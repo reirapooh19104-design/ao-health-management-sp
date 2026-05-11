@@ -1,0 +1,1557 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>明桜（あお）健康管理</title>
+<style>
+:root {
+  --green: #1D9E75;
+  --green-light: #9FE1CB;
+  --gray-rest: #D3D1C7;
+  --bg: #F5F4F0;
+  --card: #FFFFFF;
+  --text: #333333;
+  --text-light: #888888;
+  --border: #E5E4E0;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Hiragino Sans', 'Yu Gothic UI', sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  max-width: 600px;
+  margin: 0 auto;
+  min-height: 100vh;
+}
+.header {
+  background: var(--card);
+  padding: 14px 16px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  border-bottom: 1px solid var(--border);
+}
+.avatar { width: 48px; height: 48px; border-radius: 50%; background: var(--green-light); object-fit: cover; flex-shrink: 0; }
+.header-info h1 { font-size: 18px; font-weight: 700; }
+.header-info p { font-size: 12px; color: var(--text-light); }
+.header-menu { margin-left: auto; font-size: 22px; cursor: pointer; color: var(--text-light); line-height: 1; }
+#sync-status { font-size: 11px; min-height: 14px; transition: color 0.3s; }
+#sync-status.syncing { color: var(--green); }
+#sync-status.error { color: #e74c3c; }
+.tabs {
+  background: var(--card);
+  display: flex;
+  overflow-x: auto;
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 71px;
+  z-index: 99;
+}
+.tabs::-webkit-scrollbar { display: none; }
+.tab {
+  flex-shrink: 0;
+  padding: 12px 16px;
+  font-size: 14px;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  color: var(--text-light);
+  white-space: nowrap;
+  transition: color 0.2s;
+}
+.tab.active { color: var(--green); border-bottom-color: var(--green); font-weight: 600; }
+.content { padding: 12px; }
+.tab-pane { display: none; }
+.tab-pane.active { display: block; }
+.card { background: var(--card); border-radius: 12px; padding: 16px; margin-bottom: 12px; }
+.card-title { font-size: 13px; color: var(--text-light); margin-bottom: 10px; }
+.section-title { font-size: 16px; font-weight: 600; }
+.section-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+.urso-banner { border-radius: 12px; padding: 20px 16px 16px; margin-bottom: 12px; }
+.urso-banner.drink { background: #E8F5F0; }
+.urso-banner.rest  { background: #F0EFEB; }
+.urso-title { font-size: 22px; font-weight: 700; margin-bottom: 4px; }
+.urso-sub   { font-size: 13px; color: var(--text-light); margin-bottom: 14px; }
+.urso-nav   { display: flex; gap: 8px; justify-content: flex-end; }
+.urso-btn { padding: 6px 16px; border-radius: 20px; font-size: 13px; font-weight: 600; border: none; cursor: pointer; font-family: inherit; }
+.urso-btn.drink        { background: var(--green-light); color: #1a6b52; }
+.urso-btn.rest         { background: #E0DFDB; color: #666; }
+.urso-btn.today-drink  { background: var(--green); color: white; }
+.urso-btn.today-rest   { background: #777; color: white; }
+.cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; margin-top: 8px; }
+.cal-h { text-align: center; font-size: 11px; color: var(--text-light); padding: 4px 0; }
+.cal-d { text-align: center; border-radius: 8px; padding: 8px 2px; font-size: 13px; font-weight: 500; }
+.cal-d.drink       { background: var(--green-light); }
+.cal-d.rest        { background: var(--gray-rest); color: #777; }
+.cal-d.today-drink { background: var(--green); color: white; }
+.cal-d.today-rest  { background: #555; color: white; }
+.cal-legend { display: flex; gap: 16px; margin-top: 10px; }
+.cal-legend-item { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-light); }
+.cal-legend-dot { width: 12px; height: 12px; border-radius: 3px; }
+.metrics { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 12px; }
+.metric { background: var(--card); border-radius: 12px; padding: 14px 8px; text-align: center; }
+.metric-label { font-size: 12px; color: var(--text-light); margin-bottom: 4px; }
+.metric-value { font-size: 22px; font-weight: 700; }
+.progress-wrap { background: var(--border); border-radius: 4px; height: 4px; margin-top: 6px; }
+.progress-bar  { height: 100%; border-radius: 4px; background: var(--green); transition: width 0.3s; }
+.check-item { display: flex; align-items: center; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--border); cursor: pointer; user-select: none; }
+.check-item:last-child { border-bottom: none; }
+.check-circle { width: 28px; height: 28px; border-radius: 50%; border: 2px solid var(--border); display: flex; align-items: center; justify-content: center; flex-shrink: 0; transition: all 0.15s; font-size: 14px; color: transparent; }
+.check-circle.on { background: var(--green); border-color: var(--green); color: white; }
+.check-circle.on::after { content: '✓'; }
+.check-label { flex: 1; font-size: 15px; }
+.check-memo  { font-size: 12px; color: var(--text-light); display: block; margin-top: 2px; }
+.form-group { margin-bottom: 14px; }
+.form-label { font-size: 13px; color: var(--text-light); margin-bottom: 6px; display: block; }
+.form-input, .form-select, .form-textarea {
+  width: 100%; padding: 11px 12px; border: 1px solid var(--border); border-radius: 8px;
+  font-size: 15px; font-family: inherit; background: #FAFAF8; outline: none; color: var(--text);
+}
+.form-input:focus, .form-select:focus, .form-textarea:focus { border-color: var(--green); }
+.form-textarea { resize: vertical; min-height: 80px; }
+.btn-primary { width: 100%; padding: 15px; background: var(--green); color: white; border: none; border-radius: 12px; font-size: 16px; font-weight: 600; cursor: pointer; font-family: inherit; transition: opacity 0.15s; }
+.btn-primary:active { opacity: 0.85; }
+.btn-secondary { padding: 8px 14px; background: #F0EFEB; color: var(--text); border: none; border-radius: 8px; font-size: 13px; cursor: pointer; font-family: inherit; }
+.btn-small { padding: 5px 12px; background: var(--green-light); color: var(--text); border: none; border-radius: 8px; font-size: 12px; cursor: pointer; font-family: inherit; }
+.btn-edit   { padding: 5px 12px; background: var(--green-light); color: #1a6b52; border: none; border-radius: 8px; font-size: 12px; cursor: pointer; font-family: inherit; }
+.btn-delete { padding: 5px 12px; background: #FFF0EF; color: #E05050; border: 1px solid #ffd0d0; border-radius: 8px; font-size: 12px; cursor: pointer; font-family: inherit; }
+.note-card-red    { background: #FFF0EF; border-left: 4px solid #E05050; border-radius: 8px; padding: 12px; margin-bottom: 8px; }
+.note-card-yellow { background: #FFFBEF; border-left: 4px solid #E0B050; border-radius: 8px; padding: 12px; margin-bottom: 8px; }
+.note-card-blue   { background: #EFF5FF; border-left: 4px solid #5080E0; border-radius: 8px; padding: 12px; margin-bottom: 8px; }
+.card-tag { font-size: 11px; font-weight: 700; margin-bottom: 4px; }
+.note-card-red .card-tag { color: #E05050; }
+.note-card-yellow .card-tag { color: #CC8800; }
+.note-card-blue .card-tag { color: #3060C0; }
+.note-item { padding: 10px 0; border-bottom: 1px solid var(--border); }
+.note-item:last-child { border-bottom: none; }
+.note-date { font-size: 12px; color: var(--text-light); margin-bottom: 3px; }
+.note-text { font-size: 14px; }
+.vaccine-card { border: 1px solid var(--border); border-radius: 10px; padding: 14px; margin-bottom: 10px; }
+.vaccine-title { font-size: 14px; font-weight: 600; margin-bottom: 6px; }
+.vaccine-detail { font-size: 13px; color: var(--text-light); line-height: 1.6; }
+.vaccine-status { display: inline-block; padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: 700; margin-top: 8px; }
+.vs-ok     { background: var(--green-light); color: var(--green); }
+.vs-exempt { background: #FFF0EF; color: #E05050; }
+.recipe-item { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--border); font-size: 14px; }
+.recipe-item:last-child { border-bottom: none; }
+.recipe-amount { color: var(--text-light); font-size: 13px; white-space: nowrap; margin-left: 8px; }
+.recipe-cat { font-size: 13px; color: var(--text-light); margin: 12px 0 6px; font-weight: 600; }
+.supple-item { padding: 12px 0; border-bottom: 1px solid var(--border); }
+.supple-item:last-child { border-bottom: none; }
+.supple-name   { font-size: 15px; font-weight: 600; margin-bottom: 4px; }
+.supple-detail { font-size: 13px; color: var(--text-light); }
+.supple-goal   { font-size: 12px; color: var(--green); margin-top: 4px; }
+.weight-row { display: flex; align-items: center; gap: 8px; }
+.weight-row .form-input { flex: 1; }
+.weight-arrows { display: flex; flex-direction: column; gap: 2px; }
+.w-arrow { width: 30px; height: 22px; background: #F0EFEB; border: none; border-radius: 4px; cursor: pointer; font-size: 12px; display: flex; align-items: center; justify-content: center; }
+.calorie-box { background: #F0EFEB; border-radius: 8px; padding: 13px 16px; display: flex; align-items: center; gap: 10px; }
+.cal-wt   { font-size: 18px; font-weight: 700; }
+.cal-sep  { color: var(--text-light); font-size: 16px; }
+.cal-kcal { font-size: 18px; font-weight: 700; color: var(--green); }
+.cal-est  { font-size: 12px; color: var(--text-light); }
+.diary-card { background: var(--card); border-radius: 12px; padding: 14px; margin-bottom: 10px; }
+.diary-card-hd { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+.diary-card-date { font-weight: 600; font-size: 15px; }
+.urso-tag { font-size: 11px; padding: 3px 9px; border-radius: 20px; font-weight: 600; }
+.urso-tag.drink { background: var(--green-light); color: var(--green); }
+.urso-tag.rest  { background: var(--gray-rest); color: #666; }
+.diary-row { font-size: 13px; color: var(--text-light); margin-bottom: 4px; }
+.diary-row span { color: var(--text); }
+.diary-row .green { color: var(--green); }
+.gpt-row { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.gpt-dt  { font-size: 12px; color: var(--text-light); width: 72px; flex-shrink: 0; }
+.gpt-got { font-size: 11px; color: var(--text-light); width: 52px; flex-shrink: 0; text-align: right; }
+.gpt-track { flex: 1; height: 26px; background: var(--bg); border-radius: 4px; overflow: hidden; }
+.gpt-bar { height: 100%; border-radius: 4px; display: flex; align-items: center; padding-left: 8px; font-size: 12px; font-weight: 700; color: white; transition: width 0.6s ease; min-width: 36px; }
+.gpt-bar.g { background: var(--green); }
+.gpt-bar.y { background: #E0A030; }
+.gpt-bar.r { background: #E05050; }
+.hist-item { display: flex; gap: 12px; padding: 8px 0; position: relative; }
+.hist-item:not(:last-child)::after { content: ''; position: absolute; left: 63px; top: 22px; bottom: -8px; width: 1px; background: var(--border); }
+.hist-date { font-size: 11px; color: var(--text-light); width: 55px; flex-shrink: 0; padding-top: 4px; text-align: right; }
+.hist-dot  { width: 8px; height: 8px; border-radius: 50%; background: var(--green); flex-shrink: 0; margin-top: 5px; }
+.hist-text { font-size: 14px; line-height: 1.5; }
+.export-row { display: flex; gap: 8px; margin-top: 4px; }
+.scroll-ind { text-align: center; padding: 6px; font-size: 18px; color: var(--text-light); margin-bottom: 4px; }
+.toast { position: fixed; bottom: 28px; left: 50%; transform: translateX(-50%); background: rgba(40,40,40,0.9); color: white; padding: 11px 24px; border-radius: 24px; font-size: 14px; z-index: 9999; opacity: 0; transition: opacity 0.25s; pointer-events: none; white-space: nowrap; }
+.toast.show { opacity: 1; }
+
+/* ── 血液検査 ── */
+.bt-form-section { font-size: 12px; color: var(--green); font-weight: 700; margin: 16px 0 8px; padding-bottom: 4px; border-bottom: 1px solid var(--green-light); }
+.bt-input-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.bt-input-grid .form-group { margin-bottom: 8px; }
+.bt-values-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(88px, 1fr)); gap: 6px; margin-bottom: 8px; }
+.bt-val-box { background: #F5F4F0; border-radius: 8px; padding: 10px 6px; text-align: center; }
+.bt-val-name { font-size: 10px; color: var(--text-light); margin-bottom: 3px; }
+.bt-val-num { font-size: 17px; font-weight: 700; line-height: 1.2; }
+.bt-val-num.hi { color: #E05050; }
+.bt-val-num.lo { color: #3060C0; }
+.bt-val-num.ok { color: var(--green); }
+.bt-val-ref { font-size: 9px; color: #bbb; margin-top: 2px; }
+.bt-card { background: var(--card); border-radius: 12px; padding: 14px; margin-bottom: 10px; }
+.bt-card-top { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px; }
+.bt-card-date { font-size: 16px; font-weight: 700; }
+.bt-section-lbl { font-size: 11px; color: var(--text-light); font-weight: 600; margin: 8px 0 5px; }
+.bt-doctor-note { background: #F5F4F0; border-radius: 8px; padding: 10px 12px; font-size: 13px; line-height: 1.6; margin-top: 10px; white-space: pre-wrap; }
+.bt-action-row { display: flex; gap: 6px; flex-shrink: 0; margin-left: 8px; }
+
+/* ── 次回来院 ── */
+.nv-item { display: flex; align-items: flex-start; gap: 8px; padding: 10px 0; border-bottom: 1px solid var(--border); }
+.nv-item:last-child { border-bottom: none; }
+.nv-num { font-size: 14px; font-weight: 700; color: var(--green); flex-shrink: 0; min-width: 22px; padding-top: 2px; }
+.nv-text { flex: 1; font-size: 14px; line-height: 1.6; }
+.nv-del { flex-shrink: 0; background: none; border: none; font-size: 18px; color: #ccc; cursor: pointer; padding: 0 4px; line-height: 1; transition: color 0.15s; }
+.nv-del:hover { color: #E05050; }
+.nv-add-area { margin-top: 12px; }
+.nv-input { width: 100%; padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; font-size: 14px; font-family: inherit; background: #FAFAF8; resize: vertical; min-height: 56px; outline: none; }
+.nv-input:focus { border-color: var(--green); }
+.nv-add-btn { margin-top: 8px; padding: 10px 18px; background: var(--green-light); color: #1a6b52; border: none; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; font-family: inherit; }
+</style>
+</head>
+<body>
+
+<header class="header">
+  <img src="ao.png" alt="あお" class="avatar"
+       onerror="this.style.fontSize='28px';this.style.display='flex';this.style.alignItems='center';this.style.justifyContent='center';this.textContent='🐩'">
+  <div class="header-info">
+    <h1>明桜（あお）</h1>
+    <p>トイプードル・雌・<span id="dog-age">—</span></p>
+    <p id="sync-status" class="sync-status"></p>
+  </div>
+  <div class="header-menu" onclick="showToast('CSV書き出しボタンでデータをバックアップできます')">···</div>
+</header>
+
+<nav class="tabs">
+  <div class="tab active" onclick="switchTab('today')">今日</div>
+  <div class="tab"        onclick="switchTab('notes')">健康ノート</div>
+  <div class="tab"        onclick="switchTab('blood')">血液検査</div>
+  <div class="tab"        onclick="switchTab('diary')">食事日誌</div>
+  <div class="tab"        onclick="switchTab('recipe')">レシピ</div>
+  <div class="tab"        onclick="switchTab('supple')">サプリ</div>
+  <div class="tab"        onclick="switchTab('gpt')">GPT推移</div>
+  <div class="tab"        onclick="switchTab('hospital')">病院履歴</div>
+</nav>
+
+<div class="content">
+
+<!-- ===== 今日タブ ===== -->
+<div id="pane-today" class="tab-pane active">
+
+  <div id="today-date" style="font-size:13px;color:var(--text-light);padding:4px 4px 8px;font-weight:500"></div>
+
+  <div id="urso-banner" class="urso-banner drink">
+    <div id="urso-title" class="urso-title">今日はウルソを飲む日</div>
+    <div id="urso-sub"   class="urso-sub">昨日：— 　明日：—</div>
+    <div id="urso-nav"   class="urso-nav"></div>
+  </div>
+
+  <div class="card">
+    <div id="cal-month" class="card-title">— ウルソカレンダー</div>
+    <div id="cal-grid" class="cal-grid"></div>
+    <div class="cal-legend">
+      <div class="cal-legend-item"><div class="cal-legend-dot" style="background:#9FE1CB"></div>飲む</div>
+      <div class="cal-legend-item"><div class="cal-legend-dot" style="background:#D3D1C7"></div>休む</div>
+    </div>
+  </div>
+
+  <div class="metrics">
+    <div class="metric">
+      <div class="metric-label">食事</div>
+      <div class="metric-value" id="m-meal">0/2</div>
+      <div class="progress-wrap"><div class="progress-bar" id="p-meal" style="width:0%"></div></div>
+    </div>
+    <div class="metric">
+      <div class="metric-label">チェック</div>
+      <div class="metric-value" id="m-check">0/9</div>
+      <div class="progress-wrap"><div class="progress-bar" id="p-check" style="width:0%"></div></div>
+    </div>
+    <div class="metric">
+      <div class="metric-label">進捗</div>
+      <div class="metric-value" id="m-pct">0%</div>
+      <div class="progress-wrap"><div class="progress-bar" id="p-total" style="width:0%"></div></div>
+    </div>
+  </div>
+
+  <div class="scroll-ind">↓</div>
+
+  <div class="card">
+    <div class="card-title">食事</div>
+    <div class="check-item" onclick="toggleCheck('meal_am')">
+      <div class="check-circle" id="ck-meal_am"></div>
+      <div class="check-label">朝ごはん<span class="check-memo">コラーゲン混ぜる（0.15〜0.25g）</span></div>
+    </div>
+    <div class="check-item" onclick="toggleCheck('meal_pm')">
+      <div class="check-circle" id="ck-meal_pm"></div>
+      <div class="check-label">夜ごはん<span class="check-memo">コラーゲン混ぜる（0.15〜0.25g）</span></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">投薬・サプリ</div>
+    <div class="check-item" onclick="toggleCheck('urso')">
+      <div class="check-circle" id="ck-urso"></div>
+      <div class="check-label">ウルソ 1/4錠<span class="check-memo" id="urso-check-note">食後に与える</span></div>
+    </div>
+    <div class="check-item" onclick="toggleCheck('coll_am')">
+      <div class="check-circle" id="ck-coll_am"></div>
+      <div class="check-label">ニッピコラーゲン（朝）<span class="check-memo">0.15〜0.25g・ごはんに混ぜる</span></div>
+    </div>
+    <div class="check-item" onclick="toggleCheck('coll_pm')">
+      <div class="check-circle" id="ck-coll_pm"></div>
+      <div class="check-label">ニッピコラーゲン（夜）<span class="check-memo">0.15〜0.25g・ごはんに混ぜる</span></div>
+    </div>
+    <div class="check-item" onclick="toggleCheck('bacter')">
+      <div class="check-circle" id="ck-bacter"></div>
+      <div class="check-label">バクチャーペット<span class="check-memo">1滴（水またはごはんに）</span></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">健康チェック</div>
+    <div class="check-item" onclick="toggleCheck('water')">
+      <div class="check-circle" id="ck-water"></div>
+      <div class="check-label">水分補給</div>
+    </div>
+    <div class="check-item" onclick="toggleCheck('walk')">
+      <div class="check-circle" id="ck-walk"></div>
+      <div class="check-label">散歩</div>
+    </div>
+    <div class="check-item" onclick="toggleCheck('cough')">
+      <div class="check-circle" id="ck-cough"></div>
+      <div class="check-label">空咳の様子を確認</div>
+    </div>
+    <div class="check-item" onclick="toggleCheck('energy')">
+      <div class="check-circle" id="ck-energy"></div>
+      <div class="check-label">元気・食欲を確認</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="section-header">
+      <div class="section-title">今日の記録</div>
+      <div id="form-saved-badge" style="display:none;font-size:11px;padding:3px 10px;background:var(--green-light);color:var(--green);border-radius:20px;font-weight:600">保存済み</div>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">日付</label>
+      <input type="date" class="form-input" id="d-date" onchange="loadFormForDate(this.value)">
+    </div>
+
+    <div style="font-size:12px;color:var(--text-light);margin:-6px 0 12px;padding:8px 10px;background:#F5F4F0;border-radius:8px">
+      📅 日付を変えると、その日の保存データを呼び出せます
+    </div>
+
+    <div class="card-title" style="margin-bottom:10px">🍚 食事</div>
+
+    <div class="form-group">
+      <label class="form-label">動物性タンパク質</label>
+      <input type="text" class="form-input" id="d-protein" oninput="autoCalc()">
+    </div>
+    <div class="form-group">
+      <label class="form-label">穀類・芋類</label>
+      <input type="text" class="form-input" id="d-grain" oninput="autoCalc()">
+    </div>
+    <div class="form-group">
+      <label class="form-label">野菜・きのこ類</label>
+      <input type="text" class="form-input" id="d-veg" oninput="autoCalc()">
+    </div>
+    <div class="form-group">
+      <label class="form-label">その他・調味料</label>
+      <input type="text" class="form-input" id="d-other">
+    </div>
+    <div class="form-group">
+      <label class="form-label">合計重量（g）</label>
+      <div class="weight-row">
+        <input type="number" class="form-input" id="d-weight" placeholder="自動計算 or 手入力" oninput="manualWeight()">
+        <div class="weight-arrows">
+          <button class="w-arrow" onclick="nudgeWeight(1)">︿</button>
+          <button class="w-arrow" onclick="nudgeWeight(-1)">﹀</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="calorie-box">
+      <span class="cal-wt"  id="d-wt-disp">—g</span>
+      <span class="cal-sep">/</span>
+      <span class="cal-kcal" id="d-kc-disp">—kcal</span>
+      <span class="cal-est">推定値</span>
+    </div>
+
+    <div class="form-group" style="margin-top:14px">
+      <label class="form-label">完食・食べ残し</label>
+      <select class="form-select" id="d-finish">
+        <option>完食</option>
+        <option>少し残し</option>
+        <option>1/3残し</option>
+        <option>半分残し</option>
+        <option>あまり食べず</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label class="form-label">食事メモ</label>
+      <textarea class="form-textarea" id="d-memo" placeholder="自由記入"></textarea>
+    </div>
+
+    <div style="height:1px;background:var(--border);margin:16px 0"></div>
+    <div class="card-title" style="margin-bottom:10px">🐾 健康メモ</div>
+
+    <div class="form-group">
+      <label class="form-label">散歩（距離・様子）</label>
+      <input type="text" class="form-input" id="memo-walk" placeholder="例：北大4km・元気">
+    </div>
+    <div class="form-group">
+      <label class="form-label">空咳</label>
+      <div style="display:flex;gap:8px">
+        <input type="number" class="form-input" id="memo-cough-n" placeholder="回数" min="0" style="width:90px;flex-shrink:0">
+        <select class="form-select" id="memo-cough-lv">
+          <option value="なし">なし</option>
+          <option value="軽度">軽度</option>
+          <option value="中度">中度</option>
+          <option value="重度">重度</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">その他・体調メモ</label>
+      <textarea class="form-textarea" id="memo-other" placeholder="自由記入"></textarea>
+    </div>
+
+    <button class="btn-primary" onclick="saveTodayAll()">今日の記録を保存</button>
+  </div>
+
+  <div class="export-row">
+    <button class="btn-secondary" onclick="exportData()">CSV書き出し</button>
+    <button class="btn-secondary" onclick="document.getElementById('file-import').click()">CSV読み込み</button>
+    <input type="file" id="file-import" accept=".json" style="display:none" onchange="importData(event)">
+  </div>
+</div><!-- /today -->
+
+<!-- ===== 健康ノートタブ ===== -->
+<div id="pane-notes" class="tab-pane">
+
+  <div class="card">
+    <div class="section-header"><div class="section-title">アレルギー・要注意食材</div></div>
+    <div class="note-card-red">
+      <div class="card-tag">⛔ 与えない</div>
+      <div style="font-weight:600">乾燥納豆</div>
+      <div style="font-size:13px;color:#666;margin-top:4px">2026/4/15夜：耳の腫れ・痒みが出た。次回通院時に獣医師へ報告。</div>
+    </div>
+    <div class="note-card-yellow">
+      <div class="card-tag">⚠️ 様子見</div>
+      <div style="font-weight:600">煮大豆・通常の納豆</div>
+      <div style="font-size:13px;color:#666;margin-top:4px">これまで問題なし。少量から様子見。</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="section-header">
+      <div class="section-title">体調・症状の記録</div>
+    </div>
+    <div id="notes-list"></div>
+  </div>
+
+  <!-- 次回来院時に伝えること（編集可能） -->
+  <div class="card">
+    <div class="section-header">
+      <div class="section-title">次回来院時に伝えること</div>
+    </div>
+    <div id="nv-list"></div>
+    <div class="nv-add-area">
+      <textarea class="nv-input" id="nv-input" placeholder="伝えたいことを追加...（例：TCHO低値について確認）"></textarea>
+      <button class="nv-add-btn" onclick="addNextVisitItem()">追加</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="section-header"><div class="section-title">ワクチン・予防接種</div></div>
+    <div class="vaccine-card">
+      <div class="vaccine-title">混合ワクチン抗体価検査</div>
+      <div class="vaccine-detail">
+        2025/12/13 実施<br>
+        CDV 64倍・CPV 160倍・CAV 1024倍以上<br>
+        → 防御能あり・接種不要<br>
+        次回：2027年12月13日
+      </div>
+      <div class="vaccine-status vs-ok">防御能あり</div>
+    </div>
+    <div class="vaccine-card">
+      <div class="vaccine-title">狂犬病ワクチン</div>
+      <div class="vaccine-detail">
+        肝障害治療中のため免除（2025年12月・診断書発行済み）<br>
+        → 肝機能回復後に接種可否を相談
+      </div>
+      <div class="vaccine-status vs-exempt">免除中</div>
+    </div>
+  </div>
+</div><!-- /notes -->
+
+<!-- ===== 血液検査タブ ===== -->
+<div id="pane-blood" class="tab-pane">
+
+  <div class="card">
+    <div class="section-header">
+      <div class="section-title">血液検査データ入力</div>
+      <div id="bt-form-badge" style="display:none;font-size:11px;padding:3px 10px;background:var(--green-light);color:var(--green);border-radius:20px;font-weight:600">保存済み</div>
+    </div>
+    <div style="font-size:12px;color:var(--text-light);margin:-4px 0 14px;padding:8px 10px;background:#F5F4F0;border-radius:8px">
+      検査日を変えると既存データを呼び出せます。空欄の項目はスキップされます。
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">検査日</label>
+      <input type="date" class="form-input" id="bt-date" onchange="loadBloodTestForDate(this.value)">
+    </div>
+
+    <div class="bt-form-section">肝胆管機能</div>
+    <div class="bt-input-grid">
+      <div class="form-group">
+        <label class="form-label">GPT</label>
+        <input type="number" class="form-input" id="bt-gpt" placeholder="基準 17–78 U/l" step="1" min="0">
+      </div>
+      <div class="form-group">
+        <label class="form-label">GOT</label>
+        <input type="number" class="form-input" id="bt-got" placeholder="基準 17–44 U/l" step="1" min="0">
+      </div>
+      <div class="form-group">
+        <label class="form-label">ALP</label>
+        <input type="number" class="form-input" id="bt-alp" placeholder="基準 0–89 U/L" step="1" min="0">
+      </div>
+      <div class="form-group">
+        <label class="form-label">γGTP</label>
+        <input type="number" class="form-input" id="bt-ygtp" placeholder="基準 5–14 U/l" step="1" min="0">
+      </div>
+      <div class="form-group">
+        <label class="form-label">TBIL</label>
+        <input type="number" class="form-input" id="bt-tbil" placeholder="基準 0.1–0.5 mg/dl" step="0.1" min="0">
+      </div>
+    </div>
+
+    <div class="bt-form-section">脂質</div>
+    <div class="bt-input-grid">
+      <div class="form-group">
+        <label class="form-label">TCHO</label>
+        <input type="number" class="form-input" id="bt-tcho" placeholder="基準 115–337 mg/dl" step="1" min="0">
+      </div>
+      <div class="form-group">
+        <label class="form-label">TG</label>
+        <input type="number" class="form-input" id="bt-tg" placeholder="基準 23–149 mg/dl" step="1" min="0">
+      </div>
+    </div>
+
+    <div class="bt-form-section">膵臓</div>
+    <div class="bt-input-grid">
+      <div class="form-group">
+        <label class="form-label">AMY</label>
+        <input type="number" class="form-input" id="bt-amy" placeholder="基準 200–1400 U/l" step="1" min="0">
+      </div>
+      <div class="form-group">
+        <label class="form-label">LIP（リパーゼ）</label>
+        <input type="number" class="form-input" id="bt-lip" placeholder="基準 0–160 U/l" step="1" min="0">
+      </div>
+    </div>
+
+    <div class="form-group" style="margin-top:14px">
+      <label class="form-label">先生のコメント・診断メモ</label>
+      <textarea class="form-textarea" id="bt-note" placeholder="投薬変更、診断結果、先生からの指示など"></textarea>
+    </div>
+
+    <button class="btn-primary" onclick="saveBloodTest()">保存</button>
+  </div>
+
+  <div id="bt-history-list"></div>
+</div><!-- /blood -->
+
+<!-- ===== 食事日誌タブ ===== -->
+<div id="pane-diary" class="tab-pane">
+  <div class="section-header" style="padding:0 4px 8px">
+    <div class="section-title">記録一覧</div>
+  </div>
+  <div id="diary-list"></div>
+</div><!-- /diary -->
+
+<!-- ===== レシピタブ ===== -->
+<div id="pane-recipe" class="tab-pane">
+  <div class="card">
+    <div class="section-header">
+      <div class="section-title">基本レシピ（1日分）</div>
+      <span style="font-size:12px;color:#888">2食に均等に分ける</span>
+    </div>
+    <div class="recipe-cat">■ 動物性タンパク質</div>
+    <div class="recipe-item"><span>よしりんお魚（骨入り・熊野灘産天然魚）</span><span class="recipe-amount">55〜60g</span></div>
+    <div class="recipe-item"><span>鶏胸肉（皮なし）</span><span class="recipe-amount">35〜40g</span></div>
+    <div class="recipe-item" style="font-size:13px;color:var(--text-light);border:none;padding:4px 0 8px">※もも肉は週1〜2回・25〜30g</div>
+    <div class="recipe-cat">■ 穀類・芋類</div>
+    <div class="recipe-item"><span>さつまいも</span><span class="recipe-amount">55g</span></div>
+    <div class="recipe-item"><span>オートミール</span><span class="recipe-amount">8g</span></div>
+    <div class="recipe-cat">■ 野菜・きのこ類</div>
+    <div class="recipe-item"><span>人参（毎日）</span><span class="recipe-amount">20g</span></div>
+    <div class="recipe-item"><span>葉物野菜（日替わり）</span><span class="recipe-amount">25〜30g</span></div>
+    <div class="recipe-item"><span>きのこ類（週3〜4回）</span><span class="recipe-amount">8g</span></div>
+    <div class="recipe-item"><span>煮大豆または納豆（週3〜4回・様子見）</span><span class="recipe-amount">10g</span></div>
+    <div class="recipe-item"><span>切り干し大根（週3〜4回）</span><span class="recipe-amount">2〜3g</span></div>
+    <div class="recipe-cat">■ その他・調味料</div>
+    <div class="recipe-item"><span>生ウコン / 昆布水 / のり</span><span class="recipe-amount">各少々</span></div>
+    <div class="recipe-item"><span>宮古島の雪塩</span><span class="recipe-amount">少々</span></div>
+    <div class="recipe-item"><span>アリビダ または アグア酵素水（交互）</span><span class="recipe-amount">少々</span></div>
+    <div class="recipe-item"><span>ニッピコラーゲン（朝夜各）</span><span class="recipe-amount">0.15〜0.25g</span></div>
+    <div style="margin-top:14px;padding:12px;background:#F5F4F0;border-radius:8px;font-size:14px">
+      <div style="font-weight:600">合計：約218〜229g / 推定220〜230kcal</div>
+      <div style="color:var(--text-light);margin-top:4px">お魚：鶏肉 ＝ 6：4</div>
+    </div>
+  </div>
+</div><!-- /recipe -->
+
+<!-- ===== サプリタブ ===== -->
+<div id="pane-supple" class="tab-pane">
+  <div class="card">
+    <div class="section-header">
+      <div class="section-title">サプリメント</div>
+    </div>
+    <div id="supple-list"></div>
+
+    <div style="height:1px;background:var(--border);margin:16px 0"></div>
+    <div class="card-title" style="margin-bottom:10px">新しいサプリを追加</div>
+    <div class="form-group">
+      <label class="form-label">サプリ名</label>
+      <input type="text" class="form-input" id="supple-name" placeholder="例：オメガ3フィッシュオイル">
+    </div>
+    <div class="form-group">
+      <label class="form-label">量・タイミング</label>
+      <input type="text" class="form-input" id="supple-detail" placeholder="例：朝1粒・ごはんに混ぜる">
+    </div>
+    <div class="form-group">
+      <label class="form-label">目的</label>
+      <input type="text" class="form-input" id="supple-goal" placeholder="例：皮膚・被毛ケア">
+    </div>
+    <button class="btn-primary" onclick="addSupple()">追加</button>
+  </div>
+</div><!-- /supple -->
+
+<!-- ===== GPT推移タブ ===== -->
+<div id="pane-gpt" class="tab-pane">
+  <div class="card">
+    <div class="section-header"><div class="section-title">GPT推移グラフ</div></div>
+    <div style="font-size:12px;color:var(--text-light);margin-bottom:10px">基準値：〜78 U/L　GOT基準値：〜30 U/L</div>
+    <div id="gpt-line-chart" style="width:100%;overflow-x:auto"></div>
+    <div style="display:flex;gap:14px;margin-top:10px;font-size:11px;flex-wrap:wrap">
+      <span style="color:var(--green)">● 正常（〜78）</span>
+      <span style="color:#E0A030">● 注意（79〜200）</span>
+      <span style="color:#E05050">● 要注意（201〜）</span>
+    </div>
+  </div>
+  <div class="card">
+    <div class="section-header"><div class="section-title">バーグラフ</div></div>
+    <div id="gpt-chart"></div>
+  </div>
+  <div class="card">
+    <div class="section-title" style="margin-bottom:12px">検査・投薬変遷</div>
+    <div id="gpt-med-history"></div>
+  </div>
+</div><!-- /gpt -->
+
+<!-- ===== 病院履歴タブ ===== -->
+<div id="pane-hospital" class="tab-pane">
+  <div class="card">
+    <div class="section-title" style="margin-bottom:16px">病院履歴</div>
+    <div id="hospital-list"></div>
+  </div>
+</div><!-- /hospital -->
+
+</div><!-- /content -->
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ============================================================
+// CONSTANTS
+// ============================================================
+const URSO_START   = new Date('2026-04-11T00:00:00');
+const DOG_BIRTHDAY = new Date('2023-01-11T00:00:00');
+const ALL_CHECKS   = ['meal_am','meal_pm','urso','coll_am','coll_pm','bacter','water','walk','cough','energy'];
+const MEAL_CHECKS  = ['meal_am','meal_pm'];
+const TOTAL_CHECKS = ALL_CHECKS.length;
+const DENSITY      = { protein: 1.15, grain: 1.60, veg: 0.20 };
+
+// Blood test reference ranges
+const BT_REFS = {
+  gpt:  { label:'GPT',  unit:'U/l',   lo:17,  hi:78   },
+  got:  { label:'GOT',  unit:'U/l',   lo:17,  hi:44   },
+  alp:  { label:'ALP',  unit:'U/L',   lo:0,   hi:89   },
+  ygtp: { label:'γGTP', unit:'U/l',   lo:5,   hi:14   },
+  tbil: { label:'TBIL', unit:'mg/dl', lo:0.1, hi:0.5  },
+  tcho: { label:'TCHO', unit:'mg/dl', lo:115, hi:337  },
+  tg:   { label:'TG',   unit:'mg/dl', lo:23,  hi:149  },
+  amy:  { label:'AMY',  unit:'U/l',   lo:200, hi:1400 },
+  lip:  { label:'LIP',  unit:'U/l',   lo:0,   hi:160  },
+};
+const BT_KEYS   = ['gpt','got','alp','ygtp','tbil','tcho','tg','amy','lip'];
+const BT_GROUPS = [
+  { label:'肝胆管機能', keys:['gpt','got','alp','ygtp','tbil'] },
+  { label:'脂質',      keys:['tcho','tg'] },
+  { label:'膵臓',      keys:['amy','lip'] },
+];
+
+// Default blood test data (newest first)
+const DEFAULT_BLOOD_TESTS = [
+  { date:'2026-04-26', gpt:89,  got:30,  alp:48,  ygtp:8,  tbil:0.2, tcho:92,  tg:40,  amy:null, lip:null, doctorNote:'' },
+  { date:'2026-03-21', gpt:122, got:null, alp:null, ygtp:null, tbil:null, tcho:null, tg:null, amy:null, lip:228, doctorNote:'ウルソ1/4錠 1日1回に増量' },
+  { date:'2026-02-21', gpt:74,  got:30,  alp:39,  ygtp:8,  tbil:0.4, tcho:99,  tg:null, amy:null, lip:null, doctorNote:'ウルソ1/4錠 2日1回に減量' },
+  { date:'2026-01-18', gpt:116, got:29,  alp:43,  ygtp:6,  tbil:null, tcho:132, tg:null, amy:null, lip:null, doctorNote:'ウルソ1/4錠 1日1回を継続' },
+  { date:'2025-12-13', gpt:69,  got:null, alp:null, ygtp:null, tbil:null, tcho:null, tg:null, amy:null, lip:null, doctorNote:'ウルソ1/4錠 1日1回に減量' },
+  { date:'2025-11-08', gpt:129, got:null, alp:null, ygtp:null, tbil:null, tcho:null, tg:null, amy:null, lip:null, doctorNote:'ウルソ1/4錠 朝夕に増量' },
+  { date:'2025-10-02', gpt:332, got:46,  alp:null, ygtp:null, tbil:null, tcho:null, tg:null, amy:null, lip:null, doctorNote:'ウルソ再開 1/6錠 朝夕（自己判断・先生は1/4錠 朝夕）' },
+  { date:'2025-07-31', gpt:385, got:51,  alp:null, ygtp:null, tbil:null, tcho:null, tg:null, amy:null, lip:null, doctorNote:'休薬で再上昇' },
+  { date:'2025-06-20', gpt:75,  got:null, alp:null, ygtp:null, tbil:null, tcho:null, tg:null, amy:null, lip:null, doctorNote:'正常・手術後休薬' },
+  { date:'2025-05-30', gpt:377, got:37,  alp:null, ygtp:null, tbil:null, tcho:null, tg:null, amy:null, lip:null, doctorNote:'ウルソ開始 1/4錠 朝夕' },
+];
+
+const DEFAULT_SUPPLE = [
+  { name:'ニッピコラーゲン100フィッシュタイプ', detail:'開始：2026/4/15 ／ 朝夜各0.15〜0.25g ／ ごはんに混ぜる', goal:'空咳・気道・関節・皮膚ケア' },
+  { name:'バクチャーペット',                    detail:'毎日1滴（水またはごはんに）',                           goal:'腸内環境・肝機能サポート' },
+  { name:'アリビダ（VH海洋酵素調味料）',        detail:'ごはんに少々（アグア酵素水と交互に）',                  goal:'消化・ミネラル補給・旨味' },
+  { name:'Ag・uA アグア酵素水',                 detail:'ごはんに少々（アリビダと交互に）',                      goal:'消化促進・腸内環境・免疫' },
+];
+
+const DEFAULT_NEXT_VISIT = [
+  '乾燥納豆でアレルギー反応（耳の腫れ・痒み）→ 大豆製品全般の可否を確認',
+  '空咳が続いている → 気管・心臓・肺の確認を依頼',
+  'TCHO 92（低値、4/26）→ コレステロール低値の原因と対策を確認',
+  'GPT 89（4/26）→ ウルソ2日に1回投薬の効果を評価・次の方針を確認',
+];
+
+const HOSPITAL_DATA = [
+  { date:'2023/01/11',  text:'誕生' },
+  { date:'2023/03/30',  text:'お迎え（体重1.42kg）' },
+  { date:'2023/04',     text:'混合ワクチン接種（バンガードプラス5/CV）' },
+  { date:'2024/03〜05', text:'外耳炎の治療（ノルバサンオチック等）' },
+  { date:'2024/09/06',  text:'同居犬との別れ' },
+  { date:'2025/02下旬〜',text:'食欲不振が始まる（約2ヶ月）' },
+  { date:'2025/04/02',  text:'ボミットバスター処方' },
+  { date:'2025/05/30',  text:'肝機能異常が判明（GPT 377）→ ウルソ開始' },
+  { date:'2025/06/20',  text:'避妊手術・歯科処置（GPT 75）' },
+  { date:'2025/12/13',  text:'抗体価検査：CDV 64倍・CPV 160倍・CAV 1024倍以上 / ワクチン不要' },
+  { date:'2025/12',     text:'狂犬病ワクチン免除（診断書発行）' },
+  { date:'2026/04/11',  text:'ウルソ投薬スケジュール変更（1日飲んで1日休み）' },
+  { date:'2026/04/15',  text:'ニッピコラーゲン開始' },
+  { date:'2026/04/15夜',text:'⚠️ 乾燥納豆でアレルギー反応（耳の腫れ・痒み）' },
+  { date:'2026/04/26',  text:'血液検査（GPT 89 H・GOT 30・ALP 48・γGTP 8・TBIL 0.2・TCHO 92 L・TG 40）' },
+];
+
+const DEFAULT_DIARY = [
+  { date:'2026-04-16', urso:'rest', protein:'よしりんお魚60g・鶏もも肉40g', grain:'さつまいも55g・オートミール8g', veg:'人参20g・なめこ10g・大根20g・ブロッコリー・青菜30g', other:'海苔・生ウコン・雪塩・生姜の葉の酵素酢 少々', weight:'243', kcal:'262', finish:'完食', memo:'散歩：北大4km・レアちゃんとワンプロ / ⚠️前夜に乾燥納豆でアレルギー反応', walk:'北大4km・レアちゃんとワンプロ', coughN:'', coughL:'なし', memoOther:'⚠️前夜に乾燥納豆でアレルギー反応' },
+  { date:'2026-04-15', urso:'drink', protein:'よしりんお魚60g・鶏胸肉40g', grain:'さつまいも55g・オートミール8g', veg:'人参20g・菜花とキャベツ30g・干ししいたけ・干しなめこ2.5g', other:'切り干し大根3g・生ウコン・昆布水・宮古島の雪塩 少々', weight:'218', kcal:'235', finish:'完食', memo:'散歩：北大4km・元気 / 咳：1回・軽度 / コラーゲン開始日', walk:'北大4km・元気', coughN:'1', coughL:'軽度', memoOther:'コラーゲン開始日' },
+  { date:'2026-04-14', urso:'rest', protein:'', grain:'', veg:'', other:'', weight:'', kcal:'', finish:'完食', memo:'散歩：北大4km / 食事は翌日仕込み済み', walk:'北大4km', coughN:'', coughL:'なし', memoOther:'食事は翌日仕込み済み' },
+  { date:'2026-04-13', urso:'drink', protein:'', grain:'', veg:'', other:'', weight:'', kcal:'236', finish:'完食', memo:'散歩：北大4km / 朝：前日の残りを完食・夜：仕込みの2/5を完食', walk:'北大4km', coughN:'', coughL:'なし', memoOther:'' },
+  { date:'2026-04-12', urso:'rest', protein:'よしりんお魚55g・鶏胸肉60g', grain:'さつまいも60g・オートミール8g', veg:'人参20g・なばなとキャベツ30g・なめこ10g', other:'切り干し大根3.5g', weight:'247', kcal:'267', finish:'1/3残し', memo:'散歩：北大3〜4km', walk:'北大3〜4km', coughN:'', coughL:'なし', memoOther:'' },
+  { date:'2026-04-11', urso:'drink', protein:'よしりんお魚50g・鶏胸肉60g', grain:'さつまいも60g・オートミール8g', veg:'人参20g・ケールとキャベツ30g・干し舞茸3g・納豆10g', other:'切り干し大根3g', weight:'244', kcal:'261', finish:'完食', memo:'ウルソ開始日', walk:'', coughN:'', coughL:'なし', memoOther:'ウルソ開始日' },
+];
+
+const DEFAULT_HEALTH_NOTES = [
+  { date:'2026/4/16', text:'散歩北大4km・レアちゃんとワンプロ・完食・元気' },
+  { date:'2026/4/15', text:'コラーゲン開始・散歩北大4km・完食・咳1回軽度' },
+  { date:'2026/4/15夜', text:'⚠️ 乾燥納豆で耳の腫れ・痒み（アレルギー疑い）' },
+  { date:'2026/4/13', text:'散歩北大4km・完食・元気' },
+  { date:'2026/4/10', text:'よく寝ている（身体がバージョンアップ中！）' },
+];
+
+// ============================================================
+// STORAGE HELPERS
+// ============================================================
+const todayKey = () => {
+  const d = new Date();
+  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+};
+
+let _currentFormDate = todayKey();
+
+// ============================================================
+// CLOUD SYNC (Google Apps Script)
+// ============================================================
+const GAS_URL = 'https://script.google.com/macros/s/AKfycbyUDtY2DCsUgPN1mEDEZnj-khI5nNNUQn1Daawmiuj4VvWxqiSf3NcNxjSQEsyB34JLOQ/exec';
+
+function _syncStatus(msg, type) {
+  const el = document.getElementById('sync-status');
+  if (!el) return;
+  el.textContent = msg;
+  el.className = 'sync-status' + (type ? ' ' + type : '');
+}
+
+async function pushToCloud(key, val) {
+  if (!GAS_URL) return;
+  try {
+    await fetch(GAS_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify({ key, value: val })
+    });
+  } catch {}
+}
+
+async function syncFromCloud() {
+  if (!GAS_URL) return;
+  _syncStatus('同期中…', 'syncing');
+  try {
+    const res = await fetch(GAS_URL + '?action=getAll', { cache: 'no-store' });
+    const data = await res.json();
+    Object.keys(data).forEach(k => {
+      localStorage.setItem(k, JSON.stringify(data[k]));
+    });
+    _syncStatus('同期済み');
+    setTimeout(() => _syncStatus(''), 3000);
+    renderAll();
+  } catch {
+    _syncStatus('オフライン');
+    setTimeout(() => _syncStatus(''), 5000);
+  }
+}
+
+function load(key, def) {
+  try { const v = localStorage.getItem(key); return v ? JSON.parse(v) : def; } catch { return def; }
+}
+function save(key, val) {
+  localStorage.setItem(key, JSON.stringify(val));
+  pushToCloud(key, val);
+}
+
+function getChecks()    { return load('chk_' + _currentFormDate, {}); }
+function setChecks(c)   { save('chk_' + _currentFormDate, c); }
+function getNotes()     { return load('health_notes', DEFAULT_HEALTH_NOTES); }
+function setNotes(n)    { save('health_notes', n); }
+function getDiary()     { return load('diary', DEFAULT_DIARY); }
+function setDiary(d)    { save('diary', d); }
+function getDayMemo(date)    { return load('day_memo_' + date, {}); }
+function setDayMemo(date, v) { save('day_memo_' + date, v); }
+function getBloodTests()     { return load('blood_tests', DEFAULT_BLOOD_TESTS); }
+function setBloodTests(d)    { save('blood_tests', d); }
+function getSupple()       { return load('supple', DEFAULT_SUPPLE); }
+function setSupple(d)      { save('supple', d); }
+function getNextVisitItems() { return load('next_visit', DEFAULT_NEXT_VISIT); }
+function setNextVisitItems(items) { save('next_visit', items); }
+
+function escHtml(str) {
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// ============================================================
+// URSO LOGIC
+// ============================================================
+function ursoStatus(dateObj) {
+  const d0 = new Date(dateObj); d0.setHours(0,0,0,0);
+  const s0 = new Date(URSO_START); s0.setHours(0,0,0,0);
+  const diff = Math.round((d0 - s0) / 86400000);
+  if (diff < 0) return null;
+  return diff % 2 === 0 ? 'drink' : 'rest';
+}
+const ursoLabel = s => s === 'drink' ? '飲む' : '休む';
+
+// ============================================================
+// DOG AGE
+// ============================================================
+function calcAge() {
+  const now = new Date();
+  let y = now.getFullYear() - DOG_BIRTHDAY.getFullYear();
+  let m = now.getMonth() - DOG_BIRTHDAY.getMonth();
+  if (m < 0) { y--; m += 12; }
+  return y + '歳' + m + 'ヶ月';
+}
+
+// ============================================================
+// RENDER URSO BANNER
+// ============================================================
+function renderBanner() {
+  const today = new Date();
+  today.setHours(0,0,0,0);
+  const DOW = '日月火水木金土';
+  const dateEl = document.getElementById('today-date');
+  if (dateEl) dateEl.textContent =
+    today.getFullYear() + '年' + (today.getMonth()+1) + '月' + today.getDate() + '日（' + DOW[today.getDay()] + '）';
+  const yest = new Date(today); yest.setDate(today.getDate()-1);
+  const tmrw = new Date(today); tmrw.setDate(today.getDate()+1);
+  const ts = ursoStatus(today), ys = ursoStatus(yest), ms = ursoStatus(tmrw);
+  const banner = document.getElementById('urso-banner');
+  banner.className = 'urso-banner ' + ts;
+  document.getElementById('urso-title').textContent = ts === 'drink' ? '今日はウルソを飲む日' : '今日はウルソを休む日';
+  document.getElementById('urso-sub').textContent =
+    '昨日：' + (ys ? ursoLabel(ys) : '—') + '　明日：' + (ms ? ursoLabel(ms) : '—');
+  document.getElementById('urso-nav').innerHTML =
+    `<button class="urso-btn ${ys}">${ys==='drink'?'昨飲':'昨休'}</button>` +
+    `<button class="urso-btn today-${ts}">${ts==='drink'?'今飲':'今休'}</button>` +
+    `<button class="urso-btn ${ms}">${ms==='drink'?'明飲':'明休'}</button>`;
+  const note = document.getElementById('urso-check-note');
+  note.textContent = ts === 'drink' ? '今日は飲む日・食後に与える' : '今日は休む日';
+}
+
+// ============================================================
+// RENDER CALENDAR
+// ============================================================
+function renderCalendar() {
+  const today = new Date();
+  const y = today.getFullYear(), m = today.getMonth();
+  document.getElementById('cal-month').textContent = (m+1) + '月 ウルソカレンダー';
+  const first = new Date(y, m, 1);
+  const last  = new Date(y, m+1, 0).getDate();
+  const jsToCol = d => (d + 1) % 7;
+  const startOffset = jsToCol(first.getDay());
+  let html = ['土','日','月','火','水','木','金'].map(d => `<div class="cal-h">${d}</div>`).join('');
+  for (let i = 0; i < startOffset; i++) html += `<div></div>`;
+  for (let d = 1; d <= last; d++) {
+    const date = new Date(y, m, d);
+    const st = ursoStatus(date);
+    const isToday = d === today.getDate();
+    let cls = 'cal-d';
+    if (st) cls += isToday ? ' today-' + st : ' ' + st;
+    html += `<div class="${cls}">${d}</div>`;
+  }
+  document.getElementById('cal-grid').innerHTML = html;
+}
+
+// ============================================================
+// CHECK ITEMS
+// ============================================================
+function toggleCheck(id) {
+  const c = getChecks();
+  c[id] = !c[id];
+  setChecks(c);
+  renderChecks();
+  updateMetrics();
+}
+function renderChecks() {
+  const c = getChecks();
+  ALL_CHECKS.forEach(id => {
+    const el = document.getElementById('ck-' + id);
+    if (el) el.className = 'check-circle' + (c[id] ? ' on' : '');
+  });
+}
+function updateMetrics() {
+  const c = getChecks();
+  const mealDone  = MEAL_CHECKS.filter(id => c[id]).length;
+  const totalDone = ALL_CHECKS.filter(id => c[id]).length;
+  const pct = Math.round(totalDone / TOTAL_CHECKS * 100);
+  document.getElementById('m-meal').textContent  = mealDone  + '/2';
+  document.getElementById('m-check').textContent = totalDone + '/' + TOTAL_CHECKS;
+  document.getElementById('m-pct').textContent   = pct + '%';
+  document.getElementById('p-meal').style.width  = (mealDone/2*100) + '%';
+  document.getElementById('p-check').style.width = (totalDone/TOTAL_CHECKS*100) + '%';
+  document.getElementById('p-total').style.width = pct + '%';
+}
+
+// ============================================================
+// SAVE TODAY ALL
+// ============================================================
+function saveTodayAll() {
+  const date = document.getElementById('d-date').value;
+  if (!date) { showToast('日付を入力してください'); return; }
+  const protein    = document.getElementById('d-protein').value.trim();
+  const grain      = document.getElementById('d-grain').value.trim();
+  const veg        = document.getElementById('d-veg').value.trim();
+  const other      = document.getElementById('d-other').value.trim();
+  const weight     = document.getElementById('d-weight').value;
+  const kcalTxt    = document.getElementById('d-kc-disp').textContent.replace('kcal','').replace('—','');
+  const finish     = document.getElementById('d-finish').value;
+  const memo       = document.getElementById('d-memo').value.trim();
+  const walk       = document.getElementById('memo-walk').value.trim();
+  const coughN     = document.getElementById('memo-cough-n').value;
+  const coughL     = document.getElementById('memo-cough-lv').value;
+  const memoOther  = document.getElementById('memo-other').value.trim();
+  const entry = { date, protein, grain, veg, other, weight, kcal: kcalTxt, finish, memo,
+                  urso: ursoStatus(new Date(date)), walk, coughN, coughL, memoOther };
+  const diary = getDiary();
+  const idx = diary.findIndex(e => e.date === date);
+  if (idx >= 0) diary[idx] = entry; else diary.unshift(entry);
+  diary.sort((a,b) => b.date < a.date ? -1 : 1);
+  setDiary(diary);
+  renderDiary();
+  setDayMemo(date, { walk, coughN, coughL, memoOther });
+  const parts = [];
+  if (walk) parts.push('散歩：' + walk);
+  if (coughN && +coughN > 0) parts.push('空咳：' + coughN + '回（' + coughL + '）');
+  else if (coughL !== 'なし') parts.push('空咳：' + coughL);
+  if (memoOther) parts.push(memoOther);
+  if (parts.length) {
+    const d = new Date(date + 'T00:00:00');
+    const dateStr = d.getFullYear() + '/' + (d.getMonth()+1) + '/' + d.getDate();
+    const notes = getNotes();
+    const ni = notes.findIndex(n => n.date === dateStr);
+    const noteEntry = { date: dateStr, text: parts.join('・') };
+    if (ni >= 0) notes[ni] = noteEntry; else notes.unshift(noteEntry);
+    setNotes(notes);
+    renderNotes();
+  }
+  const badge = document.getElementById('form-saved-badge');
+  if (badge) badge.style.display = 'block';
+  showToast('記録を保存しました');
+}
+function saveTodayMemo() { saveTodayAll(); }
+
+// ============================================================
+// HEALTH NOTES
+// ============================================================
+function renderNotes() {
+  const notes = getNotes();
+  const list = document.getElementById('notes-list');
+  if (!notes.length) {
+    list.innerHTML = '<div style="color:var(--text-light);font-size:14px;padding:8px 0">記録はありません</div>';
+    return;
+  }
+  list.innerHTML = notes.map(n =>
+    `<div class="note-item"><div class="note-date">${n.date}</div><div class="note-text">${escHtml(n.text)}</div></div>`
+  ).join('');
+}
+function clearNotes() {
+  if (!confirm('体調記録をすべて削除しますか？')) return;
+  setNotes([]);
+  renderNotes();
+}
+
+// ============================================================
+// SUPPLEMENTS
+// ============================================================
+function renderSupple() {
+  const list = getSupple();
+  const el = document.getElementById('supple-list');
+  if (!list.length) {
+    el.innerHTML = '<div style="color:var(--text-light);font-size:14px;padding:8px 0">サプリの登録はありません</div>';
+    return;
+  }
+  el.innerHTML = list.map((s, idx) =>
+    `<div class="supple-item">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">
+        <div style="flex:1">
+          <div class="supple-name">${escHtml(s.name)}</div>
+          ${s.detail ? `<div class="supple-detail">${escHtml(s.detail)}</div>` : ''}
+          ${s.goal   ? `<div class="supple-goal">目的：${escHtml(s.goal)}</div>` : ''}
+        </div>
+        <button class="btn-delete" onclick="deleteSupple(${idx})">削除</button>
+      </div>
+    </div>`
+  ).join('');
+}
+
+function addSupple() {
+  const name   = document.getElementById('supple-name').value.trim();
+  const detail = document.getElementById('supple-detail').value.trim();
+  const goal   = document.getElementById('supple-goal').value.trim();
+  if (!name) { showToast('サプリ名を入力してください'); return; }
+  const list = getSupple();
+  list.push({ name, detail, goal });
+  setSupple(list);
+  renderSupple();
+  document.getElementById('supple-name').value   = '';
+  document.getElementById('supple-detail').value = '';
+  document.getElementById('supple-goal').value   = '';
+  showToast(name + ' を追加しました');
+}
+
+function deleteSupple(idx) {
+  const list = getSupple();
+  const name = list[idx]?.name || '';
+  if (!confirm(`「${name}」を削除しますか？`)) return;
+  list.splice(idx, 1);
+  setSupple(list);
+  renderSupple();
+  showToast('削除しました');
+}
+
+// ============================================================
+// NEXT VISIT ITEMS
+// ============================================================
+function renderNextVisitItems() {
+  const items = getNextVisitItems();
+  const list = document.getElementById('nv-list');
+  if (!items.length) {
+    list.innerHTML = '<div style="color:var(--text-light);font-size:14px;padding:8px 0">項目はありません</div>';
+    return;
+  }
+  list.innerHTML = items.map((text, idx) =>
+    `<div class="nv-item">
+      <div class="nv-num">${idx+1}.</div>
+      <div class="nv-text">${escHtml(text)}</div>
+      <button class="nv-del" onclick="deleteNextVisitItem(${idx})">×</button>
+    </div>`
+  ).join('');
+}
+function addNextVisitItem() {
+  const input = document.getElementById('nv-input');
+  const text = input.value.trim();
+  if (!text) { showToast('内容を入力してください'); return; }
+  const items = getNextVisitItems();
+  items.push(text);
+  setNextVisitItems(items);
+  renderNextVisitItems();
+  input.value = '';
+  showToast('追加しました');
+}
+function deleteNextVisitItem(idx) {
+  const items = getNextVisitItems();
+  items.splice(idx, 1);
+  setNextVisitItems(items);
+  renderNextVisitItems();
+}
+
+// ============================================================
+// BLOOD TEST HELPERS
+// ============================================================
+function btValBox(key, val) {
+  const ref = BT_REFS[key];
+  let cls = 'ok', dispStr = String(val);
+  if (val > ref.hi)              { cls = 'hi'; dispStr = val + ' H'; }
+  else if (ref.lo > 0 && val < ref.lo) { cls = 'lo'; dispStr = val + ' L'; }
+  const refStr = ref.lo > 0 ? ref.lo + '–' + ref.hi : '〜' + ref.hi;
+  return `<div class="bt-val-box">
+    <div class="bt-val-name">${ref.label}</div>
+    <div class="bt-val-num ${cls}">${dispStr}</div>
+    <div class="bt-val-ref">${refStr}</div>
+  </div>`;
+}
+
+function renderBloodTestHistory() {
+  const tests = getBloodTests();
+  const list = document.getElementById('bt-history-list');
+  if (!tests.length) {
+    list.innerHTML = '<div style="color:var(--text-light);font-size:14px;padding:4px 4px 12px">まだ記録がありません</div>';
+    return;
+  }
+  const DOW = '日月火水木金土';
+  list.innerHTML = tests.map(t => {
+    const d = new Date(t.date + 'T00:00:00');
+    const dateLabel = d.getFullYear() + '年' + (d.getMonth()+1) + '月' + d.getDate() + '日（' + DOW[d.getDay()] + '）';
+
+    const groupsHtml = BT_GROUPS.map(g => {
+      const nonNullKeys = g.keys.filter(k => t[k] != null);
+      if (!nonNullKeys.length) return '';
+      return `<div class="bt-section-lbl">${g.label}</div>
+        <div class="bt-values-grid">${nonNullKeys.map(k => btValBox(k, t[k])).join('')}</div>`;
+    }).join('');
+
+    const noteHtml = t.doctorNote
+      ? `<div class="bt-doctor-note">${escHtml(t.doctorNote)}</div>` : '';
+
+    return `<div class="bt-card">
+      <div class="bt-card-top">
+        <div class="bt-card-date">${dateLabel}</div>
+        <div class="bt-action-row">
+          <button class="btn-edit"   onclick="editBloodTest('${t.date}')">編集</button>
+          <button class="btn-delete" onclick="deleteBloodTest('${t.date}')">削除</button>
+        </div>
+      </div>
+      ${groupsHtml || '<div style="color:var(--text-light);font-size:13px">数値データなし</div>'}
+      ${noteHtml}
+    </div>`;
+  }).join('');
+}
+
+function loadBloodTestForDate(date) {
+  if (!date) return;
+  const tests = getBloodTests();
+  const t = tests.find(x => x.date === date);
+  const badge = document.getElementById('bt-form-badge');
+  BT_KEYS.forEach(k => {
+    document.getElementById('bt-' + k).value = (t && t[k] != null) ? t[k] : '';
+  });
+  document.getElementById('bt-note').value = t ? (t.doctorNote || '') : '';
+  if (badge) badge.style.display = t ? 'block' : 'none';
+}
+
+function saveBloodTest() {
+  const date = document.getElementById('bt-date').value;
+  if (!date) { showToast('検査日を入力してください'); return; }
+  const entry = { date, doctorNote: document.getElementById('bt-note').value.trim() };
+  BT_KEYS.forEach(k => {
+    const v = document.getElementById('bt-' + k).value.trim();
+    entry[k] = v !== '' ? parseFloat(v) : null;
+  });
+  const tests = getBloodTests();
+  const idx = tests.findIndex(t => t.date === date);
+  if (idx >= 0) tests[idx] = entry; else tests.unshift(entry);
+  tests.sort((a,b) => b.date < a.date ? -1 : 1);
+  setBloodTests(tests);
+  renderBloodTestHistory();
+  renderGPT();
+  const badge = document.getElementById('bt-form-badge');
+  if (badge) badge.style.display = 'block';
+  showToast('血液検査データを保存しました');
+}
+
+function editBloodTest(date) {
+  document.getElementById('bt-date').value = date;
+  loadBloodTestForDate(date);
+  switchTab('blood');
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+  showToast('フォームに読み込みました。編集後に保存してください');
+}
+
+function deleteBloodTest(date) {
+  const d = new Date(date + 'T00:00:00');
+  const label = (d.getMonth()+1) + '/' + d.getDate();
+  if (!confirm(label + ' のデータを削除しますか？')) return;
+  const tests = getBloodTests().filter(t => t.date !== date);
+  setBloodTests(tests);
+  renderBloodTestHistory();
+  renderGPT();
+  showToast('削除しました');
+}
+
+function initBloodForm() {
+  const di = document.getElementById('bt-date');
+  if (!di.value) di.value = todayKey();
+  loadBloodTestForDate(di.value);
+}
+
+// ============================================================
+// FOOD DIARY – CALORIE CALCULATION
+// ============================================================
+function parseGrams(text) {
+  if (!text) return 0;
+  let total = 0;
+  for (const m of text.matchAll(/(\d+(?:\.\d+)?)(?:〜(\d+(?:\.\d+)?))?g/g)) {
+    total += m[2] ? (parseFloat(m[1]) + parseFloat(m[2])) / 2 : parseFloat(m[1]);
+  }
+  return total;
+}
+let _manualWt = false;
+function autoCalc() {
+  _manualWt = false;
+  const p = parseGrams(document.getElementById('d-protein').value);
+  const g = parseGrams(document.getElementById('d-grain').value);
+  const v = parseGrams(document.getElementById('d-veg').value);
+  const wt   = p + g + v;
+  const kcal = p * DENSITY.protein + g * DENSITY.grain + v * DENSITY.veg;
+  if (wt > 0) {
+    document.getElementById('d-weight').value = Math.round(wt);
+    setCalDisplay(Math.round(wt), Math.round(kcal));
+  } else {
+    document.getElementById('d-weight').value = '';
+    setCalDisplay(null, null);
+  }
+}
+function manualWeight() {
+  _manualWt = true;
+  const w = parseFloat(document.getElementById('d-weight').value);
+  if (!isNaN(w) && w > 0) setCalDisplay(Math.round(w), Math.round(w * 1.05));
+  else setCalDisplay(null, null);
+}
+function nudgeWeight(d) {
+  const inp = document.getElementById('d-weight');
+  inp.value = Math.max(0, (parseFloat(inp.value) || 0) + d);
+  manualWeight();
+}
+function setCalDisplay(wt, kcal) {
+  document.getElementById('d-wt-disp').textContent  = wt   != null ? wt   + 'g'    : '—g';
+  document.getElementById('d-kc-disp').textContent  = kcal != null ? kcal + 'kcal' : '—kcal';
+}
+
+// ============================================================
+// RENDER DIARY
+// ============================================================
+function renderDiary() {
+  const diary = getDiary();
+  const list = document.getElementById('diary-list');
+  if (!diary.length) {
+    list.innerHTML = '<div style="color:var(--text-light);font-size:14px;padding:4px 4px 12px">まだ記録がありません</div>';
+    return;
+  }
+  const DOW = '日月火水木金土';
+  list.innerHTML = diary.map(e => {
+    const d = new Date(e.date + 'T00:00:00');
+    const label = (d.getMonth()+1) + '/' + d.getDate() + '（' + DOW[d.getDay()] + '）';
+    const tag = e.urso === 'drink' ? '<span class="urso-tag drink">飲む日</span>'
+              : e.urso === 'rest'  ? '<span class="urso-tag rest">休む日</span>' : '';
+    return `<div class="diary-card">
+      <div class="diary-card-hd"><div class="diary-card-date">${label}</div>${tag}</div>
+      ${e.protein ? `<div class="diary-row">タンパク質：<span>${e.protein}</span></div>` : ''}
+      ${e.grain   ? `<div class="diary-row">穀類・芋類：<span>${e.grain}</span></div>` : ''}
+      ${e.veg     ? `<div class="diary-row">野菜類：<span>${e.veg}</span></div>` : ''}
+      ${e.other   ? `<div class="diary-row">その他：<span>${e.other}</span></div>` : ''}
+      <div class="diary-row">合計：<span>${e.weight ? e.weight+'g' : '—'} / <span class="green">${e.kcal ? e.kcal+'kcal' : '—'}</span> 推定値</span></div>
+      <div class="diary-row">食べ残し：<span>${e.finish || '—'}</span></div>
+      ${e.memo ? `<div class="diary-row">メモ：<span>${e.memo}</span></div>` : ''}
+    </div>`;
+  }).join('');
+}
+
+// ============================================================
+// GPT CHART (uses dynamic blood test data)
+// ============================================================
+function gptColor(v) {
+  if (v == null) return '#aaa';
+  return v <= 78 ? '#1D9E75' : v <= 200 ? '#E0A030' : '#E05050';
+}
+
+function renderGPT() {
+  const allTests = getBloodTests(); // newest first
+  const sorted   = [...allTests].sort((a,b) => a.date < b.date ? -1 : 1); // oldest first
+  const chartData = sorted.filter(r => r.gpt != null);
+  const max = 420;
+
+  // ── 折れ線グラフ ──
+  const W = 500, H = 190;
+  const PL = 44, PR = 16, PT = 22, PB = 38;
+  const PW = W - PL - PR, PH = H - PT - PB;
+  const n = chartData.length;
+
+  if (n < 2) {
+    document.getElementById('gpt-line-chart').innerHTML =
+      '<div style="color:var(--text-light);font-size:13px;padding:8px">データが2件以上になるとグラフが表示されます</div>';
+  } else {
+    const px = i => PL + (PW / (n - 1)) * i;
+    const py = v => PT + PH - (v / max) * PH;
+    const refY = py(78);
+    let svg = `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:auto;display:block">`;
+    svg += `<rect x="${PL}" y="${PT}" width="${PW}" height="${PH}" fill="#F8F7F4" rx="4"/>`;
+    [0,100,200,300,400].forEach(v => {
+      const y = py(v);
+      svg += `<line x1="${PL}" y1="${y}" x2="${PL+PW}" y2="${y}" stroke="#E5E4E0" stroke-width="0.8"/>`;
+      svg += `<text x="${PL-5}" y="${y+4}" font-size="10" fill="#bbb" text-anchor="end">${v}</text>`;
+    });
+    svg += `<line x1="${PL}" y1="${refY}" x2="${PL+PW}" y2="${refY}" stroke="#1D9E75" stroke-width="1.2" stroke-dasharray="5,3" opacity="0.7"/>`;
+    svg += `<text x="${PL+6}" y="${refY-4}" font-size="9" fill="#1D9E75" opacity="0.8">基準78</text>`;
+    for (let i = 0; i < n - 1; i++) {
+      const c = gptColor((chartData[i].gpt + chartData[i+1].gpt) / 2);
+      svg += `<line x1="${px(i)}" y1="${py(chartData[i].gpt)}" x2="${px(i+1)}" y2="${py(chartData[i+1].gpt)}" stroke="${c}" stroke-width="2.5" stroke-linecap="round"/>`;
+    }
+    chartData.forEach((r, i) => {
+      const x = px(i), y = py(r.gpt);
+      const c = gptColor(r.gpt);
+      svg += `<circle cx="${x}" cy="${y}" r="5" fill="${c}" stroke="white" stroke-width="2"/>`;
+      svg += `<text x="${x}" y="${y - 9}" font-size="9" fill="${c}" font-weight="bold" text-anchor="middle">${r.gpt}</text>`;
+      const parts = r.date.split('-');
+      svg += `<text x="${x}" y="${PT+PH+14}" font-size="8.5" fill="#aaa" text-anchor="middle">${parseInt(parts[1])}/${parseInt(parts[2])}</text>`;
+      svg += `<text x="${x}" y="${PT+PH+24}" font-size="8" fill="#ccc" text-anchor="middle">${parts[0].slice(2)}</text>`;
+    });
+    svg += `</svg>`;
+    document.getElementById('gpt-line-chart').innerHTML = svg;
+  }
+
+  // ── バーグラフ ──
+  document.getElementById('gpt-chart').innerHTML = sorted.map(r => {
+    const pct = r.gpt != null ? Math.min(100, r.gpt / max * 100) : 0;
+    const cls = r.gpt == null ? 'g' : r.gpt <= 78 ? 'g' : r.gpt <= 200 ? 'y' : 'r';
+    const barLabel = r.gpt != null ? 'GPT ' + r.gpt : 'GPT —';
+    const gotTxt = r.got != null ? 'GOT ' + r.got : '';
+    const parts = r.date.split('-');
+    const dtStr = parseInt(parts[1]) + '/' + parseInt(parts[2]);
+    return `<div class="gpt-row">
+      <div class="gpt-dt">${dtStr}</div>
+      <div class="gpt-track"><div class="gpt-bar ${cls}" style="width:${Math.max(pct,8)}%">${barLabel}</div></div>
+      <div class="gpt-got">${gotTxt}</div>
+    </div>`;
+  }).join('');
+
+  // ── 検査・投薬変遷 ──
+  document.getElementById('gpt-med-history').innerHTML = allTests.map(r => {
+    const parts = r.date.split('-');
+    const yearStr = parts[0];
+    const mdStr   = parseInt(parts[1]) + '/' + parseInt(parts[2]);
+    const gptC = gptColor(r.gpt);
+    const gptDisp = r.gpt != null
+      ? `<span style="font-weight:700;color:${gptC};font-size:16px">GPT ${r.gpt}</span>`
+      : `<span style="font-weight:700;color:#aaa;font-size:16px">GPT —</span>`;
+    const gotDisp = r.got != null
+      ? `<span style="font-weight:700;color:#888;font-size:14px;margin-left:10px">GOT ${r.got}</span>` : '';
+    return `<div style="display:flex;justify-content:space-between;align-items:flex-start;padding:12px 0;border-bottom:1px solid var(--border)">
+      <div>
+        <div style="font-size:11px;color:var(--text-light)">${yearStr}</div>
+        <div style="font-size:18px;font-weight:700;line-height:1.2">${mdStr}</div>
+        <div style="font-size:13px;color:var(--text-light);margin-top:4px">${escHtml(r.doctorNote || '')}</div>
+      </div>
+      <div style="text-align:right;flex-shrink:0;padding-left:12px;padding-top:4px">
+        ${gptDisp}${gotDisp}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ============================================================
+// HOSPITAL HISTORY
+// ============================================================
+function renderHospital() {
+  document.getElementById('hospital-list').innerHTML =
+    [...HOSPITAL_DATA].reverse().map(r =>
+      `<div class="hist-item">
+        <div class="hist-date">${r.date}</div>
+        <div class="hist-dot"></div>
+        <div class="hist-text">${r.text}</div>
+      </div>`
+    ).join('');
+}
+
+// ============================================================
+// TAB SWITCHING
+// ============================================================
+const TAB_NAMES = ['today','notes','blood','diary','recipe','supple','gpt','hospital'];
+function switchTab(name) {
+  document.querySelectorAll('.tab').forEach((t,i) => t.classList.toggle('active', TAB_NAMES[i] === name));
+  document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+  document.getElementById('pane-' + name).classList.add('active');
+}
+
+// ============================================================
+// EXPORT / IMPORT
+// ============================================================
+function exportData() {
+  const payload = {
+    ver: 2,
+    exported: new Date().toISOString(),
+    healthNotes: getNotes(),
+    diary: getDiary(),
+    bloodTests: getBloodTests(),
+    supple: getSupple(),
+    nextVisit: getNextVisitItems(),
+    checks: {}
+  };
+  for (let i = 0; i < localStorage.length; i++) {
+    const k = localStorage.key(i);
+    if (k.startsWith('chk_') || k.startsWith('day_memo_')) {
+      payload.checks[k] = JSON.parse(localStorage.getItem(k));
+    }
+  }
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([JSON.stringify(payload, null, 2)], {type:'application/json'}));
+  a.download = 'ao-health-' + todayKey() + '.json';
+  a.click();
+  showToast('エクスポートしました');
+}
+
+function importData(e) {
+  const f = e.target.files[0]; if (!f) return;
+  const r = new FileReader();
+  r.onload = ev => {
+    try {
+      const d = JSON.parse(ev.target.result);
+      if (d.healthNotes) setNotes(d.healthNotes);
+      if (d.diary) {
+        setDiary(d.diary);
+        d.diary.forEach(e => {
+          if (e.walk !== undefined || e.coughN !== undefined || e.memoOther !== undefined) {
+            setDayMemo(e.date, { walk: e.walk||'', coughN: e.coughN||'', coughL: e.coughL||'なし', memoOther: e.memoOther||'' });
+          }
+        });
+      }
+      if (d.bloodTests) setBloodTests(d.bloodTests);
+      if (d.supple)     setSupple(d.supple);
+      if (d.nextVisit)  setNextVisitItems(d.nextVisit);
+      if (d.checks) Object.keys(d.checks).forEach(k => save(k, d.checks[k]));
+      renderAll();
+      showToast('インポートしました');
+    } catch { showToast('読み込みに失敗しました'); }
+  };
+  r.readAsText(f);
+  e.target.value = '';
+}
+
+// ============================================================
+// TOAST
+// ============================================================
+let _tt;
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  clearTimeout(_tt); _tt = setTimeout(() => t.classList.remove('show'), 2600);
+}
+
+// ============================================================
+// DIARY FORM
+// ============================================================
+const DIARY_DEFAULTS = {
+  protein: 'よしりんお魚55〜60g・鶏胸肉35〜40g',
+  grain:   'さつまいも55g・オートミール8g',
+  veg:     '人参20g・葉物野菜25〜30g',
+  other:   '生ウコン・昆布水・のり・宮古島の雪塩 少々',
+};
+
+function loadFormForDate(date) {
+  if (!date) return;
+  _currentFormDate = date;
+  document.getElementById('d-date').value = date;
+  const diary   = getDiary();
+  const entry   = diary.find(e => e.date === date);
+  const isToday = date === todayKey();
+  const badge   = document.getElementById('form-saved-badge');
+  if (entry) {
+    document.getElementById('d-protein').value = entry.protein || '';
+    document.getElementById('d-grain').value   = entry.grain   || '';
+    document.getElementById('d-veg').value     = entry.veg     || '';
+    document.getElementById('d-other').value   = entry.other   || '';
+    document.getElementById('d-weight').value  = entry.weight  || '';
+    document.getElementById('d-finish').value  = entry.finish  || '完食';
+    document.getElementById('d-memo').value    = entry.memo    || '';
+    if (entry.weight && entry.kcal) setCalDisplay(parseInt(entry.weight), parseInt(entry.kcal));
+    else autoCalc();
+    if (badge) badge.style.display = 'block';
+  } else {
+    document.getElementById('d-protein').value = isToday ? DIARY_DEFAULTS.protein : '';
+    document.getElementById('d-grain').value   = isToday ? DIARY_DEFAULTS.grain   : '';
+    document.getElementById('d-veg').value     = isToday ? DIARY_DEFAULTS.veg     : '';
+    document.getElementById('d-other').value   = isToday ? DIARY_DEFAULTS.other   : '';
+    document.getElementById('d-weight').value  = '';
+    document.getElementById('d-finish').value  = '完食';
+    document.getElementById('d-memo').value    = '';
+    autoCalc();
+    if (badge) badge.style.display = 'none';
+  }
+  const dm = getDayMemo(date);
+  document.getElementById('memo-walk').value     = dm.walk      || '';
+  document.getElementById('memo-cough-n').value  = dm.coughN    || '';
+  document.getElementById('memo-cough-lv').value = dm.coughL    || 'なし';
+  document.getElementById('memo-other').value    = dm.memoOther || '';
+  renderChecks();
+  updateMetrics();
+}
+function resetDiaryForm() { loadFormForDate(todayKey()); }
+
+// ============================================================
+// BOOT
+// ============================================================
+function renderAll() {
+  // diary 初期化・デフォルト補完
+  const _stored = load('diary', []);
+  const _storedDates = new Set(_stored.map(e => e.date));
+  const _missing = DEFAULT_DIARY.filter(e => !_storedDates.has(e.date));
+  if (_missing.length > 0) {
+    const _merged = [..._stored, ..._missing];
+    _merged.sort((a,b) => b.date < a.date ? -1 : 1);
+    setDiary(_merged);
+  }
+  getDiary().forEach(e => {
+    if (localStorage.getItem('day_memo_' + e.date)) return;
+    setDayMemo(e.date, { walk: e.walk||'', coughN: e.coughN||'', coughL: e.coughL||'なし', memoOther: e.memoOther||'' });
+  });
+
+  // blood tests 初期化
+  const _btStored = load('blood_tests', null);
+  if (!_btStored) setBloodTests(DEFAULT_BLOOD_TESTS);
+
+  const _n = load('health_notes', null);
+  if (!_n || _n.length === 0) setNotes(DEFAULT_HEALTH_NOTES);
+
+  document.getElementById('dog-age').textContent = calcAge();
+  renderBanner();
+  renderCalendar();
+  renderChecks();
+  updateMetrics();
+  renderNotes();
+  renderNextVisitItems();
+  renderSupple();
+  renderDiary();
+  renderBloodTestHistory();
+  renderGPT();
+  renderHospital();
+  resetDiaryForm();
+  initBloodForm();
+}
+
+renderAll();
+syncFromCloud();
+
+(function scheduleMidnightRefresh() {
+  const now = new Date();
+  const msUntilMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1) - now;
+  setTimeout(function() { renderAll(); scheduleMidnightRefresh(); }, msUntilMidnight);
+})();
+</script>
+</body>
+</html>
