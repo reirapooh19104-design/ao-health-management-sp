@@ -1522,11 +1522,22 @@ function resetDiaryForm() { loadFormForDate(todayKey()); }
 // ============================================================
 function renderAll() {
   // diary 初期化・デフォルト補完
+  // GAS同期で中身が空のエントリが来た場合もDEFAULT_DIARYの内容で復元する
   const _stored = load('diary', []);
-  const _storedDates = new Set(_stored.map(e => e.date));
-  const _missing = DEFAULT_DIARY.filter(e => !_storedDates.has(e.date));
-  if (_missing.length > 0) {
-    const _merged = [..._stored, ..._missing];
+  const _storedMap = new Map(_stored.map(e => [e.date, e]));
+  let _diaryChanged = false;
+  const _merged = [..._stored];
+  DEFAULT_DIARY.forEach(def => {
+    const stored = _storedMap.get(def.date);
+    if (!stored) {
+      _merged.push(def);
+      _diaryChanged = true;
+    } else if (!stored.protein && !stored.grain && !stored.veg && (def.protein || def.grain || def.veg)) {
+      const idx = _merged.findIndex(e => e.date === def.date);
+      if (idx >= 0) { _merged[idx] = def; _diaryChanged = true; }
+    }
+  });
+  if (_diaryChanged) {
     _merged.sort((a,b) => b.date < a.date ? -1 : 1);
     setDiary(_merged);
   }
