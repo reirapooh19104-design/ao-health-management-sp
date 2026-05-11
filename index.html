@@ -349,19 +349,19 @@ body {
 
     <div class="form-group">
       <label class="form-label">動物性タンパク質</label>
-      <input type="text" class="form-input" id="d-protein" oninput="autoCalc()">
+      <input type="text" class="form-input" id="d-protein" oninput="convertGram(this);autoCalc()">
     </div>
     <div class="form-group">
       <label class="form-label">穀類・芋類</label>
-      <input type="text" class="form-input" id="d-grain" oninput="autoCalc()">
+      <input type="text" class="form-input" id="d-grain" oninput="convertGram(this);autoCalc()">
     </div>
     <div class="form-group">
       <label class="form-label">野菜・きのこ類</label>
-      <input type="text" class="form-input" id="d-veg" oninput="autoCalc()">
+      <input type="text" class="form-input" id="d-veg" oninput="convertGram(this);autoCalc()">
     </div>
     <div class="form-group">
       <label class="form-label">その他・調味料</label>
-      <input type="text" class="form-input" id="d-other">
+      <input type="text" class="form-input" id="d-other" oninput="convertGram(this)">
     </div>
     <div class="form-group">
       <label class="form-label">合計重量（g）</label>
@@ -666,6 +666,20 @@ body {
 <div class="toast" id="toast"></div>
 
 <script>
+// 音声入力で「グラム」と入力されたとき「g」に変換する
+// debounceで処理することでiOS音声認識の複数回発火による重複を防ぐ
+function convertGram(el) {
+  clearTimeout(el._gramTimer);
+  el._gramTimer = setTimeout(function() {
+    var before = el.value;
+    var after = before.replace(/グラム/g, 'g');
+    if (before !== after) {
+      el.value = after;
+      autoCalc();
+    }
+  }, 400);
+}
+
 // ============================================================
 // CONSTANTS
 // ============================================================
