@@ -812,7 +812,23 @@ async function syncFromCloud() {
     const res = await fetch(GAS_URL + '?action=getAll', { cache: 'no-store' });
     const data = await res.json();
     Object.keys(data).forEach(k => {
-      localStorage.setItem(k, JSON.stringify(data[k]));
+      if (k === 'diary') {
+        // diaryはGASの空エントリでローカルの内容を上書きしないようマージする
+        const local = load('diary', []);
+        const localMap = new Map(local.map(e => [e.date, e]));
+        (data[k] || []).forEach(e => {
+          const loc = localMap.get(e.date);
+          if (!loc) {
+            localMap.set(e.date, e);
+          } else if (!loc.protein && !loc.grain && !loc.veg && (e.protein || e.grain || e.veg)) {
+            localMap.set(e.date, e);
+          }
+        });
+        const merged = Array.from(localMap.values()).sort((a,b) => b.date < a.date ? -1 : 1);
+        localStorage.setItem('diary', JSON.stringify(merged));
+      } else {
+        localStorage.setItem(k, JSON.stringify(data[k]));
+      }
     });
     _syncStatus('同期済み');
     setTimeout(() => _syncStatus(''), 3000);
@@ -820,6 +836,7 @@ async function syncFromCloud() {
   } catch {
     _syncStatus('オフライン');
     setTimeout(() => _syncStatus(''), 5000);
+    renderAll();
   }
 }
 
