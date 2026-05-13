@@ -222,6 +222,15 @@ body {
 .backup-item-date { font-size:14px; font-weight:600; }
 .backup-item-info { font-size:12px; color:var(--text-light); margin-top:2px; }
 .btn-restore { padding:7px 16px; background:var(--green-light); color:#1a6b52; border:none; border-radius:8px; font-size:13px; font-weight:600; cursor:pointer; font-family:inherit; }
+
+/* ── 月切替ナビ ── */
+.month-nav { display:flex; align-items:center; gap:6px; flex-wrap:wrap; margin-bottom:12px; }
+.month-nav-btn { background:var(--green-light); color:#1a6b52; border:none; border-radius:8px; padding:6px 12px; font-size:14px; font-weight:600; cursor:pointer; font-family:inherit; flex-shrink:0; }
+.month-nav-btn:hover { background:#c8e6da; }
+.month-nav-label { font-size:15px; font-weight:700; color:var(--text); flex:1; text-align:center; min-width:90px; }
+.month-nav-all { background:none; border:1px solid var(--border); color:var(--text-light); border-radius:8px; padding:6px 10px; font-size:13px; cursor:pointer; font-family:inherit; flex-shrink:0; }
+.month-nav-all.active { background:var(--green-light); color:#1a6b52; border-color:var(--green); font-weight:600; }
+.month-nav-all:hover { border-color:var(--green); color:#1a6b52; }
 </style>
 </head>
 <body>
@@ -465,6 +474,7 @@ body {
     <div class="section-header">
       <div class="section-title">体調・症状の記録</div>
     </div>
+    <div id="notes-month-nav"></div>
     <div id="notes-list"></div>
   </div>
 
@@ -584,6 +594,7 @@ body {
   <div class="section-header" style="padding:0 4px 8px">
     <div class="section-title">記録一覧</div>
   </div>
+  <div id="diary-month-nav"></div>
   <div id="diary-list"></div>
 </div><!-- /diary -->
 
@@ -807,6 +818,11 @@ const todayKey = () => {
 };
 
 let _currentFormDate = todayKey();
+
+// ── 月切替状態 ──
+const _todayYM = () => { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0'); };
+let currentNotesMonth = (() => { const v = localStorage.getItem('view_month_notes'); return v === 'null' ? null : (v || _todayYM()); })();
+let currentDiaryMonth = (() => { const v = localStorage.getItem('view_month_diary'); return v === 'null' ? null : (v || _todayYM()); })();
 
 // ============================================================
 // CLOUD SYNC (Google Apps Script)
@@ -1184,6 +1200,44 @@ function saveTodayMemo() { saveTodayAll(); }
 // ============================================================
 // HEALTH NOTES
 // ============================================================
+// ── 月切替ヘルパー ──
+function _shiftMonth(ym, delta) {
+  const [y, m] = ym.split('-').map(Number);
+  const d = new Date(y, m - 1 + delta, 1);
+  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0');
+}
+function _monthNavHtml(current, prefix) {
+  const label = current
+    ? (current.split('-')[0] + '年' + parseInt(current.split('-')[1]) + '月')
+    : '全期間';
+  return `<div class="month-nav">
+    <button class="month-nav-btn" onclick="${prefix}ShiftMonth(-1)">◀</button>
+    <span class="month-nav-label">${label}</span>
+    <button class="month-nav-btn" onclick="${prefix}ShiftMonth(1)">▶</button>
+    <button class="month-nav-all${current ? '' : ' active'}" onclick="${prefix}SetMonthAll()">全期間</button>
+  </div>`;
+}
+function notesShiftMonth(delta) {
+  currentNotesMonth = _shiftMonth(currentNotesMonth || _todayYM(), delta);
+  localStorage.setItem('view_month_notes', currentNotesMonth);
+  renderNotes();
+}
+function notesSetMonthAll() {
+  currentNotesMonth = null;
+  localStorage.setItem('view_month_notes', 'null');
+  renderNotes();
+}
+function diaryShiftMonth(delta) {
+  currentDiaryMonth = _shiftMonth(currentDiaryMonth || _todayYM(), delta);
+  localStorage.setItem('view_month_diary', currentDiaryMonth);
+  renderDiary();
+}
+function diarySetMonthAll() {
+  currentDiaryMonth = null;
+  localStorage.setItem('view_month_diary', 'null');
+  renderDiary();
+}
+
 function parseNoteDate(dateStr) {
   const hasNight = String(dateStr).includes('夜');
   const clean = String(dateStr).replace('夜', '').trim();
@@ -1195,10 +1249,20 @@ function parseNoteDate(dateStr) {
 }
 
 function renderNotes() {
-  const notes = [...getNotes()].sort((a, b) => parseNoteDate(b.date) - parseNoteDate(a.date));
+  const nav = document.getElementById('notes-month-nav');
+  if (nav) nav.innerHTML = _monthNavHtml(currentNotesMonth, 'notes');
+  let notes = [...getNotes()].sort((a, b) => parseNoteDate(b.date) - parseNoteDate(a.date));
+  if (currentNotesMonth) {
+    notes = notes.filter(n => {
+      const clean = String(n.date).replace('夜', '').trim();
+      const parts = clean.split(/[-\/]/);
+      if (parts.length < 3) return false;
+      return parts[0] + '-' + String(parseInt(parts[1])).padStart(2,'0') === currentNotesMonth;
+    });
+  }
   const list = document.getElementById('notes-list');
   if (!notes.length) {
-    list.innerHTML = '<div style="color:var(--text-light);font-size:14px;padding:8px 0">記録はありません</div>';
+    list.innerHTML = `<div style="color:var(--text-light);font-size:14px;padding:8px 0">${currentNotesMonth ? 'この月の記録はありません' : '記録はありません'}</div>`;
     return;
   }
   list.innerHTML = notes.map(n =>
@@ -1452,10 +1516,15 @@ function setCalDisplay(wt, kcal) {
 // RENDER DIARY
 // ============================================================
 function renderDiary() {
-  const diary = getDiary();
+  const nav = document.getElementById('diary-month-nav');
+  if (nav) nav.innerHTML = _monthNavHtml(currentDiaryMonth, 'diary');
+  let diary = getDiary();
+  if (currentDiaryMonth) {
+    diary = diary.filter(e => e.date && e.date.slice(0,7) === currentDiaryMonth);
+  }
   const list = document.getElementById('diary-list');
   if (!diary.length) {
-    list.innerHTML = '<div style="color:var(--text-light);font-size:14px;padding:4px 4px 12px">まだ記録がありません</div>';
+    list.innerHTML = `<div style="color:var(--text-light);font-size:14px;padding:4px 4px 12px">${currentDiaryMonth ? 'この月の記録はありません' : 'まだ記録がありません'}</div>`;
     return;
   }
   const DOW = '日月火水木金土';
