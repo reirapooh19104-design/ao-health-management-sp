@@ -846,34 +846,36 @@ async function syncFromCloud() {
       const localTs = Number(localStorage.getItem('_ts_' + k) || 0);
 
       if (k === 'diary') {
-        // diary: エントリ単位でマージ＋空エントリガード
+        // diary: エントリ単位でマージ＋空エントリ安全ガード
         const local = load('diary', []);
         const localMap = new Map(local.map(e => [e.date, e]));
         (gasVal || []).forEach(ge => {
           const le = localMap.get(ge.date);
           if (!le) {
+            // ローカルにないエントリ → GASから追加
             localMap.set(ge.date, ge);
           } else {
-            const gasEmpty = !ge.protein && !ge.grain && !ge.veg;
-            const localHas = le.protein || le.grain || le.veg;
-            if (gasEmpty && localHas) {
-              // GASが空でローカルに内容あり → ローカルを保持
+            const gasEmpty  = !ge.protein && !ge.grain && !ge.veg;
+            const localEmpty = !le.protein && !le.grain && !le.veg;
+            if (gasEmpty && !localEmpty) {
+              // GASが空・ローカルに内容あり → ローカル保持（安全ガード）
+            } else if (!gasEmpty && localEmpty) {
+              // GASに内容・ローカルが空 → GAS採用
+              localMap.set(ge.date, ge);
             } else {
+              // 両方同条件 → タイムスタンプ比較。同点・なしはGAS優先
               const geTs = Number(ge._ts || 0);
               const leTs = Number(le._ts || 0);
-              if (geTs > leTs) localMap.set(ge.date, ge);
+              if (geTs >= leTs) localMap.set(ge.date, ge);
             }
           }
         });
         const merged = Array.from(localMap.values()).sort((a,b) => b.date < a.date ? -1 : 1);
         localStorage.setItem('diary', JSON.stringify(merged));
-      } else if (gasTs > localTs) {
-        // GASが新しい → GASを採用
+      } else if (gasTs > localTs || (gasTs === 0 && localTs === 0)) {
+        // GASが新しい、またはタイムスタンプなし（後方互換）→ GASを採用
         localStorage.setItem(k, JSON.stringify(gasVal));
-        localStorage.setItem('_ts_' + k, gasTs);
-      } else if (gasTs === 0 && localTs === 0 && !localStorage.getItem(k)) {
-        // タイムスタンプなし・ローカルデータなし → GASから取得（後方互換）
-        localStorage.setItem(k, JSON.stringify(gasVal));
+        if (gasTs > 0) localStorage.setItem('_ts_' + k, gasTs);
       }
     });
 
@@ -891,14 +893,23 @@ async function syncFromCloud() {
 async function pushAllToCloud() {
   if (!GAS_URL) { showToast('GAS URLが設定されていません'); return; }
   _syncStatus('同期中…', 'syncing');
-  const keys = [];
+  // データキーのみ収集（autobackup_・_ts_ は除外）
+  const dataKeys = [];
   for (let i = 0; i < localStorage.length; i++) {
     const k = localStorage.key(i);
-    if (k && !k.startsWith('autobackup_')) keys.push(k);
+    if (k && !k.startsWith('autobackup_') && !k.startsWith('_ts_')) dataKeys.push(k);
   }
+  // 強制タイムスタンプ：このデバイスのデータを「最新」としてGASに書き込む
+  const forceTs = Date.now();
+  dataKeys.forEach(k => localStorage.setItem('_ts_' + k, forceTs));
+
+  // 送信リスト：データキー + _ts_ キー
+  const allKeys = [];
+  dataKeys.forEach(k => { allKeys.push(k); allKeys.push('_ts_' + k); });
+
   showToast('GASへ全データ同期中...');
-  for (let i = 0; i < keys.length; i++) {
-    const k = keys[i];
+  for (let i = 0; i < allKeys.length; i++) {
+    const k = allKeys[i];
     try {
       const raw = localStorage.getItem(k);
       if (raw !== null) {
@@ -909,10 +920,10 @@ async function pushAllToCloud() {
         });
       }
     } catch {}
-    if ((i + 1) % 5 === 0 || i === keys.length - 1) {
-      showToast('GAS同期中 ' + (i+1) + '/' + keys.length);
+    if ((i + 1) % 10 === 0 || i === allKeys.length - 1) {
+      showToast('GAS同期中 ' + Math.ceil((i+1)/2) + '/' + dataKeys.length);
     }
-    await new Promise(r => setTimeout(r, 500));
+    await new Promise(r => setTimeout(r, 300));
   }
   _syncStatus('同期済み');
   setTimeout(() => _syncStatus(''), 3000);
