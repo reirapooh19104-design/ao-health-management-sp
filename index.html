@@ -210,6 +210,18 @@ body {
 .nv-input { width: 100%; padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; font-size: 14px; font-family: inherit; background: #FAFAF8; resize: vertical; min-height: 56px; outline: none; }
 .nv-input:focus { border-color: var(--green); }
 .nv-add-btn { margin-top: 8px; padding: 10px 18px; background: var(--green-light); color: #1a6b52; border: none; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; font-family: inherit; }
+
+/* ── バックアップ・同期 ── */
+.modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:1000; display:flex; align-items:flex-end; justify-content:center; }
+.modal-sheet { background:var(--card); border-radius:16px 16px 0 0; padding:20px 16px; width:100%; max-width:600px; max-height:75vh; overflow-y:auto; }
+.modal-title { font-size:16px; font-weight:700; margin-bottom:4px; }
+.modal-sub { font-size:12px; color:var(--text-light); margin-bottom:16px; }
+.modal-close { float:right; background:none; border:none; font-size:24px; cursor:pointer; color:var(--text-light); line-height:1; margin-top:-4px; }
+.backup-item { display:flex; justify-content:space-between; align-items:center; padding:12px 0; border-bottom:1px solid var(--border); }
+.backup-item:last-child { border-bottom:none; }
+.backup-item-date { font-size:14px; font-weight:600; }
+.backup-item-info { font-size:12px; color:var(--text-light); margin-top:2px; }
+.btn-restore { padding:7px 16px; background:var(--green-light); color:#1a6b52; border:none; border-radius:8px; font-size:13px; font-weight:600; cursor:pointer; font-family:inherit; }
 </style>
 </head>
 <body>
@@ -423,10 +435,12 @@ body {
     <button class="btn-primary" onclick="saveTodayAll()">今日の記録を保存</button>
   </div>
 
-  <div class="export-row">
+  <div class="export-row" style="flex-wrap:wrap;gap:6px">
     <button class="btn-secondary" onclick="exportData()">CSV書き出し</button>
     <button class="btn-secondary" onclick="document.getElementById('file-import').click()">CSV読み込み</button>
     <input type="file" id="file-import" accept=".json" style="display:none" onchange="importData(event)">
+    <button class="btn-secondary" onclick="showBackupModal()">履歴から復元</button>
+    <button class="btn-secondary" onclick="pushAllToCloud()">全データGAS同期</button>
   </div>
 </div><!-- /today -->
 
@@ -661,19 +675,31 @@ body {
   </div>
 </div><!-- /hospital -->
 
+<!-- バックアップ復元モーダル -->
+<div id="backup-modal" class="modal-overlay" style="display:none" onclick="if(event.target===this)closeBackupModal()">
+  <div class="modal-sheet">
+    <button class="modal-close" onclick="closeBackupModal()">×</button>
+    <div class="modal-title">過去のバックアップから復元</div>
+    <div class="modal-sub">選んだ日のデータで上書き復元します。復元後は「全データGAS同期」ボタンでクラウドに反映できます。</div>
+    <div id="backup-list"></div>
+  </div>
+</div>
+
 </div><!-- /content -->
 
 <div class="toast" id="toast"></div>
 
 <script>
-// 音声入力で「グラム」と入力されたとき「g」に変換する
-// debounceで処理することでiOS音声認識の複数回発火による重複を防ぐ
+// 音声入力で「グラム」→「g」変換（Mac/iOS両対応）
+// compositionイベントでMac音声入力のIME進行中は処理しない
 function convertGram(el) {
+  if (el._composing) return;
   clearTimeout(el._gramTimer);
   el._gramTimer = setTimeout(function() {
+    if (el._composing) return;
     var before = el.value;
     var after = before.replace(/グラム/g, 'g');
-    if (before !== after) {
+    if (before !== after && el.value === before) {
       el.value = after;
       autoCalc();
     }
@@ -810,26 +836,47 @@ async function syncFromCloud() {
   _syncStatus('同期中…', 'syncing');
   try {
     const res = await fetch(GAS_URL + '?action=getAll', { cache: 'no-store' });
-    const data = await res.json();
-    Object.keys(data).forEach(k => {
+    const gasData = await res.json();
+
+    Object.keys(gasData).forEach(k => {
+      if (k.startsWith('autobackup_') || k.startsWith('_ts_')) return;
+
+      const gasVal  = gasData[k];
+      const gasTs   = Number(gasData['_ts_' + k] || 0);
+      const localTs = Number(localStorage.getItem('_ts_' + k) || 0);
+
       if (k === 'diary') {
-        // diaryはGASの空エントリでローカルの内容を上書きしないようマージする
+        // diary: エントリ単位でマージ＋空エントリガード
         const local = load('diary', []);
         const localMap = new Map(local.map(e => [e.date, e]));
-        (data[k] || []).forEach(e => {
-          const loc = localMap.get(e.date);
-          if (!loc) {
-            localMap.set(e.date, e);
-          } else if (!loc.protein && !loc.grain && !loc.veg && (e.protein || e.grain || e.veg)) {
-            localMap.set(e.date, e);
+        (gasVal || []).forEach(ge => {
+          const le = localMap.get(ge.date);
+          if (!le) {
+            localMap.set(ge.date, ge);
+          } else {
+            const gasEmpty = !ge.protein && !ge.grain && !ge.veg;
+            const localHas = le.protein || le.grain || le.veg;
+            if (gasEmpty && localHas) {
+              // GASが空でローカルに内容あり → ローカルを保持
+            } else {
+              const geTs = Number(ge._ts || 0);
+              const leTs = Number(le._ts || 0);
+              if (geTs > leTs) localMap.set(ge.date, ge);
+            }
           }
         });
         const merged = Array.from(localMap.values()).sort((a,b) => b.date < a.date ? -1 : 1);
         localStorage.setItem('diary', JSON.stringify(merged));
-      } else {
-        localStorage.setItem(k, JSON.stringify(data[k]));
+      } else if (gasTs > localTs) {
+        // GASが新しい → GASを採用
+        localStorage.setItem(k, JSON.stringify(gasVal));
+        localStorage.setItem('_ts_' + k, gasTs);
+      } else if (gasTs === 0 && localTs === 0 && !localStorage.getItem(k)) {
+        // タイムスタンプなし・ローカルデータなし → GASから取得（後方互換）
+        localStorage.setItem(k, JSON.stringify(gasVal));
       }
     });
+
     _syncStatus('同期済み');
     setTimeout(() => _syncStatus(''), 3000);
     renderAll();
@@ -840,12 +887,117 @@ async function syncFromCloud() {
   }
 }
 
+// 全データを0.5秒間隔でGASへ手動同期
+async function pushAllToCloud() {
+  if (!GAS_URL) { showToast('GAS URLが設定されていません'); return; }
+  _syncStatus('同期中…', 'syncing');
+  const keys = [];
+  for (let i = 0; i < localStorage.length; i++) {
+    const k = localStorage.key(i);
+    if (k && !k.startsWith('autobackup_')) keys.push(k);
+  }
+  showToast('GASへ全データ同期中...');
+  for (let i = 0; i < keys.length; i++) {
+    const k = keys[i];
+    try {
+      const raw = localStorage.getItem(k);
+      if (raw !== null) {
+        await fetch(GAS_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain' },
+          body: JSON.stringify({ key: k, value: JSON.parse(raw) })
+        });
+      }
+    } catch {}
+    if ((i + 1) % 5 === 0 || i === keys.length - 1) {
+      showToast('GAS同期中 ' + (i+1) + '/' + keys.length);
+    }
+    await new Promise(r => setTimeout(r, 500));
+  }
+  _syncStatus('同期済み');
+  setTimeout(() => _syncStatus(''), 3000);
+  showToast('全データのGAS同期が完了しました！');
+}
+
 function load(key, def) {
   try { const v = localStorage.getItem(key); return v ? JSON.parse(v) : def; } catch { return def; }
 }
 function save(key, val) {
   localStorage.setItem(key, JSON.stringify(val));
+  const ts = Date.now();
+  localStorage.setItem('_ts_' + key, ts);
   pushToCloud(key, val);
+  pushToCloud('_ts_' + key, ts);
+}
+
+// ============================================================
+// AUTO BACKUP
+// ============================================================
+function autoBackup() {
+  const key = 'autobackup_' + todayKey();
+  const snapshot = {};
+  for (let i = 0; i < localStorage.length; i++) {
+    const k = localStorage.key(i);
+    if (k && !k.startsWith('autobackup_')) snapshot[k] = localStorage.getItem(k);
+  }
+  localStorage.setItem(key, JSON.stringify(snapshot));
+  // 7日より古いバックアップを削除
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - 7);
+  const cutoffStr = cutoff.toISOString().slice(0, 10);
+  for (let i = localStorage.length - 1; i >= 0; i--) {
+    const k = localStorage.key(i);
+    if (k && k.startsWith('autobackup_') && k.replace('autobackup_', '') < cutoffStr) {
+      localStorage.removeItem(k);
+    }
+  }
+}
+
+function showBackupModal() {
+  const backups = [];
+  for (let i = 0; i < localStorage.length; i++) {
+    const k = localStorage.key(i);
+    if (k && k.startsWith('autobackup_')) backups.push(k.replace('autobackup_', ''));
+  }
+  backups.sort().reverse();
+  const list = document.getElementById('backup-list');
+  if (!backups.length) {
+    list.innerHTML = '<div style="color:var(--text-light);padding:16px 0;font-size:14px">バックアップがありません</div>';
+  } else {
+    list.innerHTML = backups.map(date => {
+      const snap = JSON.parse(localStorage.getItem('autobackup_' + date) || '{}');
+      const cnt  = Object.keys(snap).length;
+      return `<div class="backup-item">
+        <div>
+          <div class="backup-item-date">${date}</div>
+          <div class="backup-item-info">${cnt} キー保存</div>
+        </div>
+        <button class="btn-restore" onclick="restoreFromBackup('${date}')">復元</button>
+      </div>`;
+    }).join('');
+  }
+  document.getElementById('backup-modal').style.display = 'flex';
+}
+
+function closeBackupModal() {
+  document.getElementById('backup-modal').style.display = 'none';
+}
+
+function restoreFromBackup(date) {
+  if (!confirm(date + ' のバックアップで復元しますか？\n現在のデータは上書きされます。\n（復元後、GAS同期は手動で行ってください）')) return;
+  const snap = JSON.parse(localStorage.getItem('autobackup_' + date) || '{}');
+  // autobackup_以外のキーをクリア
+  const toRemove = [];
+  for (let i = 0; i < localStorage.length; i++) {
+    const k = localStorage.key(i);
+    if (k && !k.startsWith('autobackup_')) toRemove.push(k);
+  }
+  toRemove.forEach(k => localStorage.removeItem(k));
+  // スナップショットを復元（GASへは同期しない）
+  Object.keys(snap).forEach(k => localStorage.setItem(k, snap[k]));
+  closeBackupModal();
+  renderAll();
+  showToast(date + ' から復元しました。「全データGAS同期」でクラウドに反映できます');
 }
 
 function getChecks()    { return load('chk_' + _currentFormDate, {}); }
@@ -989,7 +1141,7 @@ function saveTodayAll() {
   const coughL     = document.getElementById('memo-cough-lv').value;
   const memoOther  = document.getElementById('memo-other').value.trim();
   const entry = { date, protein, grain, veg, other, weight, kcal: kcalTxt, finish, memo,
-                  urso: ursoStatus(new Date(date)), walk, coughN, coughL, memoOther };
+                  urso: ursoStatus(new Date(date)), walk, coughN, coughL, memoOther, _ts: Date.now() };
   const diary = getDiary();
   const idx = diary.findIndex(e => e.date === date);
   if (idx >= 0) diary[idx] = entry; else diary.unshift(entry);
@@ -1021,8 +1173,18 @@ function saveTodayMemo() { saveTodayAll(); }
 // ============================================================
 // HEALTH NOTES
 // ============================================================
+function parseNoteDate(dateStr) {
+  const hasNight = String(dateStr).includes('夜');
+  const clean = String(dateStr).replace('夜', '').trim();
+  const parts = clean.split(/[-\/]/);
+  if (parts.length < 3) return 0;
+  const ts = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2])).getTime();
+  // 同日内で夜は後ろ（値が小さい）→ 非夜に+1してソート優先
+  return isNaN(ts) ? 0 : ts * 2 + (hasNight ? 0 : 1);
+}
+
 function renderNotes() {
-  const notes = getNotes();
+  const notes = [...getNotes()].sort((a, b) => parseNoteDate(b.date) - parseNoteDate(a.date));
   const list = document.getElementById('notes-list');
   if (!notes.length) {
     list.innerHTML = '<div style="color:var(--text-light);font-size:14px;padding:8px 0">記録はありません</div>';
@@ -1586,8 +1748,21 @@ function renderAll() {
   initBloodForm();
 }
 
+autoBackup(); // renderAllより前に自動バックアップ
 renderAll();
 syncFromCloud();
+
+// Mac音声入力対応：compositionイベントでIME進行中は変換しない
+['d-protein','d-grain','d-veg','d-other'].forEach(function(id) {
+  var el = document.getElementById(id);
+  if (!el) return;
+  el.addEventListener('compositionstart', function() { el._composing = true; });
+  el.addEventListener('compositionend', function() {
+    el._composing = false;
+    convertGram(el);
+    autoCalc();
+  });
+});
 
 (function scheduleMidnightRefresh() {
   const now = new Date();
