@@ -83,7 +83,8 @@ body {
 .urso-btn.today-rest   { background: #777; color: white; }
 .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; margin-top: 8px; }
 .cal-h { text-align: center; font-size: 11px; color: var(--text-light); padding: 4px 0; }
-.cal-d { text-align: center; border-radius: 8px; padding: 8px 2px; font-size: 13px; font-weight: 500; }
+.cal-d { text-align: center; border-radius: 8px; padding: 8px 2px; font-size: 13px; font-weight: 500; cursor: pointer; transition: opacity 0.1s, transform 0.1s; }
+.cal-d:active { opacity: 0.6; transform: scale(0.88); }
 .cal-d.drink       { background: var(--green-light); }
 .cal-d.rest        { background: var(--gray-rest); color: #777; }
 .cal-d.today-drink { background: var(--green); color: white; }
@@ -364,6 +365,11 @@ body {
 
     <div style="font-size:12px;color:var(--text-light);margin:-6px 0 12px;padding:8px 10px;background:#F5F4F0;border-radius:8px">
       📅 日付を変えると、その日の保存データを呼び出せます
+    </div>
+
+    <div id="editing-banner" style="display:none;font-size:13px;color:#7a4f00;background:#FFF3CD;border:1px solid #ffc107;border-radius:8px;padding:10px 12px;margin:0 0 12px;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">
+      <span id="editing-banner-text"></span>
+      <button onclick="loadFormForDate(todayKey())" style="background:none;border:1px solid #7a4f00;color:#7a4f00;border-radius:6px;padding:4px 10px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;flex-shrink:0;white-space:nowrap">今日に戻る</button>
     </div>
 
     <div class="card-title" style="margin-bottom:10px">🍚 食事</div>
@@ -1110,11 +1116,12 @@ function renderCalendar() {
   for (let i = 0; i < startOffset; i++) html += `<div></div>`;
   for (let d = 1; d <= last; d++) {
     const date = new Date(y, m, d);
+    const dateStr = y + '-' + String(m+1).padStart(2,'0') + '-' + String(d).padStart(2,'0');
     const st = ursoStatus(date);
     const isToday = d === today.getDate();
     let cls = 'cal-d';
     if (st) cls += isToday ? ' today-' + st : ' ' + st;
-    html += `<div class="${cls}">${d}</div>`;
+    html += `<div class="${cls}" onclick="goToDate('${dateStr}')">${d}</div>`;
   }
   document.getElementById('cal-grid').innerHTML = html;
 }
@@ -1736,6 +1743,14 @@ const DIARY_DEFAULTS = {
   other:   '生ウコン・昆布水・のり・宮古島の雪塩 少々',
 };
 
+function goToDate(date) {
+  const pane = document.getElementById('pane-today');
+  if (!pane || !pane.classList.contains('active')) switchTab('today');
+  loadFormForDate(date);
+  const card = document.getElementById('d-date').closest('.card');
+  if (card) card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
 function loadFormForDate(date) {
   if (!date) return;
   _currentFormDate = date;
@@ -1773,6 +1788,18 @@ function loadFormForDate(date) {
   document.getElementById('memo-other').value    = dm.memoOther || '';
   renderChecks();
   updateMetrics();
+  // 過去日編集バナー制御
+  const banner = document.getElementById('editing-banner');
+  const bannerText = document.getElementById('editing-banner-text');
+  if (banner) {
+    if (isToday) {
+      banner.style.display = 'none';
+    } else {
+      const [by, bm, bd] = date.split('-');
+      if (bannerText) bannerText.textContent = `⚠️ ${by}/${bm}/${bd}（過去日）の記録を編集中`;
+      banner.style.display = 'flex';
+    }
+  }
 }
 function resetDiaryForm() { loadFormForDate(todayKey()); }
 
