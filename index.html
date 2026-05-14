@@ -232,6 +232,19 @@ body {
 .month-nav-all { background:none; border:1px solid var(--border); color:var(--text-light); border-radius:8px; padding:6px 10px; font-size:13px; cursor:pointer; font-family:inherit; flex-shrink:0; }
 .month-nav-all.active { background:var(--green-light); color:#1a6b52; border-color:var(--green); font-weight:600; }
 .month-nav-all:hover { border-color:var(--green); color:#1a6b52; }
+
+/* ── レシピ管理 ── */
+.recipe-toolbar { display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-bottom:10px; }
+.recipe-select { flex:1; min-width:100px; padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:14px; font-family:inherit; background:#FAFAF8; outline:none; color:var(--text); }
+.recipe-select:focus { border-color:var(--green); }
+.recipe-edit-section { background:#F8F7F3; border-radius:10px; padding:12px; margin-bottom:10px; }
+.recipe-edit-section-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; gap:8px; }
+.recipe-item-row { display:flex; gap:6px; align-items:center; margin-bottom:6px; }
+.recipe-item-row .ri-name { flex:1; padding:7px 10px; border:1px solid var(--border); border-radius:6px; font-size:13px; font-family:inherit; background:#fff; outline:none; }
+.recipe-item-row .ri-amount { width:90px; flex:none; padding:7px 10px; border:1px solid var(--border); border-radius:6px; font-size:13px; font-family:inherit; background:#fff; outline:none; }
+.recipe-item-row .ri-name:focus, .recipe-item-row .ri-amount:focus { border-color:var(--green); }
+.recipe-del-btn { background:none; border:none; color:#ccc; font-size:20px; cursor:pointer; padding:0 4px; line-height:1; flex-shrink:0; transition:color 0.15s; }
+.recipe-del-btn:hover { color:#E05050; }
 </style>
 </head>
 <body>
@@ -606,34 +619,7 @@ body {
 
 <!-- ===== レシピタブ ===== -->
 <div id="pane-recipe" class="tab-pane">
-  <div class="card">
-    <div class="section-header">
-      <div class="section-title">基本レシピ（1日分）</div>
-      <span style="font-size:12px;color:#888">2食に均等に分ける</span>
-    </div>
-    <div class="recipe-cat">■ 動物性タンパク質</div>
-    <div class="recipe-item"><span>よしりんお魚（骨入り・熊野灘産天然魚）</span><span class="recipe-amount">55〜60g</span></div>
-    <div class="recipe-item"><span>鶏胸肉（皮なし）</span><span class="recipe-amount">35〜40g</span></div>
-    <div class="recipe-item" style="font-size:13px;color:var(--text-light);border:none;padding:4px 0 8px">※もも肉は週1〜2回・25〜30g</div>
-    <div class="recipe-cat">■ 穀類・芋類</div>
-    <div class="recipe-item"><span>さつまいも</span><span class="recipe-amount">55g</span></div>
-    <div class="recipe-item"><span>オートミール</span><span class="recipe-amount">8g</span></div>
-    <div class="recipe-cat">■ 野菜・きのこ類</div>
-    <div class="recipe-item"><span>人参（毎日）</span><span class="recipe-amount">20g</span></div>
-    <div class="recipe-item"><span>葉物野菜（日替わり）</span><span class="recipe-amount">25〜30g</span></div>
-    <div class="recipe-item"><span>きのこ類（週3〜4回）</span><span class="recipe-amount">8g</span></div>
-    <div class="recipe-item"><span>煮大豆または納豆（週3〜4回・様子見）</span><span class="recipe-amount">10g</span></div>
-    <div class="recipe-item"><span>切り干し大根（週3〜4回）</span><span class="recipe-amount">2〜3g</span></div>
-    <div class="recipe-cat">■ その他・調味料</div>
-    <div class="recipe-item"><span>生ウコン / 昆布水 / のり</span><span class="recipe-amount">各少々</span></div>
-    <div class="recipe-item"><span>宮古島の雪塩</span><span class="recipe-amount">少々</span></div>
-    <div class="recipe-item"><span>アリビダ または アグア酵素水（交互）</span><span class="recipe-amount">少々</span></div>
-    <div class="recipe-item"><span>ニッピコラーゲン（朝夜各）</span><span class="recipe-amount">0.15〜0.25g</span></div>
-    <div style="margin-top:14px;padding:12px;background:#F5F4F0;border-radius:8px;font-size:14px">
-      <div style="font-weight:600">合計：約218〜229g / 推定220〜230kcal</div>
-      <div style="color:var(--text-light);margin-top:4px">お魚：鶏肉 ＝ 6：4</div>
-    </div>
-  </div>
+  <div id="recipe-view"></div>
 </div><!-- /recipe -->
 
 <!-- ===== サプリタブ ===== -->
@@ -1660,6 +1646,306 @@ function renderHospital() {
 }
 
 // ============================================================
+// RECIPE MANAGEMENT
+// ============================================================
+
+let _currentRecipeId = null;
+
+const DEFAULT_RECIPE_DATA = [
+  {
+    id: 'rec_default',
+    name: '基本レシピ（1日分）',
+    note: '2食に均等に分ける',
+    sections: [
+      {
+        title: '動物性タンパク質',
+        items: [
+          { name: 'よしりんお魚（骨入り・熊野灘産天然魚）', amount: '55〜60g' },
+          { name: '鶏胸肉（皮なし）', amount: '35〜40g' }
+        ],
+        memo: '※もも肉は週1〜2回・25〜30g'
+      },
+      {
+        title: '穀類・芋類',
+        items: [
+          { name: 'さつまいも', amount: '55g' },
+          { name: 'オートミール', amount: '8g' }
+        ],
+        memo: ''
+      },
+      {
+        title: '野菜・きのこ類',
+        items: [
+          { name: '人参（毎日）', amount: '20g' },
+          { name: '葉物野菜（日替わり）', amount: '25〜30g' },
+          { name: 'きのこ類（週3〜4回）', amount: '8g' },
+          { name: '煮大豆または納豆（週3〜4回・様子見）', amount: '10g' },
+          { name: '切り干し大根（週3〜4回）', amount: '2〜3g' }
+        ],
+        memo: ''
+      },
+      {
+        title: 'その他・調味料',
+        items: [
+          { name: '生ウコン / 昆布水 / のり', amount: '各少々' },
+          { name: '宮古島の雪塩', amount: '少々' },
+          { name: 'アリビダ または アグア酵素水（交互）', amount: '少々' },
+          { name: 'ニッピコラーゲン（朝夜各）', amount: '0.15〜0.25g' }
+        ],
+        memo: ''
+      }
+    ],
+    summary: '合計：約218〜229g / 推定220〜230kcal\nお魚：鶏肉 ＝ 6：4'
+  }
+];
+
+function _esc(str) {
+  return (str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function initRecipes() {
+  if (localStorage.getItem('recipes')) return;
+  save('recipes', DEFAULT_RECIPE_DATA);
+}
+
+function getRecipes() {
+  return load('recipes', DEFAULT_RECIPE_DATA);
+}
+
+function renderRecipe() {
+  const container = document.getElementById('recipe-view');
+  if (!container) return;
+  const recipes = getRecipes();
+  if (!_currentRecipeId || !recipes.find(r => r.id === _currentRecipeId)) {
+    _currentRecipeId = recipes[0]?.id || null;
+  }
+  const recipe = recipes.find(r => r.id === _currentRecipeId);
+
+  const selectOpts = recipes.map(r =>
+    `<option value="${_esc(r.id)}" ${r.id === _currentRecipeId ? 'selected' : ''}>${_esc(r.name)}</option>`
+  ).join('');
+
+  const sectionsHtml = recipe ? recipe.sections.map(sec => `
+    <div class="recipe-cat">■ ${_esc(sec.title)}</div>
+    ${sec.items.map(item => `
+      <div class="recipe-item">
+        <span>${_esc(item.name)}</span>
+        <span class="recipe-amount">${_esc(item.amount)}</span>
+      </div>`).join('')}
+    ${sec.memo ? `<div class="recipe-item" style="font-size:13px;color:var(--text-light);border:none;padding:4px 0 8px">${_esc(sec.memo)}</div>` : ''}
+  `).join('') : '';
+
+  const summaryLines = (recipe?.summary || '').split('\n').filter(Boolean);
+  const summaryHtml = summaryLines.length ? `
+    <div style="margin-top:14px;padding:12px;background:#F5F4F0;border-radius:8px;font-size:14px">
+      ${summaryLines.map((line, i) =>
+        `<div style="${i > 0 ? 'color:var(--text-light);margin-top:4px' : 'font-weight:600'}">${_esc(line)}</div>`
+      ).join('')}
+    </div>` : '';
+
+  const escapedId = _esc(_currentRecipeId || '');
+  container.innerHTML = `
+    <div class="card">
+      <div class="recipe-toolbar">
+        <select class="recipe-select" onchange="selectRecipe(this.value)">${selectOpts}</select>
+        <button class="btn-edit" onclick="startEditRecipe('${escapedId}')">編集</button>
+        <button class="btn-small" onclick="duplicateRecipe('${escapedId}')">📋 複製</button>
+      </div>
+      <div class="recipe-toolbar" style="margin-top:-2px">
+        <button class="btn-primary" style="flex:1;padding:10px;font-size:14px" onclick="addRecipe()">＋ 新規レシピ追加</button>
+        ${recipes.length > 1 ? `<button class="btn-delete" onclick="deleteRecipe('${escapedId}')">削除</button>` : ''}
+      </div>
+      ${recipe ? `
+        <div class="section-header" style="margin-top:12px">
+          <div class="section-title">${_esc(recipe.name)}</div>
+          ${recipe.note ? `<span style="font-size:12px;color:#888">${_esc(recipe.note)}</span>` : ''}
+        </div>
+        ${sectionsHtml}
+        ${summaryHtml}
+      ` : '<div style="color:var(--text-light);text-align:center;padding:20px">レシピがありません</div>'}
+    </div>`;
+}
+
+function selectRecipe(id) {
+  _currentRecipeId = id;
+  renderRecipe();
+}
+
+function addRecipe() {
+  const recipes = getRecipes();
+  const newRecipe = {
+    id: 'rec_' + Date.now(),
+    name: '新しいレシピ',
+    note: '',
+    sections: [{ title: 'セクション1', items: [{ name: '', amount: '' }], memo: '' }],
+    summary: ''
+  };
+  recipes.push(newRecipe);
+  save('recipes', recipes);
+  _currentRecipeId = newRecipe.id;
+  startEditRecipe(newRecipe.id);
+}
+
+function duplicateRecipe(id) {
+  const recipes = getRecipes();
+  const orig = recipes.find(r => r.id === id);
+  if (!orig) return;
+  const copy = JSON.parse(JSON.stringify(orig));
+  copy.id = 'rec_' + Date.now();
+  copy.name = orig.name + '（コピー）';
+  recipes.push(copy);
+  save('recipes', recipes);
+  _currentRecipeId = copy.id;
+  renderRecipe();
+  showToast('レシピを複製しました');
+}
+
+function deleteRecipe(id) {
+  const recipes = getRecipes();
+  if (recipes.length <= 1) { showToast('最後のレシピは削除できません'); return; }
+  const recipe = recipes.find(r => r.id === id);
+  if (!recipe) return;
+  if (!confirm(`「${recipe.name}」を削除しますか？`)) return;
+  const newList = recipes.filter(r => r.id !== id);
+  save('recipes', newList);
+  _currentRecipeId = newList[0]?.id || null;
+  renderRecipe();
+  showToast('削除しました');
+}
+
+// ── Edit mode ──
+function startEditRecipe(id) {
+  const recipes = getRecipes();
+  const recipe = recipes.find(r => r.id === id);
+  if (!recipe) return;
+  window._editData = JSON.parse(JSON.stringify(recipe));
+  window._editRecipeId = id;
+  _renderEditMode();
+}
+
+function _renderEditMode() {
+  const container = document.getElementById('recipe-view');
+  if (!container || !window._editData) return;
+  const ed = window._editData;
+
+  const sectionsHtml = ed.sections.map((sec, si) => `
+    <div class="recipe-edit-section" data-si="${si}">
+      <div class="recipe-edit-section-header">
+        <input type="text" class="form-input" style="font-size:14px;font-weight:600;flex:1"
+          value="${_esc(sec.title)}" placeholder="セクション名">
+        <button class="btn-delete" onclick="deleteSection(${si})">削除</button>
+      </div>
+      ${sec.items.map((item, ii) => `
+        <div class="recipe-item-row">
+          <input type="text" class="ri-name" value="${_esc(item.name)}" placeholder="項目名">
+          <input type="text" class="ri-amount" value="${_esc(item.amount)}" placeholder="分量">
+          <button class="recipe-del-btn" onclick="deleteRecipeItem(${si},${ii})">×</button>
+        </div>`).join('')}
+      <button class="btn-small" style="margin-top:4px" onclick="addRecipeItem(${si})">＋ 項目追加</button>
+      <div style="margin-top:8px">
+        <input type="text" class="form-input" style="font-size:13px"
+          value="${_esc(sec.memo)}" placeholder="補足メモ（任意）">
+      </div>
+    </div>`).join('');
+
+  container.innerHTML = `
+    <div class="card">
+      <div class="section-header">
+        <div class="section-title">レシピ編集</div>
+        <div style="display:flex;gap:6px">
+          <button class="btn-secondary" onclick="cancelEditRecipe()">キャンセル</button>
+          <button class="btn-edit" style="font-size:14px;padding:8px 16px" onclick="saveRecipeEdit()">保存</button>
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">レシピ名</label>
+        <input id="edit-recipe-name" type="text" class="form-input" value="${_esc(ed.name)}" placeholder="レシピ名">
+      </div>
+      <div class="form-group">
+        <label class="form-label">補足</label>
+        <input id="edit-recipe-note" type="text" class="form-input" value="${_esc(ed.note)}" placeholder="例：2食に均等に分ける">
+      </div>
+      <div id="edit-sections">${sectionsHtml}</div>
+      <button class="btn-secondary" style="width:100%;margin-top:4px" onclick="addSection()">＋ セクションを追加</button>
+      <div class="form-group" style="margin-top:12px">
+        <label class="form-label">合計欄（複数行可）</label>
+        <textarea id="edit-recipe-summary" class="form-textarea" style="min-height:60px">${_esc(ed.summary)}</textarea>
+      </div>
+    </div>`;
+}
+
+function _syncEditFields() {
+  if (!window._editData) return;
+  const nameEl    = document.getElementById('edit-recipe-name');
+  const noteEl    = document.getElementById('edit-recipe-note');
+  const summaryEl = document.getElementById('edit-recipe-summary');
+  if (nameEl)    window._editData.name    = nameEl.value;
+  if (noteEl)    window._editData.note    = noteEl.value;
+  if (summaryEl) window._editData.summary = summaryEl.value;
+
+  document.querySelectorAll('#edit-sections .recipe-edit-section').forEach((secEl, si) => {
+    if (!window._editData.sections[si]) return;
+    const titleInput = secEl.querySelector('.recipe-edit-section-header input');
+    if (titleInput) window._editData.sections[si].title = titleInput.value;
+    secEl.querySelectorAll('.recipe-item-row').forEach((row, ii) => {
+      const nameIn   = row.querySelector('.ri-name');
+      const amountIn = row.querySelector('.ri-amount');
+      if (window._editData.sections[si].items[ii]) {
+        if (nameIn)   window._editData.sections[si].items[ii].name   = nameIn.value;
+        if (amountIn) window._editData.sections[si].items[ii].amount = amountIn.value;
+      }
+    });
+    const memoInput = secEl.querySelector('input[placeholder="補足メモ（任意）"]');
+    if (memoInput) window._editData.sections[si].memo = memoInput.value;
+  });
+}
+
+function addRecipeItem(si) {
+  _syncEditFields();
+  window._editData.sections[si].items.push({ name: '', amount: '' });
+  _renderEditMode();
+}
+
+function deleteRecipeItem(si, ii) {
+  _syncEditFields();
+  window._editData.sections[si].items.splice(ii, 1);
+  _renderEditMode();
+}
+
+function addSection() {
+  _syncEditFields();
+  window._editData.sections.push({ title: '新しいセクション', items: [{ name: '', amount: '' }], memo: '' });
+  _renderEditMode();
+}
+
+function deleteSection(si) {
+  if (window._editData.sections.length <= 1) { showToast('最低1セクション必要です'); return; }
+  _syncEditFields();
+  window._editData.sections.splice(si, 1);
+  _renderEditMode();
+}
+
+function saveRecipeEdit() {
+  _syncEditFields();
+  const recipes = getRecipes();
+  const idx = recipes.findIndex(r => r.id === window._editRecipeId);
+  if (idx === -1) return;
+  recipes[idx] = window._editData;
+  save('recipes', recipes);
+  _currentRecipeId = window._editRecipeId;
+  window._editData     = null;
+  window._editRecipeId = null;
+  renderRecipe();
+  showToast('保存しました');
+}
+
+function cancelEditRecipe() {
+  window._editData     = null;
+  window._editRecipeId = null;
+  renderRecipe();
+}
+
+// ============================================================
 // TAB SWITCHING
 // ============================================================
 const TAB_NAMES = ['today','notes','blood','diary','recipe','supple','gpt','hospital'];
@@ -1851,6 +2137,8 @@ function renderAll() {
   renderBloodTestHistory();
   renderGPT();
   renderHospital();
+  initRecipes();
+  renderRecipe();
   resetDiaryForm();
   initBloodForm();
 }
