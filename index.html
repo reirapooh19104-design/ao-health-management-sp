@@ -83,12 +83,21 @@ body {
 .urso-btn.today-rest   { background: #777; color: white; }
 .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; margin-top: 8px; }
 .cal-h { text-align: center; font-size: 11px; color: var(--text-light); padding: 4px 0; }
-.cal-d { text-align: center; border-radius: 8px; padding: 8px 2px; font-size: 13px; font-weight: 500; cursor: pointer; transition: opacity 0.1s, transform 0.1s; }
+.cal-d { position: relative; text-align: center; border-radius: 8px; padding: 8px 2px 16px; font-size: 13px; font-weight: 500; cursor: pointer; transition: opacity 0.1s, transform 0.1s; }
 .cal-d:active { opacity: 0.6; transform: scale(0.88); }
 .cal-d.drink       { background: var(--green-light); }
 .cal-d.rest        { background: var(--gray-rest); color: #777; }
 .cal-d.today-drink { background: var(--green); color: white; }
 .cal-d.today-rest  { background: #555; color: white; }
+.cal-d.special-note { background: #FFE8E8 !important; border: 1.5px solid #E53935; color: inherit; }
+.cal-d.today-drink.special-note, .cal-d.today-rest.special-note { border: 2px solid #B71C1C; }
+.cal-dots { position: absolute; bottom: 3px; left: 50%; transform: translateX(-50%); display: flex; gap: 3px; }
+.cal-dot  { width: 5px; height: 5px; border-radius: 50%; flex-shrink: 0; }
+.cal-dot.red    { background: #E53935; }
+.cal-dot.amber  { background: #FB8C00; }
+.cal-dot.purple { background: #8E24AA; }
+.cal-badge { font-size: 10px; background: #E8F5F0; color: var(--green); border-radius: 4px; padding: 1px 5px; margin-left: 4px; font-weight: 500; }
+.cal-field { border-color: var(--green-light) !important; }
 .cal-legend { display: flex; gap: 16px; margin-top: 10px; }
 .cal-legend-item { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-light); }
 .cal-legend-dot { width: 12px; height: 12px; border-radius: 3px; }
@@ -444,10 +453,10 @@ body {
       <input type="text" class="form-input" id="memo-walk" placeholder="例：北大4km・元気">
     </div>
     <div class="form-group">
-      <label class="form-label">空咳</label>
+      <label class="form-label">空咳 <span class="cal-badge">カレンダー反映</span></label>
       <div style="display:flex;gap:8px">
-        <input type="number" class="form-input" id="memo-cough-n" placeholder="回数" min="0" style="width:90px;flex-shrink:0">
-        <select class="form-select" id="memo-cough-lv">
+        <input type="number" class="form-input cal-field" id="memo-cough-n" placeholder="回数" min="0" style="width:90px;flex-shrink:0">
+        <select class="form-select cal-field" id="memo-cough-lv">
           <option value="なし">なし</option>
           <option value="軽度">軽度</option>
           <option value="中度">中度</option>
@@ -456,7 +465,19 @@ body {
       </div>
     </div>
     <div class="form-group">
-      <label class="form-label">その他・体調メモ</label>
+      <label class="form-label">元気度 <span class="cal-badge">カレンダー反映</span></label>
+      <select class="form-select cal-field" id="memo-energy">
+        <option value="普通">普通</option>
+        <option value="やや元気がない">やや元気がない</option>
+        <option value="元気がない">元気がない</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label class="form-label">特記事項 <span class="cal-badge">カレンダー反映</span></label>
+      <textarea class="form-textarea cal-field" id="memo-special" placeholder="下痢・嘔吐・急な異常などがあれば記入"></textarea>
+    </div>
+    <div class="form-group">
+      <label class="form-label">その他</label>
       <textarea class="form-textarea" id="memo-other" placeholder="自由記入"></textarea>
     </div>
 
@@ -1098,6 +1119,7 @@ function renderCalendar() {
   const last  = new Date(y, m+1, 0).getDate();
   const jsToCol = d => (d + 1) % 7;
   const startOffset = jsToCol(first.getDay());
+  const diaryMap = new Map(getDiary().map(e => [e.date, e]));
   let html = ['土','日','月','火','水','木','金'].map(d => `<div class="cal-h">${d}</div>`).join('');
   for (let i = 0; i < startOffset; i++) html += `<div></div>`;
   for (let d = 1; d <= last; d++) {
@@ -1105,9 +1127,22 @@ function renderCalendar() {
     const dateStr = y + '-' + String(m+1).padStart(2,'0') + '-' + String(d).padStart(2,'0');
     const st = ursoStatus(date);
     const isToday = d === today.getDate();
+    const isPast = date <= today;
     let cls = 'cal-d';
     if (st) cls += isToday ? ' today-' + st : ' ' + st;
-    html += `<div class="${cls}" onclick="goToDate('${dateStr}')">${d}</div>`;
+    let dotsHtml = '';
+    if (isPast) {
+      const e = diaryMap.get(dateStr);
+      if (e) {
+        if (e.specialNote && e.specialNote.trim()) cls += ' special-note';
+        const dots = [];
+        if (e.coughL === '中度' || e.coughL === '重度') dots.push('<span class="cal-dot red"></span>');
+        if (e.finish === '半分残し' || e.finish === 'あまり食べず') dots.push('<span class="cal-dot amber"></span>');
+        if (e.energyLv === 'やや元気がない' || e.energyLv === '元気がない') dots.push('<span class="cal-dot purple"></span>');
+        if (dots.length) dotsHtml = '<div class="cal-dots">' + dots.join('') + '</div>';
+      }
+    }
+    html += `<div class="${cls}" onclick="goToDate('${dateStr}')">${d}${dotsHtml}</div>`;
   }
   document.getElementById('cal-grid').innerHTML = html;
 }
@@ -1156,23 +1191,28 @@ function saveTodayAll() {
   const kcalTxt    = document.getElementById('d-kc-disp').textContent.replace('kcal','').replace('—','');
   const finish     = document.getElementById('d-finish').value;
   const memo       = document.getElementById('d-memo').value.trim();
-  const walk       = document.getElementById('memo-walk').value.trim();
-  const coughN     = document.getElementById('memo-cough-n').value;
-  const coughL     = document.getElementById('memo-cough-lv').value;
-  const memoOther  = document.getElementById('memo-other').value.trim();
+  const walk        = document.getElementById('memo-walk').value.trim();
+  const coughN      = document.getElementById('memo-cough-n').value;
+  const coughL      = document.getElementById('memo-cough-lv').value;
+  const energyLv    = document.getElementById('memo-energy').value;
+  const specialNote = document.getElementById('memo-special').value.trim();
+  const memoOther   = document.getElementById('memo-other').value.trim();
   const entry = { date, protein, grain, veg, other, weight, kcal: kcalTxt, finish, memo,
-                  urso: ursoStatus(new Date(date)), walk, coughN, coughL, memoOther, _ts: Date.now() };
+                  urso: ursoStatus(new Date(date)), walk, coughN, coughL, energyLv, specialNote, memoOther, _ts: Date.now() };
   const diary = getDiary();
   const idx = diary.findIndex(e => e.date === date);
   if (idx >= 0) diary[idx] = entry; else diary.unshift(entry);
   diary.sort((a,b) => b.date < a.date ? -1 : 1);
   setDiary(diary);
   renderDiary();
-  setDayMemo(date, { walk, coughN, coughL, memoOther });
+  renderCalendar();
+  setDayMemo(date, { walk, coughN, coughL, energyLv, specialNote, memoOther });
   const parts = [];
   if (walk) parts.push('散歩：' + walk);
   if (coughN && +coughN > 0) parts.push('空咳：' + coughN + '回（' + coughL + '）');
   else if (coughL !== 'なし') parts.push('空咳：' + coughL);
+  if (energyLv && energyLv !== '普通') parts.push('元気度：' + energyLv);
+  if (specialNote) parts.push('⚠️' + specialNote);
   if (memoOther) parts.push(memoOther);
   if (parts.length) {
     const d = new Date(date + 'T00:00:00');
@@ -1993,7 +2033,7 @@ function importData(e) {
         setDiary(d.diary);
         d.diary.forEach(e => {
           if (e.walk !== undefined || e.coughN !== undefined || e.memoOther !== undefined) {
-            setDayMemo(e.date, { walk: e.walk||'', coughN: e.coughN||'', coughL: e.coughL||'なし', memoOther: e.memoOther||'' });
+            setDayMemo(e.date, { walk: e.walk||'', coughN: e.coughN||'', coughL: e.coughL||'なし', energyLv: e.energyLv||'普通', specialNote: e.specialNote||'', memoOther: e.memoOther||'' });
           }
         });
       }
@@ -2068,10 +2108,12 @@ function loadFormForDate(date) {
     if (badge) badge.style.display = 'none';
   }
   const dm = getDayMemo(date);
-  document.getElementById('memo-walk').value     = dm.walk      || '';
-  document.getElementById('memo-cough-n').value  = dm.coughN    || '';
-  document.getElementById('memo-cough-lv').value = dm.coughL    || 'なし';
-  document.getElementById('memo-other').value    = dm.memoOther || '';
+  document.getElementById('memo-walk').value     = (entry && entry.walk        !== undefined) ? entry.walk        : (dm.walk        || '');
+  document.getElementById('memo-cough-n').value  = (entry && entry.coughN      !== undefined) ? entry.coughN      : (dm.coughN      || '');
+  document.getElementById('memo-cough-lv').value = (entry && entry.coughL      !== undefined) ? entry.coughL      : (dm.coughL      || 'なし');
+  document.getElementById('memo-energy').value   = (entry && entry.energyLv    !== undefined) ? entry.energyLv    : (dm.energyLv    || '普通');
+  document.getElementById('memo-special').value  = (entry && entry.specialNote !== undefined) ? entry.specialNote : (dm.specialNote || '');
+  document.getElementById('memo-other').value    = (entry && entry.memoOther   !== undefined) ? entry.memoOther   : (dm.memoOther   || '');
   renderChecks();
   updateMetrics();
   // 過去日編集バナー制御
@@ -2115,7 +2157,7 @@ function renderAll() {
   }
   getDiary().forEach(e => {
     if (localStorage.getItem('day_memo_' + e.date)) return;
-    setDayMemo(e.date, { walk: e.walk||'', coughN: e.coughN||'', coughL: e.coughL||'なし', memoOther: e.memoOther||'' });
+    setDayMemo(e.date, { walk: e.walk||'', coughN: e.coughN||'', coughL: e.coughL||'なし', energyLv: e.energyLv||'普通', specialNote: e.specialNote||'', memoOther: e.memoOther||'' });
   });
 
   // blood tests 初期化
