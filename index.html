@@ -98,7 +98,7 @@ body {
 .cal-dot.purple { background: #8E24AA; }
 .cal-badge { font-size: 10px; background: #E8F5F0; color: var(--green); border-radius: 4px; padding: 1px 5px; margin-left: 4px; font-weight: 500; }
 .cal-field { border-color: var(--green-light) !important; }
-.cal-legend { display: flex; gap: 16px; margin-top: 10px; }
+.cal-legend { display: flex; flex-wrap: wrap; gap: 10px 16px; margin-top: 10px; }
 .cal-legend-item { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-light); }
 .cal-legend-dot { width: 12px; height: 12px; border-radius: 3px; }
 .metrics { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 12px; }
@@ -299,6 +299,10 @@ body {
     <div class="cal-legend">
       <div class="cal-legend-item"><div class="cal-legend-dot" style="background:#9FE1CB"></div>飲む</div>
       <div class="cal-legend-item"><div class="cal-legend-dot" style="background:#D3D1C7"></div>休む</div>
+      <div class="cal-legend-item"><div class="cal-dot purple" style="width:8px;height:8px;flex-shrink:0"></div>咳（中〜重度）</div>
+      <div class="cal-legend-item"><div class="cal-dot amber" style="width:8px;height:8px;flex-shrink:0"></div>食欲不振</div>
+      <div class="cal-legend-item"><div class="cal-dot red" style="width:8px;height:8px;flex-shrink:0"></div>元気度低下</div>
+      <div class="cal-legend-item"><div style="width:14px;height:10px;border-radius:2px;background:#FFE4EC;border:1.5px solid #E53935;flex-shrink:0"></div>特記事項あり</div>
     </div>
   </div>
 
@@ -1136,9 +1140,9 @@ function renderCalendar() {
       if (e) {
         if (e.specialNote && e.specialNote.trim()) cls += ' special-note';
         const dots = [];
-        if (e.coughL === '中度' || e.coughL === '重度') dots.push('<span class="cal-dot red"></span>');
+        if (e.coughL === '中度' || e.coughL === '重度') dots.push('<span class="cal-dot purple"></span>');
         if (e.finish === '半分残し' || e.finish === 'あまり食べず') dots.push('<span class="cal-dot amber"></span>');
-        if (e.energyLv === 'やや元気がない' || e.energyLv === '元気がない') dots.push('<span class="cal-dot purple"></span>');
+        if (e.energyLv === 'やや元気がない' || e.energyLv === '元気がない') dots.push('<span class="cal-dot red"></span>');
         if (dots.length) dotsHtml = '<div class="cal-dots">' + dots.join('') + '</div>';
       }
     }
