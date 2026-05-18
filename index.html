@@ -1227,6 +1227,12 @@ function saveTodayAll() {
     if (ni >= 0) notes[ni] = noteEntry; else notes.unshift(noteEntry);
     setNotes(notes);
     renderNotes();
+  } else {
+    const d = new Date(date + 'T00:00:00');
+    const dateStr = d.getFullYear() + '/' + (d.getMonth()+1) + '/' + d.getDate();
+    const notes = getNotes();
+    const ni = notes.findIndex(n => n.date === dateStr);
+    if (ni >= 0) { notes.splice(ni, 1); setNotes(notes); renderNotes(); }
   }
   const badge = document.getElementById('form-saved-badge');
   if (badge) badge.style.display = 'block';
