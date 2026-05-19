@@ -159,6 +159,8 @@ body {
 .weight-entry:last-child { border-bottom: none; }
 .weight-entry-date { font-size: 14px; flex: 1; }
 .weight-entry-val { font-size: 15px; font-weight: 700; color: var(--pink); min-width: 72px; text-align: right; }
+.wg-period-btn { padding: 7px 14px; background: #F0EFEB; color: var(--text); border: 1px solid var(--border); border-radius: 8px; font-size: 13px; cursor: pointer; font-family: inherit; }
+.wg-period-btn.wg-active { background: #FBEAF0; border-color: #D4537E; color: #D4537E; font-weight: 600; }
 .weight-row { display: flex; align-items: center; gap: 8px; }
 .weight-row .form-input { flex: 1; }
 .weight-arrows { display: flex; flex-direction: column; gap: 2px; }
@@ -260,6 +262,7 @@ body {
 .recipe-del-btn { background:none; border:none; color:#ccc; font-size:20px; cursor:pointer; padding:0 4px; line-height:1; flex-shrink:0; transition:color 0.15s; }
 .recipe-del-btn:hover { color:#E05050; }
 </style>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
 </head>
 <body>
 
@@ -729,6 +732,23 @@ body {
   <div class="card">
     <div class="section-title" style="margin-bottom:12px">直近の記録</div>
     <div id="weight-recent-list"></div>
+  </div>
+  <div class="card" id="weight-graph-card">
+    <div class="section-title" style="margin-bottom:12px">体重グラフ</div>
+    <div style="display:flex;gap:8px;margin-bottom:14px">
+      <button id="wg-btn-30"  class="wg-period-btn wg-active" onclick="setWeightPeriod(30)">1ヶ月</button>
+      <button id="wg-btn-90"  class="wg-period-btn"           onclick="setWeightPeriod(90)">3ヶ月</button>
+      <button id="wg-btn-all" class="wg-period-btn"           onclick="setWeightPeriod(0)">全期間</button>
+    </div>
+    <div style="position:relative;height:200px;margin-bottom:16px">
+      <canvas id="weight-chart"></canvas>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+      <div class="metric"><div class="metric-label">現在</div><div class="metric-value" id="wg-current" style="font-size:18px;color:var(--pink)">—</div></div>
+      <div class="metric"><div class="metric-label">平均</div><div class="metric-value" id="wg-avg"     style="font-size:18px;color:var(--pink)">—</div></div>
+      <div class="metric"><div class="metric-label">最高</div><div class="metric-value" id="wg-max"     style="font-size:18px;color:var(--pink)">—</div></div>
+      <div class="metric"><div class="metric-label">最低</div><div class="metric-value" id="wg-min"     style="font-size:18px;color:var(--pink)">—</div></div>
+    </div>
   </div>
 </div><!-- /weight -->
 
@@ -2048,6 +2068,7 @@ function submitBodyWeight() {
   setBodyWeights(weights);
   valEl.value = '';
   renderBodyWeights();
+  renderWeightGraph();
   showToast('保存しました');
 }
 
@@ -2055,6 +2076,7 @@ function deleteBodyWeight(date) {
   if (!confirm(date + ' のデータを削除しますか？')) return;
   setBodyWeights(getBodyWeights().filter(w => w.date !== date));
   renderBodyWeights();
+  renderWeightGraph();
   showToast('削除しました');
 }
 
@@ -2076,6 +2098,100 @@ function renderBodyWeights() {
 }
 
 // ============================================================
+// WEIGHT GRAPH
+// ============================================================
+var _weightChart = null;
+var _weightPeriodDays = 30;
+
+function setWeightPeriod(days) {
+  _weightPeriodDays = days;
+  document.querySelectorAll('.wg-period-btn').forEach(function(btn) {
+    btn.classList.remove('wg-active');
+  });
+  var btnId = days === 0 ? 'wg-btn-all' : days === 90 ? 'wg-btn-90' : 'wg-btn-30';
+  var activeBtn = document.getElementById(btnId);
+  if (activeBtn) activeBtn.classList.add('wg-active');
+  renderWeightGraph();
+}
+
+function _filterWeightData(days) {
+  var all = getBodyWeights();
+  if (days === 0 || all.length === 0) return all;
+  var cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - days);
+  var cutoffStr = cutoff.toISOString().slice(0, 10);
+  return all.filter(function(w) { return w.date >= cutoffStr; });
+}
+
+function renderWeightGraph() {
+  var canvas = document.getElementById('weight-chart');
+  if (!canvas) return;
+  var data = _filterWeightData(_weightPeriodDays);
+
+  // 統計カード更新
+  var currentEl = document.getElementById('wg-current');
+  var avgEl     = document.getElementById('wg-avg');
+  var maxEl     = document.getElementById('wg-max');
+  var minEl     = document.getElementById('wg-min');
+  if (data.length === 0) {
+    if (currentEl) currentEl.textContent = '—';
+    if (avgEl)     avgEl.textContent     = '—';
+    if (maxEl)     maxEl.textContent     = '—';
+    if (minEl)     minEl.textContent     = '—';
+  } else {
+    var vals = data.map(function(w) { return w.weight; });
+    var latest = data[data.length - 1].weight;
+    var avg = vals.reduce(function(s, v) { return s + v; }, 0) / vals.length;
+    var max = Math.max.apply(null, vals);
+    var min = Math.min.apply(null, vals);
+    if (currentEl) currentEl.textContent = latest.toFixed(2) + ' kg';
+    if (avgEl)     avgEl.textContent     = avg.toFixed(2) + ' kg';
+    if (maxEl)     maxEl.textContent     = max.toFixed(2) + ' kg';
+    if (minEl)     minEl.textContent     = min.toFixed(2) + ' kg';
+  }
+
+  // ラベル整形
+  var labels = data.map(function(w) {
+    var parts = w.date.split('-');
+    return parts[1] + '/' + parts[2];
+  });
+  var values = data.map(function(w) { return w.weight; });
+
+  // グラフ描画
+  if (_weightChart) {
+    _weightChart.data.labels  = labels;
+    _weightChart.data.datasets[0].data = values;
+    _weightChart.update();
+  } else {
+    _weightChart = new Chart(canvas, {
+      type: 'line',
+      data: {
+        labels: labels,
+        datasets: [{
+          data: values,
+          borderColor: '#D4537E',
+          backgroundColor: 'rgba(212,83,126,0.12)',
+          fill: true,
+          tension: 0.3,
+          spanGaps: true,
+          pointRadius: data.length === 1 ? 5 : 3,
+          pointBackgroundColor: '#D4537E',
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+          x: { grid: { color: 'rgba(0,0,0,0.05)' }, ticks: { font: { size: 11 }, maxRotation: 45 } },
+          y: { grid: { color: 'rgba(0,0,0,0.05)' }, ticks: { font: { size: 11 } } }
+        }
+      }
+    });
+  }
+}
+
+// ============================================================
 // TAB SWITCHING
 // ============================================================
 const TAB_NAMES = ['today','notes','blood','diary','recipe','supple','gpt','hospital','weight'];
@@ -2083,6 +2199,7 @@ function switchTab(name) {
   document.querySelectorAll('.tab').forEach((t,i) => t.classList.toggle('active', TAB_NAMES[i] === name));
   document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
   document.getElementById('pane-' + name).classList.add('active');
+  if (name === 'weight') renderWeightGraph();
 }
 
 // ============================================================
@@ -2274,6 +2391,7 @@ function renderAll() {
   initRecipes();
   renderRecipe();
   renderBodyWeights();
+  renderWeightGraph();
   resetDiaryForm();
   initBloodForm();
 }
