@@ -161,6 +161,9 @@ body {
 .weight-entry-val { font-size: 15px; font-weight: 700; color: var(--pink); min-width: 72px; text-align: right; }
 .wg-period-btn { padding: 7px 14px; background: #F0EFEB; color: var(--text); border: 1px solid var(--border); border-radius: 8px; font-size: 13px; cursor: pointer; font-family: inherit; }
 .wg-period-btn.wg-active { background: #FBEAF0; border-color: #D4537E; color: #D4537E; font-weight: 600; }
+.wg-stat-card { background: #fff; border: 1px solid #EFEDE8; border-left: 3px solid #D4537E; border-radius: 6px; padding: 10px 12px; }
+.wg-stat-label { font-size: 12px; color: var(--text-light); margin-bottom: 4px; }
+.wg-stat-value { font-size: 18px; font-weight: 700; color: #D4537E; }
 .weight-row { display: flex; align-items: center; gap: 8px; }
 .weight-row .form-input { flex: 1; }
 .weight-arrows { display: flex; flex-direction: column; gap: 2px; }
@@ -744,10 +747,10 @@ body {
       <canvas id="weight-chart"></canvas>
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-      <div class="metric"><div class="metric-label">現在</div><div class="metric-value" id="wg-current" style="font-size:18px;color:var(--pink)">—</div></div>
-      <div class="metric"><div class="metric-label">平均</div><div class="metric-value" id="wg-avg"     style="font-size:18px;color:var(--pink)">—</div></div>
-      <div class="metric"><div class="metric-label">最高</div><div class="metric-value" id="wg-max"     style="font-size:18px;color:var(--pink)">—</div></div>
-      <div class="metric"><div class="metric-label">最低</div><div class="metric-value" id="wg-min"     style="font-size:18px;color:var(--pink)">—</div></div>
+      <div class="wg-stat-card"><div class="wg-stat-label">現在</div><div class="wg-stat-value" id="wg-current">—</div></div>
+      <div class="wg-stat-card"><div class="wg-stat-label">平均</div><div class="wg-stat-value" id="wg-avg">—</div></div>
+      <div class="wg-stat-card"><div class="wg-stat-label">最高</div><div class="wg-stat-value" id="wg-max">—</div></div>
+      <div class="wg-stat-card"><div class="wg-stat-label">最低</div><div class="wg-stat-value" id="wg-min">—</div></div>
     </div>
   </div>
 </div><!-- /weight -->
