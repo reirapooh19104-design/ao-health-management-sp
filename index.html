@@ -206,6 +206,8 @@ body {
 .bt-input-grid .form-group { margin-bottom: 8px; }
 .bt-values-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(88px, 1fr)); gap: 6px; margin-bottom: 8px; }
 .bt-val-box { background: #F5F4F0; border-radius: 8px; padding: 10px 6px; text-align: center; }
+.bt-val-box.hi { background: #FCEBEB; }
+.bt-val-box.lo { background: #E6F1FB; }
 .bt-val-name { font-size: 10px; color: var(--text-light); margin-bottom: 3px; }
 .bt-val-num { font-size: 17px; font-weight: 700; line-height: 1.2; }
 .bt-val-num.hi { color: #E05050; }
@@ -1466,7 +1468,7 @@ function btValBox(key, val) {
   if (val > ref.hi)              { cls = 'hi'; dispStr = val + ' H'; }
   else if (ref.lo > 0 && val < ref.lo) { cls = 'lo'; dispStr = val + ' L'; }
   const refStr = ref.lo > 0 ? ref.lo + '–' + ref.hi : '〜' + ref.hi;
-  return `<div class="bt-val-box">
+  return `<div class="bt-val-box ${cls}">
     <div class="bt-val-name">${ref.label}</div>
     <div class="bt-val-num ${cls}">${dispStr}</div>
     <div class="bt-val-ref">${refStr}</div>
