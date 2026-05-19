@@ -6,8 +6,8 @@
 <title>明桜（あお）健康管理</title>
 <style>
 :root {
-  --green: #1D9E75;
-  --green-light: #9FE1CB;
+  --green: #D4537E;
+  --green-light: #F4C0D1;
   --gray-rest: #D3D1C7;
   --bg: #F5F4F0;
   --card: #FFFFFF;
@@ -72,13 +72,13 @@ body {
 .section-title { font-size: 16px; font-weight: 600; }
 .section-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
 .urso-banner { border-radius: 12px; padding: 20px 16px 16px; margin-bottom: 12px; }
-.urso-banner.drink { background: #E8F5F0; }
+.urso-banner.drink { background: #FBEAF0; }
 .urso-banner.rest  { background: #F0EFEB; }
 .urso-title { font-size: 22px; font-weight: 700; margin-bottom: 4px; }
 .urso-sub   { font-size: 13px; color: var(--text-light); margin-bottom: 14px; }
 .urso-nav   { display: flex; gap: 8px; justify-content: flex-end; }
 .urso-btn { padding: 6px 16px; border-radius: 20px; font-size: 13px; font-weight: 600; border: none; cursor: pointer; font-family: inherit; }
-.urso-btn.drink        { background: var(--green-light); color: #1a6b52; }
+.urso-btn.drink        { background: var(--green-light); color: #993556; }
 .urso-btn.rest         { background: #E0DFDB; color: #666; }
 .urso-btn.today-drink  { background: var(--green); color: white; }
 .urso-btn.today-rest   { background: #777; color: white; }
@@ -97,7 +97,7 @@ body {
 .cal-dot.red    { background: #E53935; }
 .cal-dot.amber  { background: #FB8C00; }
 .cal-dot.purple { background: #8E24AA; }
-.cal-badge { font-size: 10px; background: #E8F5F0; color: var(--green); border-radius: 4px; padding: 1px 5px; margin-left: 4px; font-weight: 500; }
+.cal-badge { font-size: 10px; background: #FBEAF0; color: var(--green); border-radius: 4px; padding: 1px 5px; margin-left: 4px; font-weight: 500; }
 .cal-field { border-color: var(--green-light) !important; }
 .cal-legend { display: flex; flex-wrap: wrap; gap: 10px 16px; margin-top: 10px; }
 .cal-legend-item { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-light); }
@@ -127,7 +127,7 @@ body {
 .btn-primary:active { opacity: 0.85; }
 .btn-secondary { padding: 8px 14px; background: #F0EFEB; color: var(--text); border: none; border-radius: 8px; font-size: 13px; cursor: pointer; font-family: inherit; }
 .btn-small { padding: 5px 12px; background: var(--green-light); color: var(--text); border: none; border-radius: 8px; font-size: 12px; cursor: pointer; font-family: inherit; }
-.btn-edit   { padding: 5px 12px; background: var(--green-light); color: #1a6b52; border: none; border-radius: 8px; font-size: 12px; cursor: pointer; font-family: inherit; }
+.btn-edit   { padding: 5px 12px; background: var(--green-light); color: #993556; border: none; border-radius: 8px; font-size: 12px; cursor: pointer; font-family: inherit; }
 .btn-delete { padding: 5px 12px; background: #FFF0EF; color: #E05050; border: 1px solid #ffd0d0; border-radius: 8px; font-size: 12px; cursor: pointer; font-family: inherit; }
 .note-card-red    { background: #FFF0EF; border-left: 4px solid #E05050; border-radius: 8px; padding: 12px; margin-bottom: 8px; }
 .note-card-yellow { background: #FFFBEF; border-left: 4px solid #E0B050; border-radius: 8px; padding: 12px; margin-bottom: 8px; }
@@ -187,8 +187,8 @@ body {
 .gpt-got { font-size: 11px; color: var(--text-light); width: 52px; flex-shrink: 0; text-align: right; }
 .gpt-track { flex: 1; height: 26px; background: var(--bg); border-radius: 4px; overflow: hidden; }
 .gpt-bar { height: 100%; border-radius: 4px; display: flex; align-items: center; padding-left: 8px; font-size: 12px; font-weight: 700; color: white; transition: width 0.6s ease; min-width: 36px; }
-.gpt-bar.g { background: var(--green); }
-.gpt-bar.y { background: #E0A030; }
+.gpt-bar.g { background: #F4C0D1; }
+.gpt-bar.y { background: #D4537E; }
 .gpt-bar.r { background: #E05050; }
 .hist-item { display: flex; gap: 12px; padding: 8px 0; position: relative; }
 .hist-item:not(:last-child)::after { content: ''; position: absolute; left: 63px; top: 22px; bottom: -8px; width: 1px; background: var(--border); }
@@ -229,7 +229,7 @@ body {
 .nv-add-area { margin-top: 12px; }
 .nv-input { width: 100%; padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; font-size: 14px; font-family: inherit; background: #FAFAF8; resize: vertical; min-height: 56px; outline: none; }
 .nv-input:focus { border-color: var(--green); }
-.nv-add-btn { margin-top: 8px; padding: 10px 18px; background: var(--green-light); color: #1a6b52; border: none; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; font-family: inherit; }
+.nv-add-btn { margin-top: 8px; padding: 10px 18px; background: var(--green-light); color: #993556; border: none; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; font-family: inherit; }
 
 /* ── バックアップ・同期 ── */
 .modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:1000; display:flex; align-items:flex-end; justify-content:center; }
@@ -241,16 +241,16 @@ body {
 .backup-item:last-child { border-bottom:none; }
 .backup-item-date { font-size:14px; font-weight:600; }
 .backup-item-info { font-size:12px; color:var(--text-light); margin-top:2px; }
-.btn-restore { padding:7px 16px; background:var(--green-light); color:#1a6b52; border:none; border-radius:8px; font-size:13px; font-weight:600; cursor:pointer; font-family:inherit; }
+.btn-restore { padding:7px 16px; background:var(--green-light); color:#993556; border:none; border-radius:8px; font-size:13px; font-weight:600; cursor:pointer; font-family:inherit; }
 
 /* ── 月切替ナビ ── */
 .month-nav { display:flex; align-items:center; gap:6px; flex-wrap:wrap; margin-bottom:12px; }
-.month-nav-btn { background:var(--green-light); color:#1a6b52; border:none; border-radius:8px; padding:6px 12px; font-size:14px; font-weight:600; cursor:pointer; font-family:inherit; flex-shrink:0; }
-.month-nav-btn:hover { background:#c8e6da; }
+.month-nav-btn { background:var(--green-light); color:#993556; border:none; border-radius:8px; padding:6px 12px; font-size:14px; font-weight:600; cursor:pointer; font-family:inherit; flex-shrink:0; }
+.month-nav-btn:hover { background:#F0B3C5; }
 .month-nav-label { font-size:15px; font-weight:700; color:var(--text); flex:1; text-align:center; min-width:90px; }
 .month-nav-all { background:none; border:1px solid var(--border); color:var(--text-light); border-radius:8px; padding:6px 10px; font-size:13px; cursor:pointer; font-family:inherit; flex-shrink:0; }
-.month-nav-all.active { background:var(--green-light); color:#1a6b52; border-color:var(--green); font-weight:600; }
-.month-nav-all:hover { border-color:var(--green); color:#1a6b52; }
+.month-nav-all.active { background:var(--green-light); color:#993556; border-color:var(--green); font-weight:600; }
+.month-nav-all:hover { border-color:var(--green); color:#993556; }
 
 /* ── レシピ管理 ── */
 .recipe-toolbar { display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-bottom:10px; }
@@ -309,7 +309,7 @@ body {
     <div id="cal-month" class="card-title">— ウルソカレンダー</div>
     <div id="cal-grid" class="cal-grid"></div>
     <div class="cal-legend">
-      <div class="cal-legend-item"><div class="cal-legend-dot" style="background:#9FE1CB"></div>飲む</div>
+      <div class="cal-legend-item"><div class="cal-legend-dot" style="background:#F4C0D1"></div>飲む</div>
       <div class="cal-legend-item"><div class="cal-legend-dot" style="background:#D3D1C7"></div>休む</div>
       <div class="cal-legend-item"><div class="cal-dot purple" style="width:8px;height:8px;flex-shrink:0"></div>咳（中〜重度）</div>
       <div class="cal-legend-item"><div class="cal-dot amber" style="width:8px;height:8px;flex-shrink:0"></div>食欲不振</div>
@@ -692,8 +692,8 @@ body {
     <div style="font-size:12px;color:var(--text-light);margin-bottom:10px">基準値：〜78 U/L　GOT基準値：〜30 U/L</div>
     <div id="gpt-line-chart" style="width:100%;overflow-x:auto"></div>
     <div style="display:flex;gap:14px;margin-top:10px;font-size:11px;flex-wrap:wrap">
-      <span style="color:var(--green)">● 正常（〜78）</span>
-      <span style="color:#E0A030">● 注意（79〜200）</span>
+      <span style="color:#F4C0D1">● 正常（〜78）</span>
+      <span style="color:#D4537E">● 注意（79〜200）</span>
       <span style="color:#E05050">● 要注意（201〜）</span>
     </div>
   </div>
@@ -1648,7 +1648,7 @@ function renderDiary() {
 // ============================================================
 function gptColor(v) {
   if (v == null) return '#aaa';
-  return v <= 78 ? '#1D9E75' : v <= 200 ? '#E0A030' : '#E05050';
+  return v <= 78 ? '#F4C0D1' : v <= 200 ? '#D4537E' : '#E05050';
 }
 
 function renderGPT() {
@@ -1677,8 +1677,8 @@ function renderGPT() {
       svg += `<line x1="${PL}" y1="${y}" x2="${PL+PW}" y2="${y}" stroke="#E5E4E0" stroke-width="0.8"/>`;
       svg += `<text x="${PL-5}" y="${y+4}" font-size="10" fill="#bbb" text-anchor="end">${v}</text>`;
     });
-    svg += `<line x1="${PL}" y1="${refY}" x2="${PL+PW}" y2="${refY}" stroke="#1D9E75" stroke-width="1.2" stroke-dasharray="5,3" opacity="0.7"/>`;
-    svg += `<text x="${PL+6}" y="${refY-4}" font-size="9" fill="#1D9E75" opacity="0.8">基準78</text>`;
+    svg += `<line x1="${PL}" y1="${refY}" x2="${PL+PW}" y2="${refY}" stroke="#F4C0D1" stroke-width="1.2" stroke-dasharray="5,3" opacity="0.7"/>`;
+    svg += `<text x="${PL+6}" y="${refY-4}" font-size="9" fill="#F4C0D1" opacity="0.8">基準78</text>`;
     for (let i = 0; i < n - 1; i++) {
       const c = gptColor((chartData[i].gpt + chartData[i+1].gpt) / 2);
       svg += `<line x1="${px(i)}" y1="${py(chartData[i].gpt)}" x2="${px(i+1)}" y2="${py(chartData[i+1].gpt)}" stroke="${c}" stroke-width="2.5" stroke-linecap="round"/>`;
