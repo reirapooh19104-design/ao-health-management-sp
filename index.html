@@ -1016,13 +1016,26 @@ async function pushAllToCloud() {
     const k = localStorage.key(i);
     if (k && !k.startsWith('autobackup_') && !k.startsWith('_ts_')) dataKeys.push(k);
   }
+  // 動的キー（chk_・day_memo_）で空値のものをスキップ（静的キーは必ず送る）
+  const filteredDataKeys = dataKeys.filter(k => {
+    if (!k.startsWith('chk_') && !k.startsWith('day_memo_')) return true;
+    const raw = localStorage.getItem(k);
+    if (raw === null || raw === '' || raw === '{}' || raw === '[]') return false;
+    try {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return parsed.length > 0;
+      if (parsed !== null && typeof parsed === 'object') return Object.keys(parsed).length > 0;
+    } catch {}
+    return true;
+  });
+  console.log('[pushAllToCloud] 送信対象: ' + filteredDataKeys.length + '/' + dataKeys.length + ' キー（' + (dataKeys.length - filteredDataKeys.length) + ' 件スキップ）');
   // 強制タイムスタンプ：このデバイスのデータを「最新」としてGASに書き込む
   const forceTs = Date.now();
-  dataKeys.forEach(k => localStorage.setItem('_ts_' + k, forceTs));
+  filteredDataKeys.forEach(k => localStorage.setItem('_ts_' + k, forceTs));
 
   // 送信リスト：データキー + _ts_ キー
   const allKeys = [];
-  dataKeys.forEach(k => { allKeys.push(k); allKeys.push('_ts_' + k); });
+  filteredDataKeys.forEach(k => { allKeys.push(k); allKeys.push('_ts_' + k); });
 
   showToast('GASへ全データ同期中...');
   for (let i = 0; i < allKeys.length; i++) {
@@ -1038,7 +1051,7 @@ async function pushAllToCloud() {
       }
     } catch {}
     if ((i + 1) % 10 === 0 || i === allKeys.length - 1) {
-      showToast('GAS同期中 ' + Math.ceil((i+1)/2) + '/' + dataKeys.length);
+      showToast('GAS同期中 ' + Math.ceil((i+1)/2) + '/' + filteredDataKeys.length);
     }
     await new Promise(r => setTimeout(r, 50));
   }
