@@ -960,7 +960,10 @@ async function syncFromCloud() {
         const merged = Array.from(localMap.values()).sort((a,b) => b.date < a.date ? -1 : 1);
         localStorage.setItem('diary', JSON.stringify(merged));
       } else if (gasTs > localTs || (gasTs === 0 && localTs === 0)) {
-        // GASが新しい、またはタイムスタンプなし（後方互換）→ GASを採用
+        // 安全ガード: GAS が空配列・null・undefined のときは上書きしない
+        // (誤って空になった可能性が高く、ローカル保持を優先)
+        const isEmpty = gasVal == null || (Array.isArray(gasVal) && gasVal.length === 0);
+        if (isEmpty) return;
         localStorage.setItem(k, JSON.stringify(gasVal));
         if (gasTs > 0) localStorage.setItem('_ts_' + k, gasTs);
       }
