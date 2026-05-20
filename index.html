@@ -959,6 +959,33 @@ async function syncFromCloud() {
         });
         const merged = Array.from(localMap.values()).sort((a,b) => b.date < a.date ? -1 : 1);
         localStorage.setItem('diary', JSON.stringify(merged));
+      } else if (k === 'health_notes') {
+        // healthNotes: エントリ単位マージ + 削除ガード(text 空エントリはローカルに内容があれば保持)
+        const local = load('health_notes', []);
+        const localMap = new Map(local.map(e => [e.date, e]));
+        (gasVal || []).forEach(ge => {
+          const le = localMap.get(ge.date);
+          if (!le) {
+            // ローカルにないエントリ → GASから追加
+            localMap.set(ge.date, ge);
+          } else {
+            const gasEmpty   = !ge.text;
+            const localEmpty = !le.text;
+            if (gasEmpty && !localEmpty) {
+              // GASが空・ローカルに内容あり → ローカル保持(誤消失防止)
+            } else if (!gasEmpty && localEmpty) {
+              localMap.set(ge.date, ge);
+            } else {
+              // 両方同条件 → タイムスタンプ比較。同点・なしはGAS優先
+              const geTs = Number(ge._ts || 0);
+              const leTs = Number(le._ts || 0);
+              if (geTs >= leTs) localMap.set(ge.date, ge);
+            }
+          }
+        });
+        const hnMerged = Array.from(localMap.values())
+          .sort((a, b) => parseNoteDate(b.date) - parseNoteDate(a.date));
+        localStorage.setItem('health_notes', JSON.stringify(hnMerged));
       } else if (gasTs > localTs || (gasTs === 0 && localTs === 0)) {
         // 安全ガード: GAS が空配列・null・undefined のときは上書きしない
         // (誤って空になった可能性が高く、ローカル保持を優先)
@@ -1282,7 +1309,7 @@ function saveTodayAll() {
     const dateStr = d.getFullYear() + '/' + (d.getMonth()+1) + '/' + d.getDate();
     const notes = getNotes();
     const ni = notes.findIndex(n => n.date === dateStr);
-    const noteEntry = { date: dateStr, text: parts.join('・') };
+    const noteEntry = { date: dateStr, text: parts.join('・'), _ts: Date.now() };
     if (ni >= 0) notes[ni] = noteEntry; else notes.unshift(noteEntry);
     setNotes(notes);
     renderNotes();
@@ -2244,7 +2271,10 @@ function importData(e) {
   r.onload = ev => {
     try {
       const d = JSON.parse(ev.target.result);
-      if (d.healthNotes) setNotes(d.healthNotes);
+      if (d.healthNotes && d.healthNotes.length > 0) {
+        const stamped = d.healthNotes.map(e => e._ts ? e : { ...e, _ts: Date.now() });
+        setNotes(stamped);
+      }
       if (d.diary) {
         setDiary(d.diary);
         d.diary.forEach(e => {
