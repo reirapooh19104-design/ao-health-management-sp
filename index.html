@@ -1071,17 +1071,65 @@ async function pushAllToCloud() {
     await new Promise(r => setTimeout(r, 50));
   }
 
+  // リトライロジック（GAS500エラー対策・最大3回）
+  let retriedCount = 0;
+  const MAX_RETRY = 3;
+  let retryAttempt = 0;
+  while (failedKeys.length > 0 && retryAttempt < MAX_RETRY) {
+    retryAttempt++;
+    const retryTargets = [...failedKeys];
+    const retryStart = performance.now();
+    console.log('[pushAllToCloud] リトライ ' + retryAttempt + '/' + MAX_RETRY + ': ' + retryTargets.length + '件試行');
+    const stillFailed = [];
+    for (let i = 0; i < retryTargets.length; i += CHUNK_SIZE) {
+      const chunk = retryTargets.slice(i, i + CHUNK_SIZE);
+      const results = await Promise.allSettled(
+        chunk.map(k => {
+          const raw = localStorage.getItem(k);
+          if (raw === null) return Promise.resolve();
+          try {
+            return fetch(GAS_URL, {
+              method: 'POST',
+              headers: { 'Content-Type': 'text/plain' },
+              body: JSON.stringify({ key: k, value: JSON.parse(raw) })
+            });
+          } catch {
+            return Promise.reject(new Error('parse error: ' + k));
+          }
+        })
+      );
+      results.forEach((r, idx) => {
+        if (r.status === 'rejected') stillFailed.push(chunk[idx]);
+      });
+      await new Promise(r => setTimeout(r, 200));
+    }
+    const retrySuccess = retryTargets.length - stillFailed.length;
+    const retryElapsed = ((performance.now() - retryStart) / 1000).toFixed(1);
+    console.log('[pushAllToCloud] リトライ' + retryAttempt + ' 完了: ' + retryElapsed + '秒, 成功' + retrySuccess + '件, 失敗' + stillFailed.length + '件');
+    retriedCount += retrySuccess;
+    failedKeys.length = 0;
+    stillFailed.forEach(k => failedKeys.push(k));
+  }
+
   const elapsed = ((performance.now() - startTime) / 1000).toFixed(1);
-  console.log('[pushAllToCloud] 完了: ' + elapsed + '秒, 失敗' + failedKeys.length + '件');
+  const successCount = allKeys.length - failedKeys.length;
+  console.log('[pushAllToCloud] 最終完了: ' + elapsed + '秒, 成功' + successCount + '件, 失敗' + failedKeys.length + '件');
+  let toastMsg;
   if (failedKeys.length > 0) {
     console.warn('[pushAllToCloud] 失敗キー:', failedKeys);
-    _syncStatus('同期完了（失敗 ' + failedKeys.length + '件）', 'error');
+    toastMsg = '全データ同期完了(' + successCount + '件・' + elapsed + '秒・' + failedKeys.length + '件失敗)';
+    _syncStatus('同期完了（' + failedKeys.length + '件失敗）', 'error');
+    setTimeout(() => _syncStatus(''), 5000);
+  } else if (retriedCount > 0) {
+    toastMsg = '全データ同期完了(' + successCount + '件・' + elapsed + '秒・リトライで' + retriedCount + '件救済)';
+    _syncStatus('同期済み（リトライで' + retriedCount + '件救済）');
     setTimeout(() => _syncStatus(''), 5000);
   } else {
+    toastMsg = '全データ同期完了(' + successCount + '件・' + elapsed + '秒)';
     _syncStatus('同期済み');
     setTimeout(() => _syncStatus(''), 3000);
   }
-  showToast('全データのGAS同期が完了しました！');
+  showToast(toastMsg);
 }
 
 function load(key, def) {
