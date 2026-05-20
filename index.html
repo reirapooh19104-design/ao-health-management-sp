@@ -1037,26 +1037,50 @@ async function pushAllToCloud() {
   const allKeys = [];
   filteredDataKeys.forEach(k => { allKeys.push(k); allKeys.push('_ts_' + k); });
 
+  const CHUNK_SIZE = 5;
+  const chunkCount = Math.ceil(allKeys.length / CHUNK_SIZE);
+  console.log('[pushAllToCloud] 開始: ' + allKeys.length + 'キーを' + chunkCount + 'チャンクで並列送信');
+  const startTime = performance.now();
+  const failedKeys = [];
+
   showToast('GASへ全データ同期中...');
-  for (let i = 0; i < allKeys.length; i++) {
-    const k = allKeys[i];
-    try {
-      const raw = localStorage.getItem(k);
-      if (raw !== null) {
-        await fetch(GAS_URL, {
-          method: 'POST',
-          headers: { 'Content-Type': 'text/plain' },
-          body: JSON.stringify({ key: k, value: JSON.parse(raw) })
-        });
-      }
-    } catch {}
-    if ((i + 1) % 10 === 0 || i === allKeys.length - 1) {
-      showToast('GAS同期中 ' + Math.ceil((i+1)/2) + '/' + filteredDataKeys.length);
+  for (let i = 0; i < allKeys.length; i += CHUNK_SIZE) {
+    const chunk = allKeys.slice(i, i + CHUNK_SIZE);
+    const results = await Promise.allSettled(
+      chunk.map(k => {
+        const raw = localStorage.getItem(k);
+        if (raw === null) return Promise.resolve();
+        try {
+          return fetch(GAS_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'text/plain' },
+            body: JSON.stringify({ key: k, value: JSON.parse(raw) })
+          });
+        } catch {
+          return Promise.reject(new Error('parse error: ' + k));
+        }
+      })
+    );
+    results.forEach((r, idx) => {
+      if (r.status === 'rejected') failedKeys.push(chunk[idx]);
+    });
+    const chunkIdx = Math.floor(i / CHUNK_SIZE) + 1;
+    if (chunkIdx % 2 === 0 || chunkIdx === chunkCount) {
+      showToast('GAS同期中 ' + chunkIdx + '/' + chunkCount + ' チャンク');
     }
     await new Promise(r => setTimeout(r, 50));
   }
-  _syncStatus('同期済み');
-  setTimeout(() => _syncStatus(''), 3000);
+
+  const elapsed = ((performance.now() - startTime) / 1000).toFixed(1);
+  console.log('[pushAllToCloud] 完了: ' + elapsed + '秒, 失敗' + failedKeys.length + '件');
+  if (failedKeys.length > 0) {
+    console.warn('[pushAllToCloud] 失敗キー:', failedKeys);
+    _syncStatus('同期完了（失敗 ' + failedKeys.length + '件）', 'error');
+    setTimeout(() => _syncStatus(''), 5000);
+  } else {
+    _syncStatus('同期済み');
+    setTimeout(() => _syncStatus(''), 3000);
+  }
   showToast('全データのGAS同期が完了しました！');
 }
 
