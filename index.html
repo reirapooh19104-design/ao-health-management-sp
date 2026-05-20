@@ -1006,7 +1006,7 @@ async function syncFromCloud() {
   }
 }
 
-// 全データを0.5秒間隔でGASへ手動同期
+// 全データを50ms間隔でGASへ手動同期
 async function pushAllToCloud() {
   if (!GAS_URL) { showToast('GAS URLが設定されていません'); return; }
   _syncStatus('同期中…', 'syncing');
@@ -1040,7 +1040,7 @@ async function pushAllToCloud() {
     if ((i + 1) % 10 === 0 || i === allKeys.length - 1) {
       showToast('GAS同期中 ' + Math.ceil((i+1)/2) + '/' + dataKeys.length);
     }
-    await new Promise(r => setTimeout(r, 300));
+    await new Promise(r => setTimeout(r, 50));
   }
   _syncStatus('同期済み');
   setTimeout(() => _syncStatus(''), 3000);
