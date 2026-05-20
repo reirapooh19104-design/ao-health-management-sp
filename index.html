@@ -2378,8 +2378,11 @@ function renderAll() {
   const _btStored = load('blood_tests', null);
   if (!_btStored) setBloodTests(DEFAULT_BLOOD_TESTS);
 
-  const _n = load('health_notes', null);
-  if (!_n || _n.length === 0) setNotes(DEFAULT_HEALTH_NOTES);
+  // localStorage に health_notes キーがそもそも存在しない初回起動時のみ DEFAULT を書く
+  // (空配列はユーザーが意図的に全削除した結果の可能性があるので、復活させない)
+  if (localStorage.getItem('health_notes') === null) {
+    setNotes(DEFAULT_HEALTH_NOTES);
+  }
 
   document.getElementById('dog-age').textContent = calcAge();
   renderBanner();
