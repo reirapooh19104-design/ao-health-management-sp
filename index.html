@@ -900,6 +900,7 @@ let currentNotesMonth = (() => { const v = localStorage.getItem('view_month_note
 let currentDiaryMonth = (() => { const v = localStorage.getItem('view_month_diary'); return v === 'null' ? null : (v || _todayYM()); })();
 let _suppleStoppedOpen = false;
 let _suppleFormOpenId  = null;
+let _suppleEditOpenId  = null;
 
 // ============================================================
 // CLOUD SYNC (Google Apps Script)
@@ -1605,16 +1606,39 @@ function renderSupple() {
         ${formHtml}
       </div>`;
 
+    const isEditOpen = _suppleEditOpenId === s.id;
+    const editFormHtml = isEditOpen
+      ? `<div style="margin-bottom:8px;padding:10px;background:#FAF8F6;border-radius:8px;border:1px solid #EDE9E4">
+          <div style="margin-bottom:6px">
+            <div style="font-size:12px;color:#888780;margin-bottom:3px">サプリ名</div>
+            <input type="text" class="form-input" id="supple-edit-name" style="font-size:13px;padding:7px 10px">
+          </div>
+          <div style="margin-bottom:6px">
+            <div style="font-size:12px;color:#888780;margin-bottom:3px">開始日・量・タイミング</div>
+            <textarea class="form-textarea" id="supple-edit-detail" style="min-height:52px;font-size:13px;padding:7px 10px"></textarea>
+          </div>
+          <div style="margin-bottom:8px">
+            <div style="font-size:12px;color:#888780;margin-bottom:3px">目的</div>
+            <input type="text" class="form-input" id="supple-edit-goal" style="font-size:13px;padding:7px 10px">
+          </div>
+          <div style="display:flex;gap:6px">
+            <button class="btn-supple" style="flex:1" onclick="saveSuppleEdit()">保存</button>
+            <button class="btn-supple" style="flex:1;background:#F0EDE8;color:#888780" onclick="cancelSuppleEdit()">キャンセル</button>
+          </div>
+        </div>`
+      : '';
+
     return `<div class="supple-item"${!isActive ? ' style="opacity:0.85"' : ''}>
       <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">
         <div style="flex:1;min-width:0">
-          <div class="supple-name">${escHtml(s.name)}</div>
-          ${detailText ? `<div class="supple-detail">${detailText}</div>` : ''}
-          ${s.goal ? `<div class="supple-goal">目的：${escHtml(s.goal)}</div>` : ''}
+          ${isEditOpen ? editFormHtml : `
+            <div class="supple-name">${escHtml(s.name)}</div>
+            ${detailText ? `<div class="supple-detail">${detailText}</div>` : ''}
+            ${s.goal ? `<div class="supple-goal">目的：${escHtml(s.goal)}</div>` : ''}`}
           ${memoSection}
         </div>
         <div style="display:flex;flex-direction:column;gap:6px;flex-shrink:0">
-          <button class="btn-supple" onclick="editSupple('${sid}')">編集</button>
+          <button class="btn-supple" onclick="editSupple('${sid}')">${isEditOpen ? '編集中' : '編集'}</button>
           ${actionBtn}
         </div>
       </div>
@@ -1642,9 +1666,23 @@ function renderSupple() {
   // details の open 状態を再描画後も保持
   const detEl = document.getElementById('supple-stopped-details');
   if (detEl) detEl.addEventListener('toggle', () => { _suppleStoppedOpen = detEl.open; });
+
+  // 編集フォームの初期値を JS で安全に設定（特殊文字対応）
+  if (_suppleEditOpenId) {
+    const et = list.find(e => e.id === _suppleEditOpenId);
+    if (et) {
+      const ne = document.getElementById('supple-edit-name');
+      const de = document.getElementById('supple-edit-detail');
+      const ge = document.getElementById('supple-edit-goal');
+      if (ne) ne.value = et.name   || '';
+      if (de) de.value = et.detail || '';
+      if (ge) ge.value = et.goal   || '';
+    }
+  }
 }
 
 function toggleSuppleMemoForm(id) {
+  _suppleEditOpenId = null;
   _suppleFormOpenId = (_suppleFormOpenId === id) ? null : id;
   renderSupple();
 }
@@ -1682,6 +1720,7 @@ function deleteSuppleMemo(id, memoIdx) {
 }
 
 function stopSupple(id) {
+  _suppleEditOpenId = null;
   const list = getSupple();
   const s = list.find(e => e.id === id);
   if (!s) return;
@@ -1691,6 +1730,7 @@ function stopSupple(id) {
 }
 
 function resumeSupple(id) {
+  _suppleEditOpenId = null;
   const list = getSupple();
   const s = list.find(e => e.id === id);
   if (!s) return;
@@ -1700,7 +1740,29 @@ function resumeSupple(id) {
 }
 
 function editSupple(id) {
-  console.log('[editSupple] not implemented yet', id);
+  _suppleFormOpenId = null;
+  _suppleEditOpenId = (_suppleEditOpenId === id) ? null : id;
+  renderSupple();
+}
+
+function saveSuppleEdit() {
+  if (!_suppleEditOpenId) return;
+  const name   = (document.getElementById('supple-edit-name')?.value   || '').trim();
+  const detail = (document.getElementById('supple-edit-detail')?.value || '').trim();
+  const goal   = (document.getElementById('supple-edit-goal')?.value   || '').trim();
+  if (!name) { showToast('サプリ名を入力してください'); return; }
+  const list = getSupple();
+  const s = list.find(e => e.id === _suppleEditOpenId);
+  if (!s) return;
+  s.name = name; s.detail = detail; s.goal = goal; s._ts = Date.now();
+  _suppleEditOpenId = null;
+  setSupple(list);
+  renderSupple();
+}
+
+function cancelSuppleEdit() {
+  _suppleEditOpenId = null;
+  renderSupple();
 }
 
 function addSupple() {
