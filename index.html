@@ -986,6 +986,27 @@ async function syncFromCloud() {
         const hnMerged = Array.from(localMap.values())
           .sort((a, b) => parseNoteDate(b.date) - parseNoteDate(a.date));
         localStorage.setItem('health_notes', JSON.stringify(hnMerged));
+      } else if (k === 'supple') {
+        // supple: エントリ単位マージ + 安全ガード(cloud が空なら保持)
+        const isEmpty = gasVal == null || (Array.isArray(gasVal) && gasVal.length === 0);
+        if (isEmpty) return;
+        const localSupple = load('supple', []);
+        // id をキーに。id がない場合は 'name:サプリ名' でフォールバック
+        const suppleMap = new Map(localSupple.map(e => [e.id || ('name:' + e.name), e]));
+        (gasVal || []).forEach(ge => {
+          const key = ge.id || ('name:' + ge.name);
+          const le = suppleMap.get(key);
+          if (!le) {
+            // ローカルにないエントリ → GASから追加
+            suppleMap.set(key, ge);
+          } else {
+            // 両方ある → _ts で LWW (同点・なしはGAS優先)
+            const geTs = Number(ge._ts || 0);
+            const leTs = Number(le._ts || 0);
+            if (geTs >= leTs) suppleMap.set(key, ge);
+          }
+        });
+        localStorage.setItem('supple', JSON.stringify(Array.from(suppleMap.values())));
       } else if (gasTs > localTs || (gasTs === 0 && localTs === 0)) {
         // 安全ガード: GAS が空配列・null・undefined のときは上書きしない
         // (誤って空になった可能性が高く、ローカル保持を優先)
@@ -1499,16 +1520,26 @@ function migrateSupplements() {
   const list = load('supple', null);
   if (!list || !Array.isArray(list)) return;
   let count = 0;
+  const addedFields = new Set();
   const migrated = list.map(s => {
-    if ('status' in s) return s;
-    const entry = { ...s, status: 'active', stoppedAt: '', memos: [] };
-    if (s.memo) { entry.memos = [{ date: '', text: s.memo }]; delete entry.memo; }
+    const needsStatus = !('status' in s);
+    const needsId     = !('id' in s);
+    const needsTs     = !('_ts' in s);
+    if (!needsStatus && !needsId && !needsTs) return s;
+    const entry = { ...s };
+    if (needsStatus) {
+      entry.status = 'active'; entry.stoppedAt = ''; entry.memos = [];
+      if (s.memo) { entry.memos = [{ date: '', text: s.memo }]; delete entry.memo; }
+      addedFields.add('status'); addedFields.add('stoppedAt'); addedFields.add('memos');
+    }
+    if (needsId)  { entry.id  = 'supple_legacy_' + s.name; addedFields.add('id'); }
+    if (needsTs)  { entry._ts = Date.now();                 addedFields.add('_ts'); }
     count++;
     return entry;
   });
   if (count > 0) {
     setSupple(migrated);
-    console.log('[migrateSupplements] migrated ' + count + ' entries');
+    console.log('[migrateSupplements] migrated ' + count + ' entries (added: ' + Array.from(addedFields).join(', ') + ')');
   }
 }
 
@@ -1540,7 +1571,7 @@ function addSupple() {
   const goal   = document.getElementById('supple-goal').value.trim();
   if (!name) { showToast('サプリ名を入力してください'); return; }
   const list = getSupple();
-  list.push({ name, detail, goal, status: 'active', stoppedAt: '', memos: [] });
+  list.push({ id: 'supple_' + Date.now() + '_' + Math.random().toString(36).slice(2,8), name, detail, goal, status: 'active', stoppedAt: '', memos: [], _ts: Date.now() });
   setSupple(list);
   renderSupple();
   document.getElementById('supple-name').value   = '';
