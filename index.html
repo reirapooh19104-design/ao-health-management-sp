@@ -1625,6 +1625,9 @@ function renderSupple() {
             <button class="btn-supple" style="flex:1" onclick="saveSuppleEdit()">保存</button>
             <button class="btn-supple" style="flex:1;background:#F0EDE8;color:#888780" onclick="cancelSuppleEdit()">キャンセル</button>
           </div>
+          <div style="margin-top:12px;text-align:center">
+            <button style="background:none;border:none;color:#C0392B;font-size:12px;text-decoration:underline;cursor:pointer;font-family:inherit;padding:2px" onclick="deleteSuppleById('${sid}')">このサプリを削除</button>
+          </div>
         </div>`
       : '';
 
@@ -1786,6 +1789,17 @@ function deleteSupple(idx) {
   if (!confirm(`「${name}」を削除しますか？`)) return;
   list.splice(idx, 1);
   setSupple(list);
+  renderSupple();
+  showToast('削除しました');
+}
+
+function deleteSuppleById(id) {
+  const list = getSupple();
+  const s = list.find(e => e.id === id);
+  if (!s) return;
+  if (!confirm(`「${s.name}」を完全に削除します。よろしいですか？(この操作は取り消せません)`)) return;
+  _suppleEditOpenId = null;
+  setSupple(list.filter(e => e.id !== id));
   renderSupple();
   showToast('削除しました');
 }
