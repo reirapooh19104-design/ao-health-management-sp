@@ -998,6 +998,7 @@ async function syncFromCloud() {
 
     _syncStatus('同期済み');
     setTimeout(() => _syncStatus(''), 3000);
+    migrateSupplements();
     renderAll();
   } catch {
     _syncStatus('オフライン');
@@ -1494,6 +1495,23 @@ function clearNotes() {
 // ============================================================
 // SUPPLEMENTS
 // ============================================================
+function migrateSupplements() {
+  const list = load('supple', null);
+  if (!list || !Array.isArray(list)) return;
+  let count = 0;
+  const migrated = list.map(s => {
+    if ('status' in s) return s;
+    const entry = { ...s, status: 'active', stoppedAt: '', memos: [] };
+    if (s.memo) { entry.memos = [{ date: '', text: s.memo }]; delete entry.memo; }
+    count++;
+    return entry;
+  });
+  if (count > 0) {
+    setSupple(migrated);
+    console.log('[migrateSupplements] migrated ' + count + ' entries');
+  }
+}
+
 function renderSupple() {
   const list = getSupple();
   const el = document.getElementById('supple-list');
@@ -1508,6 +1526,7 @@ function renderSupple() {
           <div class="supple-name">${escHtml(s.name)}</div>
           ${s.detail ? `<div class="supple-detail">${escHtml(s.detail)}</div>` : ''}
           ${s.goal   ? `<div class="supple-goal">目的：${escHtml(s.goal)}</div>` : ''}
+          ${s.memos && s.memos[0]?.text ? `<div class="supple-detail" style="margin-top:2px">メモ：${escHtml(s.memos[0].text)}</div>` : ''}
         </div>
         <button class="btn-delete" onclick="deleteSupple(${idx})">削除</button>
       </div>
@@ -1521,7 +1540,7 @@ function addSupple() {
   const goal   = document.getElementById('supple-goal').value.trim();
   if (!name) { showToast('サプリ名を入力してください'); return; }
   const list = getSupple();
-  list.push({ name, detail, goal });
+  list.push({ name, detail, goal, status: 'active', stoppedAt: '', memos: [] });
   setSupple(list);
   renderSupple();
   document.getElementById('supple-name').value   = '';
@@ -2525,6 +2544,7 @@ function renderAll() {
 }
 
 autoBackup(); // renderAllより前に自動バックアップ
+migrateSupplements();
 renderAll();
 document.getElementById('weight-date').value = todayKey();
 syncFromCloud();
