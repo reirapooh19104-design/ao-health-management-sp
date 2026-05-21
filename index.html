@@ -1056,8 +1056,9 @@ async function pushAllToCloud() {
             headers: { 'Content-Type': 'text/plain' },
             body: JSON.stringify({ key: k, value: JSON.parse(raw) })
           });
-        } catch {
-          return Promise.reject(new Error('parse error: ' + k));
+        } catch (e) {
+          console.warn('[pushAllToCloud] parse error, skipping:', k, 'value:', raw);
+          return Promise.resolve();
         }
       })
     );
@@ -1093,8 +1094,9 @@ async function pushAllToCloud() {
               headers: { 'Content-Type': 'text/plain' },
               body: JSON.stringify({ key: k, value: JSON.parse(raw) })
             });
-          } catch {
-            return Promise.reject(new Error('parse error: ' + k));
+          } catch (e) {
+            console.warn('[pushAllToCloud] parse error, skipping:', k, 'value:', raw);
+            return Promise.resolve();
           }
         })
       );
