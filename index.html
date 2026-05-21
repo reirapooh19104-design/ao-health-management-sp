@@ -898,6 +898,8 @@ let _currentFormDate = todayKey();
 const _todayYM = () => { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0'); };
 let currentNotesMonth = (() => { const v = localStorage.getItem('view_month_notes'); return v === 'null' ? null : (v || _todayYM()); })();
 let currentDiaryMonth = (() => { const v = localStorage.getItem('view_month_diary'); return v === 'null' ? null : (v || _todayYM()); })();
+let _suppleStoppedOpen = false;
+let _suppleFormOpenId  = null;
 
 // ============================================================
 // CLOUD SYNC (Google Apps Script)
@@ -1564,13 +1566,52 @@ function renderSupple() {
     const actionBtn = isActive
       ? `<button class="btn-supple" onclick="stopSupple('${sid}')">停止</button>`
       : `<button class="btn-supple" onclick="resumeSupple('${sid}')">再開</button>`;
+
+    // メモ履歴（新しい順＝配列末尾が最新）
+    const memos = s.memos || [];
+    const memoRows = [...memos].reverse().map((m, revIdx) => {
+      const origIdx = memos.length - 1 - revIdx;
+      const dateLabel = m.date
+        ? m.date.split('-').map((p, i) => i === 0 ? p : String(Number(p))).join('/')
+        : '';
+      return `<div style="padding:5px 0;border-bottom:1px solid #F0EDE8;display:flex;align-items:flex-start;gap:4px">
+        <div style="flex:1;min-width:0">
+          ${dateLabel
+            ? `<div style="font-size:11px;color:#888780">${escHtml(dateLabel)}</div>`
+            : `<div style="font-size:11px;color:#B0ADA8">日付未記入</div>`}
+          <div style="font-size:13px;color:var(--text);white-space:pre-wrap">${escHtml(m.text)}</div>
+        </div>
+        <button style="background:none;border:none;color:#CCBBB8;font-size:12px;cursor:pointer;padding:2px 4px;flex-shrink:0;line-height:1" onclick="deleteSuppleMemo('${sid}',${origIdx})" title="削除">✕</button>
+      </div>`;
+    }).join('');
+
+    const isFormOpen = _suppleFormOpenId === s.id;
+    const formHtml = isFormOpen
+      ? `<div style="margin-top:8px;padding:10px;background:#FAF8F6;border-radius:8px;border:1px solid #EDE9E4">
+          <input type="date" class="form-input" id="supple-memo-date" style="font-size:13px;padding:7px 10px;margin-bottom:6px" value="${todayKey()}">
+          <textarea class="form-textarea" id="supple-memo-text" style="min-height:60px;font-size:13px;padding:7px 10px;margin-bottom:6px" placeholder="メモを入力..."></textarea>
+          <div style="display:flex;gap:6px">
+            <button class="btn-supple" style="flex:1" onclick="saveSuppleMemo()">保存</button>
+            <button class="btn-supple" style="flex:1;background:#F0EDE8;color:#888780" onclick="cancelSuppleMemo()">キャンセル</button>
+          </div>
+        </div>`
+      : '';
+
+    const memoSection =
+      `<div style="margin-top:10px;border-top:1px solid #F0EDE8;padding-top:8px">
+        <div style="font-size:12px;color:#888780;font-weight:600;margin-bottom:4px">メモ</div>
+        ${memoRows || '<div style="font-size:13px;color:#B0ADA8;padding:3px 0">まだメモがありません</div>'}
+        <button class="btn-supple" style="margin-top:8px;font-size:12px;padding:4px 10px" onclick="toggleSuppleMemoForm('${sid}')">＋ 新しい記録を追加</button>
+        ${formHtml}
+      </div>`;
+
     return `<div class="supple-item"${!isActive ? ' style="opacity:0.85"' : ''}>
       <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">
-        <div style="flex:1">
+        <div style="flex:1;min-width:0">
           <div class="supple-name">${escHtml(s.name)}</div>
           ${detailText ? `<div class="supple-detail">${detailText}</div>` : ''}
           ${s.goal ? `<div class="supple-goal">目的：${escHtml(s.goal)}</div>` : ''}
-          ${s.memos && s.memos[0]?.text ? `<div class="supple-detail" style="margin-top:2px">メモ：${escHtml(s.memos[0].text)}</div>` : ''}
+          ${memoSection}
         </div>
         <div style="display:flex;flex-direction:column;gap:6px;flex-shrink:0">
           <button class="btn-supple" onclick="editSupple('${sid}')">編集</button>
@@ -1590,13 +1631,54 @@ function renderSupple() {
   el.innerHTML =
     `<div class="supple-section-label">服用中（${active.length}件）</div>
     ${activeHtml}
-    <details style="margin-top:14px">
+    <details id="supple-stopped-details" style="margin-top:14px"${_suppleStoppedOpen ? ' open' : ''}>
       <summary class="supple-summary supple-section-label">
         <span>服用をやめた（${stopped.length}件）</span>
         <span style="font-size:10px;color:var(--text-light)">▼</span>
       </summary>
       <div style="margin-top:4px">${stoppedHtml}</div>
     </details>`;
+
+  // details の open 状態を再描画後も保持
+  const detEl = document.getElementById('supple-stopped-details');
+  if (detEl) detEl.addEventListener('toggle', () => { _suppleStoppedOpen = detEl.open; });
+}
+
+function toggleSuppleMemoForm(id) {
+  _suppleFormOpenId = (_suppleFormOpenId === id) ? null : id;
+  renderSupple();
+}
+
+function saveSuppleMemo() {
+  if (!_suppleFormOpenId) return;
+  const text = (document.getElementById('supple-memo-text')?.value || '').trim();
+  if (!text) { showToast('テキストを入力してください'); return; }
+  const date = document.getElementById('supple-memo-date')?.value || '';
+  const list = getSupple();
+  const s = list.find(e => e.id === _suppleFormOpenId);
+  if (!s) return;
+  if (!s.memos) s.memos = [];
+  s.memos.push({ date, text });
+  s._ts = Date.now();
+  _suppleFormOpenId = null;
+  setSupple(list);
+  renderSupple();
+}
+
+function cancelSuppleMemo() {
+  _suppleFormOpenId = null;
+  renderSupple();
+}
+
+function deleteSuppleMemo(id, memoIdx) {
+  if (!confirm('このメモを削除しますか?')) return;
+  const list = getSupple();
+  const s = list.find(e => e.id === id);
+  if (!s || !s.memos) return;
+  s.memos.splice(memoIdx, 1);
+  s._ts = Date.now();
+  setSupple(list);
+  renderSupple();
 }
 
 function stopSupple(id) {
