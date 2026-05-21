@@ -1027,6 +1027,7 @@ async function syncFromCloud() {
     _syncStatus('同期済み');
     setTimeout(() => _syncStatus(''), 3000);
     migrateSupplements();
+    migrateNextVisitItems();
     renderAll();
   } catch {
     _syncStatus('オフライン');
@@ -1550,6 +1551,39 @@ function migrateSupplements() {
   }
 }
 
+function migrateNextVisitItems() {
+  const items = load('next_visit', null);
+  if (!items || !Array.isArray(items)) return;
+  let count = 0;
+  const addedFields = new Set();
+  const migrated = items.map((item, idx) => {
+    if (typeof item === 'string') {
+      count++;
+      addedFields.add('all');
+      return { id: 'note_legacy_' + idx, text: item, source: 'manual', sourceKey: '', result: '', _ts: Date.now() };
+    }
+    const entry = { ...item };
+    let changed = false;
+    if (!('id' in entry))        { entry.id = 'note_' + Date.now() + '_' + Math.random().toString(36).slice(2,8); addedFields.add('id'); changed = true; }
+    if (!('text' in entry))      { entry.text = ''; addedFields.add('text'); changed = true; }
+    if (!('source' in entry))    { entry.source = 'manual'; addedFields.add('source'); changed = true; }
+    if (!('sourceKey' in entry)) { entry.sourceKey = ''; addedFields.add('sourceKey'); changed = true; }
+    if (!('result' in entry))    { entry.result = ''; addedFields.add('result'); changed = true; }
+    if (!('_ts' in entry))       { entry._ts = Date.now(); addedFields.add('_ts'); changed = true; }
+    if (changed) count++;
+    return entry;
+  });
+  if (count > 0) {
+    setNextVisitItems(migrated);
+    console.log('[migrateNextVisitItems] migrated ' + count + ' entries (added: ' + Array.from(addedFields).join(', ') + ')');
+  }
+}
+
+function initConsultationKeys() {
+  if (load('consultation_summary', null) === null) save('consultation_summary', []);
+  if (load('consultation_history', null) === null) save('consultation_history', []);
+}
+
 function renderSupple() {
   const list = getSupple();
   const el = document.getElementById('supple-list');
@@ -1814,10 +1848,10 @@ function renderNextVisitItems() {
     list.innerHTML = '<div style="color:var(--text-light);font-size:14px;padding:8px 0">項目はありません</div>';
     return;
   }
-  list.innerHTML = items.map((text, idx) =>
+  list.innerHTML = items.map((item, idx) =>
     `<div class="nv-item">
       <div class="nv-num">${idx+1}.</div>
-      <div class="nv-text">${escHtml(text)}</div>
+      <div class="nv-text">${escHtml(typeof item === 'string' ? item : item.text)}</div>
       <button class="nv-del" onclick="deleteNextVisitItem(${idx})">×</button>
     </div>`
   ).join('');
@@ -1827,7 +1861,8 @@ function addNextVisitItem() {
   const text = input.value.trim();
   if (!text) { showToast('内容を入力してください'); return; }
   const items = getNextVisitItems();
-  items.push(text);
+  const ts = Date.now();
+  items.push({ id: 'note_' + ts + '_' + Math.random().toString(36).slice(2,8), text, source: 'manual', sourceKey: '', result: '', _ts: ts });
   setNextVisitItems(items);
   renderNextVisitItems();
   input.value = '';
@@ -2790,6 +2825,8 @@ function renderAll() {
 
 autoBackup(); // renderAllより前に自動バックアップ
 migrateSupplements();
+migrateNextVisitItems();
+initConsultationKeys();
 renderAll();
 document.getElementById('weight-date').value = todayKey();
 syncFromCloud();
