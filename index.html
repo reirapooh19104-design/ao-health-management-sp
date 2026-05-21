@@ -129,6 +129,10 @@ body {
 .btn-small { padding: 5px 12px; background: var(--green-light); color: var(--text); border: none; border-radius: 8px; font-size: 12px; cursor: pointer; font-family: inherit; }
 .btn-edit   { padding: 5px 12px; background: var(--green-light); color: #993556; border: none; border-radius: 8px; font-size: 12px; cursor: pointer; font-family: inherit; }
 .btn-delete { padding: 5px 12px; background: #FFF0EF; color: #E05050; border: 1px solid #ffd0d0; border-radius: 8px; font-size: 12px; cursor: pointer; font-family: inherit; }
+.btn-supple { padding: 5px 14px; min-height: 28px; background: #FBEAF0; color: #993556; border: none; border-radius: 8px; font-size: 12px; cursor: pointer; font-family: inherit; }
+.supple-section-label { font-size: 13px; color: var(--text-light); font-weight: 600; padding: 4px 0 8px; }
+.supple-summary { cursor: pointer; user-select: none; display: flex; justify-content: space-between; align-items: center; list-style: none; }
+.supple-summary::-webkit-details-marker { display: none; }
 .note-card-red    { background: #FFF0EF; border-left: 4px solid #E05050; border-radius: 8px; padding: 12px; margin-bottom: 8px; }
 .note-card-yellow { background: #FFFBEF; border-left: 4px solid #E0B050; border-radius: 8px; padding: 12px; margin-bottom: 8px; }
 .note-card-blue   { background: #EFF5FF; border-left: 4px solid #5080E0; border-radius: 8px; padding: 12px; margin-bottom: 8px; }
@@ -1546,23 +1550,75 @@ function migrateSupplements() {
 function renderSupple() {
   const list = getSupple();
   const el = document.getElementById('supple-list');
-  if (!list.length) {
-    el.innerHTML = '<div style="color:var(--text-light);font-size:14px;padding:8px 0">サプリの登録はありません</div>';
-    return;
-  }
-  el.innerHTML = list.map((s, idx) =>
-    `<div class="supple-item">
+
+  const active  = list.filter(s => s.status !== 'stopped');
+  const stopped = list.filter(s => s.status === 'stopped');
+
+  const cardHtml = s => {
+    const isActive = s.status !== 'stopped';
+    const sid = (s.id || '').replace(/'/g, "\\'");
+    const stoppedNote = (!isActive && s.stoppedAt) ? ' / 停止：' + s.stoppedAt : '';
+    const detailText = s.detail
+      ? escHtml(s.detail) + escHtml(stoppedNote)
+      : (stoppedNote ? escHtml(stoppedNote.replace(' / ', '')) : '');
+    const actionBtn = isActive
+      ? `<button class="btn-supple" onclick="stopSupple('${sid}')">停止</button>`
+      : `<button class="btn-supple" onclick="resumeSupple('${sid}')">再開</button>`;
+    return `<div class="supple-item"${!isActive ? ' style="opacity:0.85"' : ''}>
       <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">
         <div style="flex:1">
           <div class="supple-name">${escHtml(s.name)}</div>
-          ${s.detail ? `<div class="supple-detail">${escHtml(s.detail)}</div>` : ''}
-          ${s.goal   ? `<div class="supple-goal">目的：${escHtml(s.goal)}</div>` : ''}
+          ${detailText ? `<div class="supple-detail">${detailText}</div>` : ''}
+          ${s.goal ? `<div class="supple-goal">目的：${escHtml(s.goal)}</div>` : ''}
           ${s.memos && s.memos[0]?.text ? `<div class="supple-detail" style="margin-top:2px">メモ：${escHtml(s.memos[0].text)}</div>` : ''}
         </div>
-        <button class="btn-delete" onclick="deleteSupple(${idx})">削除</button>
+        <div style="display:flex;flex-direction:column;gap:6px;flex-shrink:0">
+          <button class="btn-supple" onclick="editSupple('${sid}')">編集</button>
+          ${actionBtn}
+        </div>
       </div>
-    </div>`
-  ).join('');
+    </div>`;
+  };
+
+  const activeHtml = active.length
+    ? active.map(cardHtml).join('')
+    : '<div style="color:var(--text-light);font-size:14px;padding:8px 0">服用中のサプリはありません</div>';
+  const stoppedHtml = stopped.length
+    ? stopped.map(cardHtml).join('')
+    : '<div style="color:var(--text-light);font-size:14px;padding:8px 0">停止中のサプリはありません</div>';
+
+  el.innerHTML =
+    `<div class="supple-section-label">服用中（${active.length}件）</div>
+    ${activeHtml}
+    <details style="margin-top:14px">
+      <summary class="supple-summary supple-section-label">
+        <span>服用をやめた（${stopped.length}件）</span>
+        <span style="font-size:10px;color:var(--text-light)">▼</span>
+      </summary>
+      <div style="margin-top:4px">${stoppedHtml}</div>
+    </details>`;
+}
+
+function stopSupple(id) {
+  const list = getSupple();
+  const s = list.find(e => e.id === id);
+  if (!s) return;
+  s.status = 'stopped'; s.stoppedAt = todayKey(); s._ts = Date.now();
+  setSupple(list);
+  renderSupple();
+}
+
+function resumeSupple(id) {
+  const list = getSupple();
+  const s = list.find(e => e.id === id);
+  if (!s) return;
+  s.status = 'active'; s.stoppedAt = ''; s._ts = Date.now();
+  setSupple(list);
+  renderSupple();
+}
+
+function editSupple(id) {
+  console.log('[editSupple] not implemented yet', id);
 }
 
 function addSupple() {
