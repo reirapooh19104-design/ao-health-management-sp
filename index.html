@@ -246,6 +246,9 @@ body {
 .cs-edit-btn { background: none; border: 1px solid var(--border); border-radius: 6px; font-size: 12px; color: var(--text-light); cursor: pointer; padding: 2px 8px; font-family: inherit; }
 .cs-edit-btn:hover { border-color: var(--green); color: var(--green); }
 .cs-edit-row { display: flex; gap: 6px; margin-top: 8px; }
+.cs-result-saved { font-size:13px; color:var(--text-light); background:#FAF8F5; border-radius:6px; padding:6px 8px; margin-top:6px; line-height:1.6; white-space:pre-wrap; }
+.cs-result-link  { background:none; border:none; font-size:12px; color:var(--text-light); cursor:pointer; padding:0; font-family:inherit; margin-top:4px; display:inline-block; text-decoration:underline; }
+.cs-result-link:hover { color:var(--green); }
 
 /* ── バックアップ・同期 ── */
 .modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:1000; display:flex; align-items:flex-end; justify-content:center; }
@@ -943,6 +946,7 @@ let _suppleStoppedOpen = false;
 let _suppleFormOpenId  = null;
 let _suppleEditOpenId  = null;
 let _csEditOpenId      = null;
+let _csResultOpenId    = null;
 let _csAggPending      = null;
 
 // ============================================================
@@ -1981,10 +1985,14 @@ function renderConsultationSummary() {
     return;
   }
   list.innerHTML = items.map((item, idx) => {
-    const id   = typeof item === 'string' ? '' : item.id;
-    const text = typeof item === 'string' ? item : item.text;
-    const sid  = (id || '').replace(/'/g, "\\'");
-    const isEditOpen = _csEditOpenId === id;
+    const id     = typeof item === 'string' ? '' : item.id;
+    const text   = typeof item === 'string' ? item : item.text;
+    const result = typeof item === 'string' ? '' : (item.result || '');
+    const sid    = (id || '').replace(/'/g, "\\'");
+    const isEditOpen   = _csEditOpenId   === id;
+    const isResultOpen = _csResultOpenId === id;
+
+    // ケース1: 本文編集フォーム展開中
     if (isEditOpen) {
       return `<div class="cs-item">
         <div class="nv-num">${idx+1}.</div>
@@ -1997,10 +2005,35 @@ function renderConsultationSummary() {
         </div>
       </div>`;
     }
+
+    // ケース2: 診察結果記入フォーム展開中
+    if (isResultOpen) {
+      const savedHtml = result
+        ? `<div class="cs-result-saved">【診察結果】${escHtml(result)}</div>` : '';
+      return `<div class="cs-item">
+        <div class="nv-num">${idx+1}.</div>
+        <div class="cs-item-body">
+          <div class="cs-item-text">${escHtml(text)}</div>
+          ${savedHtml}
+          <textarea class="nv-input" id="cs-result-input" style="min-height:52px;margin-top:8px" placeholder="診察でわかったこと・医師の回答など"></textarea>
+          <div class="cs-edit-row">
+            <button class="nv-add-btn" style="flex:1;margin-top:0" onclick="saveConsultationResult()">保存</button>
+            <button class="nv-add-btn" style="flex:1;margin-top:0;background:#F0EDE8;color:#888780" onclick="cancelConsultationResult()">キャンセル</button>
+          </div>
+        </div>
+      </div>`;
+    }
+
+    // ケース3: 通常表示
+    const savedHtml = result
+      ? `<div class="cs-result-saved">【診察結果】${escHtml(result)}</div>` : '';
+    const resultLinkLabel = result ? '診察結果を編集 ▼' : '診察結果を記入 ▼';
     return `<div class="cs-item">
       <div class="nv-num">${idx+1}.</div>
       <div class="cs-item-body">
         <div class="cs-item-text">${escHtml(text)}</div>
+        ${savedHtml}
+        <button class="cs-result-link" onclick="openConsultationResult('${sid}')">${resultLinkLabel}</button>
       </div>
       <div class="cs-item-actions">
         <button class="cs-edit-btn" onclick="editConsultationSummaryItem('${sid}')">編集</button>
@@ -2008,12 +2041,21 @@ function renderConsultationSummary() {
       </div>
     </div>`;
   }).join('');
-  // 編集フォームの初期値を JS で安全に設定（特殊文字・改行対応）
+
+  // 本文編集フォームの初期値をJSで安全に設定
   if (_csEditOpenId) {
     const editItem = items.find(e => typeof e === 'object' && e.id === _csEditOpenId);
     if (editItem) {
       const ta = document.getElementById('cs-edit-input');
       if (ta) ta.value = editItem.text || '';
+    }
+  }
+  // 診察結果フォームの初期値をJSで安全に設定
+  if (_csResultOpenId) {
+    const resultItem = items.find(e => typeof e === 'object' && e.id === _csResultOpenId);
+    if (resultItem) {
+      const ta = document.getElementById('cs-result-input');
+      if (ta) { ta.value = resultItem.result || ''; ta.focus(); }
     }
   }
 }
@@ -2030,11 +2072,36 @@ function addConsultationSummaryItem() {
   showToast('追加しました');
 }
 function deleteConsultationSummaryItem(id) {
+  _csEditOpenId = null;
+  _csResultOpenId = null;
   setConsultationSummary(getConsultationSummary().filter(e => typeof e === 'string' ? false : e.id !== id));
   renderConsultationSummary();
 }
 function editConsultationSummaryItem(id) {
+  _csResultOpenId = null;
   _csEditOpenId = (_csEditOpenId === id) ? null : id;
+  renderConsultationSummary();
+}
+function openConsultationResult(id) {
+  _csEditOpenId = null;
+  _csResultOpenId = (_csResultOpenId === id) ? null : id;
+  renderConsultationSummary();
+}
+function saveConsultationResult() {
+  if (!_csResultOpenId) return;
+  const text = (document.getElementById('cs-result-input')?.value || '').trim();
+  const items = getConsultationSummary();
+  const item = items.find(e => typeof e === 'object' && e.id === _csResultOpenId);
+  if (!item) return;
+  item.result = text;
+  item._ts = Date.now();
+  _csResultOpenId = null;
+  setConsultationSummary(items);
+  renderConsultationSummary();
+  showToast('診察結果を保存しました');
+}
+function cancelConsultationResult() {
+  _csResultOpenId = null;
   renderConsultationSummary();
 }
 function saveConsultationSummaryEdit() {
