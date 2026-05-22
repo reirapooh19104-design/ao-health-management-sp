@@ -798,7 +798,7 @@ body {
   <div class="modal-sheet">
     <div id="cs-agg-modal-body" style="margin-bottom:16px;font-size:14px;line-height:1.6"></div>
     <button id="cs-agg-add-btn" class="nv-add-btn" style="width:100%" onclick="confirmCsAgg('add')">追加する</button>
-    <button class="nv-add-btn" style="width:100%;background:#F0EDE8;color:#888780;margin-top:8px" onclick="confirmCsAgg('clear')">クリアして追加</button>
+    <button class="nv-add-btn" style="width:100%;background:#F0EDE8;color:#888780;margin-top:8px" onclick="confirmCsAgg('clear')">自動集計をやり直す</button>
     <button class="nv-add-btn" style="width:100%;background:#F0EDE8;color:#888780;margin-top:8px" onclick="closeCsAggModal()">キャンセル</button>
   </div>
 </div>
@@ -2193,14 +2193,14 @@ function runAggregation() {
   if (filtered.length === 0) {
     // ケース2: 候補0件 + 既存あり → モーダル（追加するは無効）
     document.getElementById('cs-agg-modal-body').innerHTML =
-      '新しい追加データはありません。<br>既存のまとめをクリアして再集計することもできます。';
+      '新しい追加データはありません。<br>自動集計分のみやり直すこともできます。<br><small style="color:var(--text-light)">（手動追加メモは保持されます）</small>';
     addBtn.disabled = true;
     addBtn.style.opacity = '0.4';
     addBtn.style.cursor = 'default';
   } else {
     // ケース3: 候補あり → 通常モーダル
-    document.getElementById('cs-agg-modal-body').textContent =
-      periodLabels[periodKey] + ' で ' + filtered.length + ' 件のデータが見つかりました。';
+    document.getElementById('cs-agg-modal-body').innerHTML =
+      periodLabels[periodKey] + ' で ' + filtered.length + ' 件のデータが見つかりました。<br><small style="color:var(--text-light)">（手動追加メモは保持されます）</small>';
     addBtn.disabled = false;
     addBtn.style.opacity = '';
     addBtn.style.cursor = '';
@@ -2214,10 +2214,15 @@ function confirmCsAgg(mode) {
   const count = _csAggPending.length;
   if (mode === 'add' && count === 0) { closeCsAggModal(); return; }
   const existing = getConsultationSummary();
-  setConsultationSummary(mode === 'clear' ? _csAggPending : existing.concat(_csAggPending));
+  if (mode === 'clear') {
+    const manualOnly = existing.filter(function(x) { return typeof x === 'object' && x.source === 'manual'; });
+    setConsultationSummary(manualOnly.concat(_csAggPending));
+  } else {
+    setConsultationSummary(existing.concat(_csAggPending));
+  }
   renderConsultationSummary();
   closeCsAggModal();
-  showToast(mode === 'clear' && count === 0 ? 'まとめをクリアしました' : (mode === 'clear' ? 'クリアして ' : '') + count + ' 件追加しました');
+  showToast(mode === 'clear' && count === 0 ? '自動集計分をクリアしました' : (mode === 'clear' ? '自動集計分をやり直して ' + count + ' 件追加しました' : count + ' 件追加しました'));
 }
 
 function closeCsAggModal() {
