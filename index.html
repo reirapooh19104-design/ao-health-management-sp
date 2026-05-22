@@ -797,7 +797,7 @@ body {
 <div id="cs-agg-modal" class="modal-overlay" style="display:none" onclick="if(event.target===this)closeCsAggModal()">
   <div class="modal-sheet">
     <div id="cs-agg-modal-body" style="margin-bottom:16px;font-size:14px;line-height:1.6"></div>
-    <button class="nv-add-btn" style="width:100%" onclick="confirmCsAgg('add')">追加する</button>
+    <button id="cs-agg-add-btn" class="nv-add-btn" style="width:100%" onclick="confirmCsAgg('add')">追加する</button>
     <button class="nv-add-btn" style="width:100%;background:#F0EDE8;color:#888780;margin-top:8px" onclick="confirmCsAgg('clear')">クリアして追加</button>
     <button class="nv-add-btn" style="width:100%;background:#F0EDE8;color:#888780;margin-top:8px" onclick="closeCsAggModal()">キャンセル</button>
   </div>
@@ -2077,18 +2077,25 @@ function collectAbnormalRecords(periodKey) {
   const items = [];
   const ts = Date.now();
 
-  // ソース①: health_notes（期間内・非空）
+  // ソース①: health_notes（期間内・元気度低下 or 特記事項あり）
   const notes = getNotes();
   notes.forEach(function(n) {
     if (!n.text || !n.text.trim()) return;
+    const text = n.text.trim();
+    const energyMatch  = text.match(/元気度：([^・\n]+)/);
+    const specialMatch = text.match(/⚠️(.+?)(?:・|$)/);
+    if (!energyMatch && !specialMatch) return;
     const clean = String(n.date).replace('夜', '').trim();
     const p = clean.split(/[-\/]/);
     if (p.length < 3) return;
     const noteTs = new Date(parseInt(p[0]), parseInt(p[1]) - 1, parseInt(p[2])).getTime();
     if (noteTs < since) return;
+    const prefixParts = [];
+    if (energyMatch)  prefixParts.push('元気度:' + energyMatch[1].trim());
+    if (specialMatch) prefixParts.push('⚠️' + specialMatch[1].trim());
     items.push({
       id: 'cs_' + ts + '_' + Math.random().toString(36).slice(2, 8),
-      text: '【体調記録】' + n.date + ' ' + n.text.trim(),
+      text: '【体調記録】' + n.date + '(' + prefixParts.join('/') + ') ' + text,
       source: 'auto',
       sourceKey: 'hn_' + n.date,
       result: '',
@@ -2096,8 +2103,9 @@ function collectAbnormalRecords(periodKey) {
     });
   });
 
-  // ソース②: blood_tests（期間内・基準値外のみ）
+  // ソース②: blood_tests（期間内・同日異常値をまとめる）
   const tests = getBloodTests();
+  const btMap = new Map();
   tests.forEach(function(t) {
     if (!t.date) return;
     const p = t.date.split('-');
@@ -2113,14 +2121,18 @@ function collectAbnormalRecords(periodKey) {
       const isHigh = num > ref.hi;
       const isLow = ref.lo > 0 && num < ref.lo;
       if (!isHigh && !isLow) return;
-      items.push({
-        id: 'cs_' + ts + '_' + Math.random().toString(36).slice(2, 8),
-        text: '【血液検査】' + t.date + ' ' + ref.label + ' ' + num + ' ' + ref.unit + '（' + (isHigh ? '高値' : '低値') + '）',
-        source: 'auto',
-        sourceKey: 'bt_' + t.date + '_' + key,
-        result: '',
-        _ts: ts
-      });
+      if (!btMap.has(t.date)) btMap.set(t.date, []);
+      btMap.get(t.date).push(ref.label + ' ' + num + ' ' + ref.unit + '（' + (isHigh ? '高値' : '低値') + '）');
+    });
+  });
+  btMap.forEach(function(parts, date) {
+    items.push({
+      id: 'cs_' + ts + '_' + Math.random().toString(36).slice(2, 8),
+      text: '【血液検査】' + date + ':' + parts.join('、'),
+      source: 'auto',
+      sourceKey: 'bt_' + date,
+      result: '',
+      _ts: ts
     });
   });
 
@@ -2152,14 +2164,16 @@ function runAggregation() {
     }
   }
   const pending = collectAbnormalRecords(periodKey);
-  if (!pending || !pending.length) {
+  const existing = getConsultationSummary();
+
+  // ケース1: 候補0件 + 既存空 → トースト
+  if ((!pending || !pending.length) && !existing.length) {
     showToast('集計対象のデータがありませんでした');
     return;
   }
 
   // 既存アイテムとの重複除去
-  const existing = getConsultationSummary();
-  const filtered = pending.filter(function(item) {
+  const filtered = (pending || []).filter(function(item) {
     if (item.source === 'auto') {
       return !existing.some(function(e) { return typeof e === 'object' && e.sourceKey === item.sourceKey; });
     }
@@ -2172,25 +2186,38 @@ function runAggregation() {
     return true;
   });
 
-  if (!filtered.length) {
-    showToast('新しいデータはありませんでした（すでに追加済み）');
-    return;
-  }
-
   _csAggPending = filtered;
   const periodLabels = { '2w': '直近2週間', '1m': '直近1ヶ月', '2m': '直近2ヶ月', '3m': '直近3ヶ月', 'last_visit': '前回診察日から' };
-  document.getElementById('cs-agg-modal-body').textContent = periodLabels[periodKey] + ' で ' + filtered.length + ' 件のデータが見つかりました。';
+  const addBtn = document.getElementById('cs-agg-add-btn');
+
+  if (filtered.length === 0) {
+    // ケース2: 候補0件 + 既存あり → モーダル（追加するは無効）
+    document.getElementById('cs-agg-modal-body').innerHTML =
+      '新しい追加データはありません。<br>既存のまとめをクリアして再集計することもできます。';
+    addBtn.disabled = true;
+    addBtn.style.opacity = '0.4';
+    addBtn.style.cursor = 'default';
+  } else {
+    // ケース3: 候補あり → 通常モーダル
+    document.getElementById('cs-agg-modal-body').textContent =
+      periodLabels[periodKey] + ' で ' + filtered.length + ' 件のデータが見つかりました。';
+    addBtn.disabled = false;
+    addBtn.style.opacity = '';
+    addBtn.style.cursor = '';
+  }
+
   document.getElementById('cs-agg-modal').style.display = 'flex';
 }
 
 function confirmCsAgg(mode) {
-  if (!_csAggPending) return;
+  if (_csAggPending === null) return;
   const count = _csAggPending.length;
+  if (mode === 'add' && count === 0) { closeCsAggModal(); return; }
   const existing = getConsultationSummary();
   setConsultationSummary(mode === 'clear' ? _csAggPending : existing.concat(_csAggPending));
   renderConsultationSummary();
   closeCsAggModal();
-  showToast((mode === 'clear' ? 'クリアして ' : '') + count + ' 件追加しました');
+  showToast(mode === 'clear' && count === 0 ? 'まとめをクリアしました' : (mode === 'clear' ? 'クリアして ' : '') + count + ' 件追加しました');
 }
 
 function closeCsAggModal() {
