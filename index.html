@@ -1684,6 +1684,21 @@ function deleteHealthNote(dateStr) {
   if (idx < 0) return;
   notes.splice(idx, 1);
   setNotes(notes);
+  // 夜エントリは diary と独立して存在するため diary/day_memo はクリアしない。
+  // 通常エントリのみ diary の health memo fields と day_memo をクリアして整合を取る。
+  if (!dateStr.includes('夜')) {
+    const parts = String(dateStr).split('/');
+    if (parts.length === 3) {
+      const isoDate = parts[0] + '-' + String(parseInt(parts[1])).padStart(2,'0') + '-' + String(parseInt(parts[2])).padStart(2,'0');
+      const diary = getDiary();
+      const di = diary.findIndex(e => e.date === isoDate);
+      if (di >= 0) {
+        diary[di] = { ...diary[di], walk:'', coughN:'', coughL:'なし', energyLv:'普通', specialNote:'', memoOther:'', _ts: Date.now() };
+        setDiary(diary);
+      }
+      setDayMemo(isoDate, { walk:'', coughN:'', coughL:'なし', energyLv:'普通', specialNote:'', memoOther:'' });
+    }
+  }
   renderNotes();
 }
 
