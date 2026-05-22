@@ -566,6 +566,16 @@ body {
   <div class="card">
     <div class="section-header">
       <div class="section-title">次回診察用まとめ</div>
+      <div style="display:flex;align-items:center;gap:6px">
+        <select class="form-select" id="cs-period-select" style="font-size:12px;padding:4px 8px;height:auto">
+          <option value="2w">直近2週間</option>
+          <option value="1m" selected>直近1ヶ月</option>
+          <option value="2m">直近2ヶ月</option>
+          <option value="3m">直近3ヶ月</option>
+          <option value="last_visit">前回診察日から</option>
+        </select>
+        <button class="cs-edit-btn" onclick="runAggregation()" style="white-space:nowrap">自動集計</button>
+      </div>
     </div>
     <div id="cs-list"></div>
     <div class="nv-add-area">
@@ -784,6 +794,15 @@ body {
 </div><!-- /weight -->
 
 <!-- バックアップ復元モーダル -->
+<div id="cs-agg-modal" class="modal-overlay" style="display:none" onclick="if(event.target===this)closeCsAggModal()">
+  <div class="modal-sheet">
+    <div id="cs-agg-modal-body" style="margin-bottom:16px;font-size:14px;line-height:1.6"></div>
+    <button class="nv-add-btn" style="width:100%" onclick="confirmCsAgg('add')">追加する</button>
+    <button class="nv-add-btn" style="width:100%;background:#F0EDE8;color:#888780;margin-top:8px" onclick="confirmCsAgg('clear')">クリアして追加</button>
+    <button class="nv-add-btn" style="width:100%;background:#F0EDE8;color:#888780;margin-top:8px" onclick="closeCsAggModal()">キャンセル</button>
+  </div>
+</div>
+
 <div id="backup-modal" class="modal-overlay" style="display:none" onclick="if(event.target===this)closeBackupModal()">
   <div class="modal-sheet">
     <button class="modal-close" onclick="closeBackupModal()">×</button>
@@ -924,6 +943,7 @@ let _suppleStoppedOpen = false;
 let _suppleFormOpenId  = null;
 let _suppleEditOpenId  = null;
 let _csEditOpenId      = null;
+let _csAggPending      = null;
 
 // ============================================================
 // CLOUD SYNC (Google Apps Script)
@@ -2033,6 +2053,149 @@ function saveConsultationSummaryEdit() {
 function cancelConsultationSummaryEdit() {
   _csEditOpenId = null;
   renderConsultationSummary();
+}
+
+function collectAbnormalRecords(periodKey) {
+  const now = Date.now();
+  let since;
+  if (periodKey === '2w') {
+    since = now - 14 * 86400000;
+  } else if (periodKey === '1m') {
+    since = now - 30 * 86400000;
+  } else if (periodKey === '2m') {
+    since = now - 60 * 86400000;
+  } else if (periodKey === '3m') {
+    since = now - 90 * 86400000;
+  } else if (periodKey === 'last_visit') {
+    const history = load('consultation_history', []);
+    if (!history.length) return null;
+    const lastDate = history[history.length - 1].date;
+    const p = lastDate.split('-');
+    since = new Date(parseInt(p[0]), parseInt(p[1]) - 1, parseInt(p[2])).getTime();
+  }
+
+  const items = [];
+  const ts = Date.now();
+
+  // ソース①: health_notes（期間内・非空）
+  const notes = getNotes();
+  notes.forEach(function(n) {
+    if (!n.text || !n.text.trim()) return;
+    const clean = String(n.date).replace('夜', '').trim();
+    const p = clean.split(/[-\/]/);
+    if (p.length < 3) return;
+    const noteTs = new Date(parseInt(p[0]), parseInt(p[1]) - 1, parseInt(p[2])).getTime();
+    if (noteTs < since) return;
+    items.push({
+      id: 'cs_' + ts + '_' + Math.random().toString(36).slice(2, 8),
+      text: '【体調記録】' + n.date + ' ' + n.text.trim(),
+      source: 'auto',
+      sourceKey: 'hn_' + n.date,
+      result: '',
+      _ts: ts
+    });
+  });
+
+  // ソース②: blood_tests（期間内・基準値外のみ）
+  const tests = getBloodTests();
+  tests.forEach(function(t) {
+    if (!t.date) return;
+    const p = t.date.split('-');
+    const testTs = new Date(parseInt(p[0]), parseInt(p[1]) - 1, parseInt(p[2])).getTime();
+    if (testTs < since) return;
+    BT_KEYS.forEach(function(key) {
+      const val = t[key];
+      if (val == null || val === '') return;
+      const ref = BT_REFS[key];
+      if (!ref) return;
+      const num = parseFloat(val);
+      if (isNaN(num)) return;
+      const isHigh = num > ref.hi;
+      const isLow = ref.lo > 0 && num < ref.lo;
+      if (!isHigh && !isLow) return;
+      items.push({
+        id: 'cs_' + ts + '_' + Math.random().toString(36).slice(2, 8),
+        text: '【血液検査】' + t.date + ' ' + ref.label + ' ' + num + ' ' + ref.unit + '（' + (isHigh ? '高値' : '低値') + '）',
+        source: 'auto',
+        sourceKey: 'bt_' + t.date + '_' + key,
+        result: '',
+        _ts: ts
+      });
+    });
+  });
+
+  // ソース③: next_visit（全件・期間フィルタなし）
+  const nvItems = getNextVisitItems();
+  nvItems.forEach(function(nv) {
+    const text = typeof nv === 'string' ? nv : (nv.text || '');
+    if (!text.trim()) return;
+    items.push({
+      id: 'cs_' + ts + '_' + Math.random().toString(36).slice(2, 8),
+      text: text.trim(),
+      source: 'next_visit',
+      sourceKey: '',
+      result: '',
+      _ts: ts
+    });
+  });
+
+  return items;
+}
+
+function runAggregation() {
+  const periodKey = (document.getElementById('cs-period-select') || {}).value || '1m';
+  if (periodKey === 'last_visit') {
+    const history = load('consultation_history', []);
+    if (!history.length) {
+      showToast('診察履歴がまだ登録されていません');
+      return;
+    }
+  }
+  const pending = collectAbnormalRecords(periodKey);
+  if (!pending || !pending.length) {
+    showToast('集計対象のデータがありませんでした');
+    return;
+  }
+
+  // 既存アイテムとの重複除去
+  const existing = getConsultationSummary();
+  const filtered = pending.filter(function(item) {
+    if (item.source === 'auto') {
+      return !existing.some(function(e) { return typeof e === 'object' && e.sourceKey === item.sourceKey; });
+    }
+    if (item.source === 'next_visit') {
+      return !existing.some(function(e) {
+        const t = typeof e === 'string' ? e : (e.text || '');
+        return t === item.text;
+      });
+    }
+    return true;
+  });
+
+  if (!filtered.length) {
+    showToast('新しいデータはありませんでした（すでに追加済み）');
+    return;
+  }
+
+  _csAggPending = filtered;
+  const periodLabels = { '2w': '直近2週間', '1m': '直近1ヶ月', '2m': '直近2ヶ月', '3m': '直近3ヶ月', 'last_visit': '前回診察日から' };
+  document.getElementById('cs-agg-modal-body').textContent = periodLabels[periodKey] + ' で ' + filtered.length + ' 件のデータが見つかりました。';
+  document.getElementById('cs-agg-modal').style.display = 'flex';
+}
+
+function confirmCsAgg(mode) {
+  if (!_csAggPending) return;
+  const count = _csAggPending.length;
+  const existing = getConsultationSummary();
+  setConsultationSummary(mode === 'clear' ? _csAggPending : existing.concat(_csAggPending));
+  renderConsultationSummary();
+  closeCsAggModal();
+  showToast((mode === 'clear' ? 'クリアして ' : '') + count + ' 件追加しました');
+}
+
+function closeCsAggModal() {
+  document.getElementById('cs-agg-modal').style.display = 'none';
+  _csAggPending = null;
 }
 
 // ============================================================
