@@ -1659,13 +1659,31 @@ function renderNotes() {
     list.innerHTML = `<div style="color:var(--text-light);font-size:14px;padding:8px 0">${currentNotesMonth ? 'この月の記録はありません' : '記録はありません'}</div>`;
     return;
   }
-  list.innerHTML = notes.map(n =>
-    `<div class="note-item"><div class="note-date">${n.date}</div><div class="note-text">${escHtml(n.text)}</div></div>`
-  ).join('');
+  list.innerHTML = notes.map(n => {
+    const safeDate = n.date.replace(/'/g, "\\'");
+    const delBtn = currentNotesMonth
+      ? `<button class="nv-del" style="min-width:30px;min-height:30px;font-size:16px" onclick="deleteHealthNote('${safeDate}')" title="削除">✕</button>`
+      : '';
+    return `<div class="note-item">
+      <div style="display:flex;align-items:center;justify-content:space-between">
+        <div class="note-date">${escHtml(n.date)}</div>${delBtn}
+      </div>
+      <div class="note-text">${escHtml(n.text)}</div>
+    </div>`;
+  }).join('');
 }
 function clearNotes() {
   if (!confirm('体調記録をすべて削除しますか？')) return;
   setNotes([]);
+  renderNotes();
+}
+function deleteHealthNote(dateStr) {
+  if (!confirm('「' + dateStr + '」の記録を削除しますか？')) return;
+  const notes = getNotes();
+  const idx = notes.findIndex(n => n.date === dateStr);
+  if (idx < 0) return;
+  notes.splice(idx, 1);
+  setNotes(notes);
   renderNotes();
 }
 
