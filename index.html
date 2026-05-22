@@ -237,6 +237,16 @@ body {
 .nv-input:focus { border-color: var(--green); }
 .nv-add-btn { margin-top: 8px; padding: 10px 18px; background: var(--green-light); color: #993556; border: none; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; font-family: inherit; }
 
+/* ── 次回診察用まとめ ── */
+.cs-item { display: flex; align-items: flex-start; gap: 8px; padding: 10px 0; border-bottom: 1px solid var(--border); }
+.cs-item:last-child { border-bottom: none; }
+.cs-item-body { flex: 1; min-width: 0; }
+.cs-item-text { font-size: 14px; line-height: 1.6; }
+.cs-item-actions { display: flex; flex-direction: column; gap: 4px; flex-shrink: 0; }
+.cs-edit-btn { background: none; border: 1px solid var(--border); border-radius: 6px; font-size: 12px; color: var(--text-light); cursor: pointer; padding: 2px 8px; font-family: inherit; }
+.cs-edit-btn:hover { border-color: var(--green); color: var(--green); }
+.cs-edit-row { display: flex; gap: 6px; margin-top: 8px; }
+
 /* ── バックアップ・同期 ── */
 .modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:1000; display:flex; align-items:flex-end; justify-content:center; }
 .modal-sheet { background:var(--card); border-radius:16px 16px 0 0; padding:20px 16px; width:100%; max-width:600px; max-height:75vh; overflow-y:auto; }
@@ -549,6 +559,18 @@ body {
     <div class="nv-add-area">
       <textarea class="nv-input" id="nv-input" placeholder="伝えたいことを追加...（例：TCHO低値について確認）"></textarea>
       <button class="nv-add-btn" onclick="addNextVisitItem()">追加</button>
+    </div>
+  </div>
+
+  <!-- 次回診察用まとめ -->
+  <div class="card">
+    <div class="section-header">
+      <div class="section-title">次回診察用まとめ</div>
+    </div>
+    <div id="cs-list"></div>
+    <div class="nv-add-area">
+      <textarea class="nv-input" id="cs-input" placeholder="伝えたいことを追加...（例：空咳について相談する）"></textarea>
+      <button class="nv-add-btn" onclick="addConsultationSummaryItem()">追加</button>
     </div>
   </div>
 
@@ -901,6 +923,7 @@ let currentDiaryMonth = (() => { const v = localStorage.getItem('view_month_diar
 let _suppleStoppedOpen = false;
 let _suppleFormOpenId  = null;
 let _suppleEditOpenId  = null;
+let _csEditOpenId      = null;
 
 // ============================================================
 // CLOUD SYNC (Google Apps Script)
@@ -1038,6 +1061,31 @@ async function syncFromCloud() {
         const gasNvKeySet = new Set((gasVal || []).map(ge => nvKey(ge)));
         if (nvMerged.some(e => !gasNvKeySet.has(nvKey(e)))) {
           pushToCloud('next_visit', nvMerged);
+        }
+      } else if (k === 'consultation_summary') {
+        // consultation_summary: エントリ単位マージ + 安全ガード(cloud が空なら保持)
+        const csIsEmpty = gasVal == null || (Array.isArray(gasVal) && gasVal.length === 0);
+        if (csIsEmpty) return;
+        const localCs = load('consultation_summary', []);
+        const csKey = e => typeof e === 'string' ? ('text:' + e) : (e.id || ('text:' + e.text));
+        const csMap = new Map(localCs.map(e => [csKey(e), e]));
+        (gasVal || []).forEach(ge => {
+          const key = csKey(ge);
+          const le = csMap.get(key);
+          if (!le) {
+            csMap.set(key, ge);
+          } else {
+            const geTs = Number(ge._ts || 0);
+            const leTs = Number(typeof le === 'string' ? 0 : (le._ts || 0));
+            if (geTs >= leTs) csMap.set(key, ge);
+          }
+        });
+        const csMerged = Array.from(csMap.values());
+        localStorage.setItem('consultation_summary', JSON.stringify(csMerged));
+        // ローカルにあってクラウドにない項目があればマージ結果をGASに書き戻す
+        const gasCsKeySet = new Set((gasVal || []).map(ge => csKey(ge)));
+        if (csMerged.some(e => !gasCsKeySet.has(csKey(e)))) {
+          pushToCloud('consultation_summary', csMerged);
         }
       } else if (gasTs > localTs || (gasTs === 0 && localTs === 0)) {
         // 安全ガード: GAS が空配列・null・undefined のときは上書きしない
@@ -1286,6 +1334,8 @@ function getNextVisitItems() { return load('next_visit', DEFAULT_NEXT_VISIT); }
 function setNextVisitItems(items) { save('next_visit', items); }
 function getBodyWeights()  { return load('bodyWeights', []); }
 function setBodyWeights(d) { save('bodyWeights', d); }
+function getConsultationSummary()       { return load('consultation_summary', []); }
+function setConsultationSummary(items)  { save('consultation_summary', items); }
 
 function escHtml(str) {
   return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
@@ -1898,6 +1948,91 @@ function deleteNextVisitItem(idx) {
   items.splice(idx, 1);
   setNextVisitItems(items);
   renderNextVisitItems();
+}
+
+// ============================================================
+// CONSULTATION SUMMARY
+// ============================================================
+function renderConsultationSummary() {
+  const items = getConsultationSummary();
+  const list = document.getElementById('cs-list');
+  if (!items.length) {
+    list.innerHTML = '<div style="color:var(--text-light);font-size:14px;padding:8px 0">項目はありません</div>';
+    return;
+  }
+  list.innerHTML = items.map((item, idx) => {
+    const id   = typeof item === 'string' ? '' : item.id;
+    const text = typeof item === 'string' ? item : item.text;
+    const sid  = (id || '').replace(/'/g, "\\'");
+    const isEditOpen = _csEditOpenId === id;
+    if (isEditOpen) {
+      return `<div class="cs-item">
+        <div class="nv-num">${idx+1}.</div>
+        <div class="cs-item-body">
+          <textarea class="nv-input" id="cs-edit-input" style="min-height:52px"></textarea>
+          <div class="cs-edit-row">
+            <button class="nv-add-btn" style="flex:1;margin-top:0" onclick="saveConsultationSummaryEdit()">保存</button>
+            <button class="nv-add-btn" style="flex:1;margin-top:0;background:#F0EDE8;color:#888780" onclick="cancelConsultationSummaryEdit()">キャンセル</button>
+          </div>
+        </div>
+      </div>`;
+    }
+    return `<div class="cs-item">
+      <div class="nv-num">${idx+1}.</div>
+      <div class="cs-item-body">
+        <div class="cs-item-text">${escHtml(text)}</div>
+      </div>
+      <div class="cs-item-actions">
+        <button class="cs-edit-btn" onclick="editConsultationSummaryItem('${sid}')">編集</button>
+        <button class="nv-del" onclick="deleteConsultationSummaryItem('${sid}')">×</button>
+      </div>
+    </div>`;
+  }).join('');
+  // 編集フォームの初期値を JS で安全に設定（特殊文字・改行対応）
+  if (_csEditOpenId) {
+    const editItem = items.find(e => typeof e === 'object' && e.id === _csEditOpenId);
+    if (editItem) {
+      const ta = document.getElementById('cs-edit-input');
+      if (ta) ta.value = editItem.text || '';
+    }
+  }
+}
+function addConsultationSummaryItem() {
+  const input = document.getElementById('cs-input');
+  const text = input.value.trim();
+  if (!text) { showToast('内容を入力してください'); return; }
+  const items = getConsultationSummary();
+  const ts = Date.now();
+  items.push({ id: 'cs_' + ts + '_' + Math.random().toString(36).slice(2,8), text, source: 'manual', sourceKey: '', result: '', _ts: ts });
+  setConsultationSummary(items);
+  renderConsultationSummary();
+  input.value = '';
+  showToast('追加しました');
+}
+function deleteConsultationSummaryItem(id) {
+  setConsultationSummary(getConsultationSummary().filter(e => typeof e === 'string' ? false : e.id !== id));
+  renderConsultationSummary();
+}
+function editConsultationSummaryItem(id) {
+  _csEditOpenId = (_csEditOpenId === id) ? null : id;
+  renderConsultationSummary();
+}
+function saveConsultationSummaryEdit() {
+  if (!_csEditOpenId) return;
+  const text = (document.getElementById('cs-edit-input')?.value || '').trim();
+  if (!text) { showToast('内容を入力してください'); return; }
+  const items = getConsultationSummary();
+  const item = items.find(e => typeof e === 'object' && e.id === _csEditOpenId);
+  if (!item) return;
+  item.text = text;
+  item._ts = Date.now();
+  _csEditOpenId = null;
+  setConsultationSummary(items);
+  renderConsultationSummary();
+}
+function cancelConsultationSummaryEdit() {
+  _csEditOpenId = null;
+  renderConsultationSummary();
 }
 
 // ============================================================
@@ -2835,6 +2970,7 @@ function renderAll() {
   updateMetrics();
   renderNotes();
   renderNextVisitItems();
+  renderConsultationSummary();
   renderSupple();
   renderDiary();
   renderBloodTestHistory();
