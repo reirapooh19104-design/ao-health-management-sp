@@ -972,6 +972,7 @@ let _csEditOpenId        = null;
 let _csResultOpenId      = null;
 let _csAggPending        = null;
 let _consultHistoryOpen  = false;
+let _noteEditDate        = null;
 
 // ============================================================
 // CLOUD SYNC (Google Apps Script)
@@ -1661,16 +1662,39 @@ function renderNotes() {
   }
   list.innerHTML = notes.map(n => {
     const safeDate = n.date.replace(/'/g, "\\'");
-    const delBtn = currentNotesMonth
-      ? `<button class="nv-del" style="min-width:30px;min-height:30px;font-size:16px" onclick="deleteHealthNote('${safeDate}')" title="削除">✕</button>`
+    const isEditOpen = _noteEditDate === n.date;
+    const btns = currentNotesMonth
+      ? `<div style="display:flex;gap:4px">
+           <button class="nv-del" style="min-width:30px;min-height:30px;font-size:15px" onclick="editHealthNote('${safeDate}')" title="編集">✏️</button>
+           <button class="nv-del" style="min-width:30px;min-height:30px;font-size:16px" onclick="deleteHealthNote('${safeDate}')" title="削除">✕</button>
+         </div>`
       : '';
+    const header = `<div style="display:flex;align-items:center;justify-content:space-between">
+      <div class="note-date">${escHtml(n.date)}</div>${btns}
+    </div>`;
+    if (isEditOpen) {
+      return `<div class="note-item">
+        ${header}
+        <div style="margin-top:6px;padding:10px;background:#FAF8F6;border-radius:8px;border:1px solid #EDE9E4">
+          <textarea class="form-textarea" id="note-edit-textarea" style="min-height:60px;font-size:13px;padding:7px 10px;margin-bottom:8px"></textarea>
+          <div style="display:flex;gap:6px">
+            <button class="btn-supple" style="flex:1" onclick="saveNoteEdit('${safeDate}')">保存</button>
+            <button class="btn-supple" style="flex:1;background:#F0EDE8;color:#888780" onclick="cancelNoteEdit()">キャンセル</button>
+          </div>
+        </div>
+      </div>`;
+    }
     return `<div class="note-item">
-      <div style="display:flex;align-items:center;justify-content:space-between">
-        <div class="note-date">${escHtml(n.date)}</div>${delBtn}
-      </div>
+      ${header}
       <div class="note-text">${escHtml(n.text)}</div>
     </div>`;
   }).join('');
+  // 編集フォームの初期値をJSで安全に設定（特殊文字対応）
+  if (_noteEditDate) {
+    const editNote = notes.find(n => n.date === _noteEditDate);
+    const ta = document.getElementById('note-edit-textarea');
+    if (ta && editNote) { ta.value = editNote.text || ''; ta.focus(); }
+  }
 }
 function clearNotes() {
   if (!confirm('体調記録をすべて削除しますか？')) return;
@@ -1679,6 +1703,7 @@ function clearNotes() {
 }
 function deleteHealthNote(dateStr) {
   if (!confirm('「' + dateStr + '」の記録を削除しますか？')) return;
+  _noteEditDate = null;
   const notes = getNotes();
   const idx = notes.findIndex(n => n.date === dateStr);
   if (idx < 0) return;
@@ -1699,6 +1724,27 @@ function deleteHealthNote(dateStr) {
       setDayMemo(isoDate, { walk:'', coughN:'', coughL:'なし', energyLv:'普通', specialNote:'', memoOther:'' });
     }
   }
+  renderNotes();
+}
+
+function editHealthNote(dateStr) {
+  _noteEditDate = (_noteEditDate === dateStr) ? null : dateStr;
+  renderNotes();
+}
+function saveNoteEdit(dateStr) {
+  const ta = document.getElementById('note-edit-textarea');
+  const newText = (ta ? ta.value : '').trim();
+  if (!newText) { showToast('テキストが空です'); return; }
+  const notes = getNotes();
+  const idx = notes.findIndex(n => n.date === dateStr);
+  if (idx < 0) return;
+  notes[idx] = { ...notes[idx], text: newText, _ts: Date.now() };
+  _noteEditDate = null;
+  setNotes(notes);
+  renderNotes();
+}
+function cancelNoteEdit() {
+  _noteEditDate = null;
   renderNotes();
 }
 
