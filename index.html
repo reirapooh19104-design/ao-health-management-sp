@@ -2021,6 +2021,10 @@ function renderConsultationSummary() {
             <button class="nv-add-btn" style="flex:1;margin-top:0;background:#F0EDE8;color:#888780" onclick="cancelConsultationResult()">キャンセル</button>
           </div>
         </div>
+        <div class="cs-item-actions">
+          <button class="cs-edit-btn" onclick="editConsultationSummaryItem('${sid}')">編集</button>
+          <button class="nv-del" onclick="deleteConsultationSummaryItem('${sid}')">×</button>
+        </div>
       </div>`;
     }
 
