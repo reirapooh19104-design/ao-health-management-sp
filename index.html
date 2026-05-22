@@ -1032,7 +1032,13 @@ async function syncFromCloud() {
             if (geTs >= leTs) nvMap.set(key, ge);
           }
         });
-        localStorage.setItem('next_visit', JSON.stringify(Array.from(nvMap.values())));
+        const nvMerged = Array.from(nvMap.values());
+        localStorage.setItem('next_visit', JSON.stringify(nvMerged));
+        // ローカルにあってクラウドにない項目があればマージ結果をGASに書き戻す
+        const gasNvKeySet = new Set((gasVal || []).map(ge => nvKey(ge)));
+        if (nvMerged.some(e => !gasNvKeySet.has(nvKey(e)))) {
+          pushToCloud('next_visit', nvMerged);
+        }
       } else if (gasTs > localTs || (gasTs === 0 && localTs === 0)) {
         // 安全ガード: GAS が空配列・null・undefined のときは上書きしない
         // (誤って空になった可能性が高く、ローカル保持を優先)
