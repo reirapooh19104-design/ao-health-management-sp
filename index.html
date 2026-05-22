@@ -1014,6 +1014,25 @@ async function syncFromCloud() {
           }
         });
         localStorage.setItem('supple', JSON.stringify(Array.from(suppleMap.values())));
+      } else if (k === 'next_visit') {
+        // next_visit: エントリ単位マージ + 安全ガード(cloud が空なら保持)
+        const nvIsEmpty = gasVal == null || (Array.isArray(gasVal) && gasVal.length === 0);
+        if (nvIsEmpty) return;
+        const localNv = load('next_visit', []);
+        const nvKey = e => typeof e === 'string' ? ('text:' + e) : (e.id || ('text:' + e.text));
+        const nvMap = new Map(localNv.map(e => [nvKey(e), e]));
+        (gasVal || []).forEach(ge => {
+          const key = nvKey(ge);
+          const le = nvMap.get(key);
+          if (!le) {
+            nvMap.set(key, ge);
+          } else {
+            const geTs = Number(ge._ts || 0);
+            const leTs = Number(typeof le === 'string' ? 0 : (le._ts || 0));
+            if (geTs >= leTs) nvMap.set(key, ge);
+          }
+        });
+        localStorage.setItem('next_visit', JSON.stringify(Array.from(nvMap.values())));
       } else if (gasTs > localTs || (gasTs === 0 && localTs === 0)) {
         // 安全ガード: GAS が空配列・null・undefined のときは上書きしない
         // (誤って空になった可能性が高く、ローカル保持を優先)
