@@ -585,6 +585,13 @@ body {
       <textarea class="nv-input" id="cs-input" placeholder="伝えたいことを追加...（例：空咳について相談する）"></textarea>
       <button class="nv-add-btn" onclick="addConsultationSummaryItem()">追加</button>
     </div>
+    <div style="margin-top:16px;padding-top:12px;border-top:1px solid var(--border)">
+      <div style="display:flex;gap:8px;align-items:center">
+        <label style="font-size:12px;color:var(--text-light);flex-shrink:0">診察日</label>
+        <input type="date" id="cs-consult-date" class="form-input" style="flex:1">
+        <button class="nv-add-btn" onclick="saveConsultation()" style="white-space:nowrap;flex-shrink:0">診察完了として保存</button>
+      </div>
+    </div>
   </div>
 
   <div class="card">
@@ -1111,6 +1118,29 @@ async function syncFromCloud() {
         if (csMerged.some(e => !gasCsKeySet.has(csKey(e)))) {
           pushToCloud('consultation_summary', csMerged);
         }
+      } else if (k === 'consultation_history') {
+        // consultation_history: エントリ単位マージ + 安全ガード(cloud が空なら保持)
+        const chIsEmpty = gasVal == null || (Array.isArray(gasVal) && gasVal.length === 0);
+        if (chIsEmpty) return;
+        const localCh = load('consultation_history', []);
+        const chKey = e => e.id || ('date:' + e.date);
+        const chMap = new Map(localCh.map(e => [chKey(e), e]));
+        (gasVal || []).forEach(ge => {
+          const key = chKey(ge);
+          const le = chMap.get(key);
+          if (!le) { chMap.set(key, ge); }
+          else {
+            const geTs = Number(ge._ts || 0);
+            const leTs = Number(le._ts || 0);
+            if (geTs >= leTs) chMap.set(key, ge);
+          }
+        });
+        const chMerged = Array.from(chMap.values());
+        localStorage.setItem('consultation_history', JSON.stringify(chMerged));
+        const gasChKeySet = new Set((gasVal || []).map(ge => chKey(ge)));
+        if (chMerged.some(e => !gasChKeySet.has(chKey(e)))) {
+          pushToCloud('consultation_history', chMerged);
+        }
       } else if (gasTs > localTs || (gasTs === 0 && localTs === 0)) {
         // 安全ガード: GAS が空配列・null・undefined のときは上書きしない
         // (誤って空になった可能性が高く、ローカル保持を優先)
@@ -1360,6 +1390,8 @@ function getBodyWeights()  { return load('bodyWeights', []); }
 function setBodyWeights(d) { save('bodyWeights', d); }
 function getConsultationSummary()       { return load('consultation_summary', []); }
 function setConsultationSummary(items)  { save('consultation_summary', items); }
+function getConsultationHistory()       { return load('consultation_history', []); }
+function setConsultationHistory(items)  { save('consultation_history', items); }
 
 function escHtml(str) {
   return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
@@ -2107,6 +2139,28 @@ function saveConsultationResult() {
 function cancelConsultationResult() {
   _csResultOpenId = null;
   renderConsultationSummary();
+}
+function saveConsultation() {
+  const items = getConsultationSummary();
+  if (!items.length) { showToast('保存する内容がありません'); return; }
+  const dateVal = (document.getElementById('cs-consult-date')?.value || '').trim();
+  if (!dateVal) { showToast('診察日を入力してください'); return; }
+  const displayDate = dateVal.replace(/-/g, '/');
+  if (!confirm(displayDate + ' の診察として保存します。\n保存後、「次回診察用まとめ」と「次回来院時に伝えること」はクリアされます。\nよろしいですか?')) return;
+  const history = getConsultationHistory();
+  const ts = Date.now();
+  history.push({
+    id: 'consult_' + ts + '_' + Math.random().toString(36).slice(2, 8),
+    date: dateVal,
+    items: JSON.parse(JSON.stringify(items)),
+    _ts: ts
+  });
+  setConsultationSummary([]);
+  setNextVisitItems([]);
+  setConsultationHistory(history);
+  renderConsultationSummary();
+  renderNextVisitItems();
+  showToast('診察記録を保存しました（履歴 ' + history.length + ' 件目）');
 }
 function saveConsultationSummaryEdit() {
   if (!_csEditOpenId) return;
@@ -3256,6 +3310,7 @@ migrateNextVisitItems();
 initConsultationKeys();
 renderAll();
 document.getElementById('weight-date').value = todayKey();
+document.getElementById('cs-consult-date').value = todayKey();
 syncFromCloud();
 
 // Mac音声入力対応：compositionイベントでIME進行中は変換しない
