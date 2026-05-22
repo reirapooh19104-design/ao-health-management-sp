@@ -1593,7 +1593,7 @@ function migrateNextVisitItems() {
     return entry;
   });
   if (count > 0) {
-    setNextVisitItems(migrated);
+    localStorage.setItem('next_visit', JSON.stringify(migrated));
     console.log('[migrateNextVisitItems] migrated ' + count + ' entries (added: ' + Array.from(addedFields).join(', ') + ')');
   }
 }
