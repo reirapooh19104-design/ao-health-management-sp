@@ -2185,7 +2185,10 @@ function renderConsultationHistory() {
   const el = document.getElementById('consult-history-section');
   if (!el) return;
   const history = getConsultationHistory();
-  const sorted = [...history].sort(function(a, b) { return (b._ts || 0) - (a._ts || 0); });
+  const sorted = [...history].sort(function(a, b) {
+    if (a.date !== b.date) return a.date > b.date ? -1 : 1;
+    return (b._ts || 0) - (a._ts || 0);
+  });
   const itemsHtml = sorted.length ? sorted.map(function(h) {
     const dateDisp = (h.date || '').replace(/-/g, '/');
     const items = Array.isArray(h.items) ? h.items : [];
