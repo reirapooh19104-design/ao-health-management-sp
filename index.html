@@ -2861,6 +2861,36 @@ function getRecipes() {
   return load('recipes', DEFAULT_RECIPE_DATA);
 }
 
+function calcRecipeStats(recipe) {
+  if (!recipe) return null;
+  const map = { '動物性タンパク質': 'protein', '穀類・芋類': 'grain', '野菜・きのこ類': 'veg' };
+  let p = 0, g = 0, v = 0;
+  (recipe.sections || []).forEach(sec => {
+    const key = map[sec.title];
+    if (!key) return;
+    (sec.items || []).forEach(item => {
+      const grams = parseGrams(item.amount || '');
+      if (key === 'protein') p += grams;
+      else if (key === 'grain') g += grams;
+      else v += grams;
+    });
+  });
+  const totalG = p + g + v;
+  const kcal   = p * DENSITY.protein + g * DENSITY.grain + v * DENSITY.veg;
+  return { totalG: Math.round(totalG), kcal: Math.round(kcal) };
+}
+
+function _recipeCalcBoxHtml(recipe) {
+  const s = calcRecipeStats(recipe);
+  if (!s || s.totalG === 0) return '';
+  return `<div class="calorie-box" style="margin:12px 0 0">
+    <span class="cal-wt">合計:約${s.totalG}g</span>
+    <span class="cal-sep">/</span>
+    <span class="cal-kcal">推定${s.kcal}kcal</span>
+    <span class="cal-est">(自動計算)</span>
+  </div>`;
+}
+
 function renderRecipe() {
   const container = document.getElementById('recipe-view');
   if (!container) return;
@@ -2910,6 +2940,7 @@ function renderRecipe() {
           ${recipe.note ? `<span style="font-size:12px;color:#888">${_esc(recipe.note)}</span>` : ''}
         </div>
         ${sectionsHtml}
+        ${_recipeCalcBoxHtml(recipe)}
         ${summaryHtml}
       ` : '<div style="color:var(--text-light);text-align:center;padding:20px">レシピがありません</div>'}
     </div>`;
@@ -3016,6 +3047,7 @@ function _renderEditMode() {
       </div>
       <div id="edit-sections">${sectionsHtml}</div>
       <button class="btn-secondary" style="width:100%;margin-top:4px" onclick="addSection()">＋ セクションを追加</button>
+      ${_recipeCalcBoxHtml(ed)}
       <div class="form-group" style="margin-top:12px">
         <label class="form-label">合計欄（複数行可）</label>
         <textarea id="edit-recipe-summary" class="form-textarea" style="min-height:60px">${_esc(ed.summary)}</textarea>
