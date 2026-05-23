@@ -294,6 +294,8 @@ body {
 .recipe-item-row .ri-name:focus, .recipe-item-row .ri-amount:focus { border-color:var(--green); }
 .recipe-del-btn { background:none; border:none; color:#ccc; font-size:20px; cursor:pointer; padding:0 4px; line-height:1; flex-shrink:0; transition:color 0.15s; }
 .recipe-del-btn:hover { color:#E05050; }
+.recipe-hint { font-size:12px; color:var(--text-light); border-left:2px solid var(--border); padding-left:10px; margin-top:4px; line-height:1.6; white-space:pre-line; }
+.recipe-hint:empty { display:none; }
 </style>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
 </head>
@@ -445,18 +447,22 @@ body {
     <div class="form-group">
       <label class="form-label">動物性タンパク質</label>
       <input type="text" class="form-input" id="d-protein" oninput="convertGram(this);autoCalc()">
+      <div id="hint-protein" class="recipe-hint"></div>
     </div>
     <div class="form-group">
       <label class="form-label">穀類・芋類</label>
       <input type="text" class="form-input" id="d-grain" oninput="convertGram(this);autoCalc()">
+      <div id="hint-grain" class="recipe-hint"></div>
     </div>
     <div class="form-group">
       <label class="form-label">野菜・きのこ類</label>
       <input type="text" class="form-input" id="d-veg" oninput="convertGram(this);autoCalc()">
+      <div id="hint-veg" class="recipe-hint"></div>
     </div>
     <div class="form-group">
       <label class="form-label">その他・調味料</label>
       <input type="text" class="form-input" id="d-other" oninput="convertGram(this)">
+      <div id="hint-other" class="recipe-hint"></div>
     </div>
     <div class="form-group">
       <label class="form-label">合計重量（g）</label>
@@ -2951,6 +2957,7 @@ function selectRecipe(id) {
   _currentRecipeId = id;
   localStorage.setItem('selected_recipe_id', id);
   renderRecipe();
+  renderRecipeHint();
 }
 
 function addRecipe() {
@@ -2981,6 +2988,7 @@ function duplicateRecipe(id) {
   _currentRecipeId = copy.id;
   localStorage.setItem('selected_recipe_id', copy.id);
   renderRecipe();
+  renderRecipeHint();
   showToast('レシピを複製しました');
 }
 
@@ -2995,6 +3003,7 @@ function deleteRecipe(id) {
   _currentRecipeId = newList[0]?.id || null;
   if (_currentRecipeId) localStorage.setItem('selected_recipe_id', _currentRecipeId);
   renderRecipe();
+  renderRecipeHint();
   showToast('削除しました');
 }
 
@@ -3149,6 +3158,7 @@ function saveRecipeEdit() {
   window._editData     = null;
   window._editRecipeId = null;
   renderRecipe();
+  renderRecipeHint();
   showToast('保存しました');
 }
 
@@ -3156,6 +3166,34 @@ function cancelEditRecipe() {
   window._editData     = null;
   window._editRecipeId = null;
   renderRecipe();
+}
+
+function renderRecipeHint() {
+  const CAT_MAP = {
+    '動物性タンパク質': 'hint-protein',
+    '穀類・芋類':       'hint-grain',
+    '野菜・きのこ類':   'hint-veg',
+    'その他・調味料':   'hint-other'
+  };
+  const ids = Object.values(CAT_MAP);
+  const recipes = getRecipes();
+  const recipe = _currentRecipeId ? recipes.find(r => r.id === _currentRecipeId) : null;
+  if (!recipe) {
+    ids.forEach(id => { const el = document.getElementById(id); if (el) el.textContent = ''; });
+    return;
+  }
+  ids.forEach(id => { const el = document.getElementById(id); if (el) el.textContent = ''; });
+  (recipe.sections || []).forEach(sec => {
+    const elId = CAT_MAP[sec.title];
+    if (!elId) return;
+    const el = document.getElementById(elId);
+    if (!el) return;
+    const itemsText = (sec.items || [])
+      .filter(item => item.name || item.amount)
+      .map(item => [item.name, item.amount].filter(Boolean).join(' '))
+      .join(' / ');
+    el.textContent = sec.memo ? itemsText + '\n' + sec.memo : itemsText;
+  });
 }
 
 // ============================================================
@@ -3312,6 +3350,7 @@ function switchTab(name) {
   document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
   document.getElementById('pane-' + name).classList.add('active');
   if (name === 'weight') renderWeightGraph();
+  if (name === 'today') renderRecipeHint();
 }
 
 // ============================================================
@@ -3510,6 +3549,7 @@ function renderAll() {
   renderHospital();
   initRecipes();
   renderRecipe();
+  renderRecipeHint();
   renderBodyWeights();
   renderWeightGraph();
   resetDiaryForm();
