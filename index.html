@@ -2895,6 +2895,7 @@ function renderRecipe() {
   const container = document.getElementById('recipe-view');
   if (!container) return;
   const recipes = getRecipes();
+  if (!_currentRecipeId) _currentRecipeId = localStorage.getItem('selected_recipe_id') || null;
   if (!_currentRecipeId || !recipes.find(r => r.id === _currentRecipeId)) {
     _currentRecipeId = recipes[0]?.id || null;
   }
@@ -2948,6 +2949,7 @@ function renderRecipe() {
 
 function selectRecipe(id) {
   _currentRecipeId = id;
+  localStorage.setItem('selected_recipe_id', id);
   renderRecipe();
 }
 
@@ -2963,6 +2965,7 @@ function addRecipe() {
   recipes.push(newRecipe);
   save('recipes', recipes);
   _currentRecipeId = newRecipe.id;
+  localStorage.setItem('selected_recipe_id', newRecipe.id);
   startEditRecipe(newRecipe.id);
 }
 
@@ -2976,6 +2979,7 @@ function duplicateRecipe(id) {
   recipes.push(copy);
   save('recipes', recipes);
   _currentRecipeId = copy.id;
+  localStorage.setItem('selected_recipe_id', copy.id);
   renderRecipe();
   showToast('レシピを複製しました');
 }
@@ -2989,6 +2993,7 @@ function deleteRecipe(id) {
   const newList = recipes.filter(r => r.id !== id);
   save('recipes', newList);
   _currentRecipeId = newList[0]?.id || null;
+  if (_currentRecipeId) localStorage.setItem('selected_recipe_id', _currentRecipeId);
   renderRecipe();
   showToast('削除しました');
 }
@@ -3140,6 +3145,7 @@ function saveRecipeEdit() {
   recipes[idx] = window._editData;
   save('recipes', recipes);
   _currentRecipeId = window._editRecipeId;
+  localStorage.setItem('selected_recipe_id', _currentRecipeId);
   window._editData     = null;
   window._editRecipeId = null;
   renderRecipe();
