@@ -3012,13 +3012,13 @@ function _renderEditMode() {
     <div class="recipe-edit-section" data-si="${si}">
       <div class="recipe-edit-section-header">
         <input type="text" class="form-input" style="font-size:14px;font-weight:600;flex:1"
-          value="${_esc(sec.title)}" placeholder="セクション名">
+          value="${_esc(sec.title)}" placeholder="セクション名" oninput="_updateEditCalcBox()">
         <button class="btn-delete" onclick="deleteSection(${si})">削除</button>
       </div>
       ${sec.items.map((item, ii) => `
         <div class="recipe-item-row">
           <input type="text" class="ri-name" value="${_esc(item.name)}" placeholder="項目名">
-          <input type="text" class="ri-amount" value="${_esc(item.amount)}" placeholder="分量">
+          <input type="text" class="ri-amount" value="${_esc(item.amount)}" placeholder="分量" oninput="_updateEditCalcBox()">
           <button class="recipe-del-btn" onclick="deleteRecipeItem(${si},${ii})">×</button>
         </div>`).join('')}
       <button class="btn-small" style="margin-top:4px" onclick="addRecipeItem(${si})">＋ 項目追加</button>
@@ -3047,12 +3047,29 @@ function _renderEditMode() {
       </div>
       <div id="edit-sections">${sectionsHtml}</div>
       <button class="btn-secondary" style="width:100%;margin-top:4px" onclick="addSection()">＋ セクションを追加</button>
-      ${_recipeCalcBoxHtml(ed)}
+      <div id="recipe-calc-box-wrap">${_recipeCalcBoxHtml(ed)}</div>
       <div class="form-group" style="margin-top:12px">
         <label class="form-label">合計欄（複数行可）</label>
         <textarea id="edit-recipe-summary" class="form-textarea" style="min-height:60px">${_esc(ed.summary)}</textarea>
       </div>
     </div>`;
+}
+
+function _collectRecipeFromEditForm() {
+  const sections = [];
+  document.querySelectorAll('#edit-sections .recipe-edit-section').forEach(secEl => {
+    const titleInput = secEl.querySelector('.recipe-edit-section-header input');
+    const items = [];
+    secEl.querySelectorAll('.recipe-item-row').forEach(row => {
+      items.push({
+        name:   (row.querySelector('.ri-name')?.value   || ''),
+        amount: (row.querySelector('.ri-amount')?.value || '')
+      });
+    });
+    const memoInput = secEl.querySelector('input[placeholder="補足メモ（任意）"]');
+    sections.push({ title: titleInput?.value || '', items, memo: memoInput?.value || '' });
+  });
+  return { sections };
 }
 
 function _syncEditFields() {
@@ -3063,22 +3080,31 @@ function _syncEditFields() {
   if (nameEl)    window._editData.name    = nameEl.value;
   if (noteEl)    window._editData.note    = noteEl.value;
   if (summaryEl) window._editData.summary = summaryEl.value;
-
-  document.querySelectorAll('#edit-sections .recipe-edit-section').forEach((secEl, si) => {
+  const { sections } = _collectRecipeFromEditForm();
+  sections.forEach((sec, si) => {
     if (!window._editData.sections[si]) return;
-    const titleInput = secEl.querySelector('.recipe-edit-section-header input');
-    if (titleInput) window._editData.sections[si].title = titleInput.value;
-    secEl.querySelectorAll('.recipe-item-row').forEach((row, ii) => {
-      const nameIn   = row.querySelector('.ri-name');
-      const amountIn = row.querySelector('.ri-amount');
+    window._editData.sections[si].title = sec.title;
+    window._editData.sections[si].memo  = sec.memo;
+    sec.items.forEach((item, ii) => {
       if (window._editData.sections[si].items[ii]) {
-        if (nameIn)   window._editData.sections[si].items[ii].name   = nameIn.value;
-        if (amountIn) window._editData.sections[si].items[ii].amount = amountIn.value;
+        window._editData.sections[si].items[ii].name   = item.name;
+        window._editData.sections[si].items[ii].amount = item.amount;
       }
     });
-    const memoInput = secEl.querySelector('input[placeholder="補足メモ（任意）"]');
-    if (memoInput) window._editData.sections[si].memo = memoInput.value;
   });
+}
+
+function _updateEditCalcBox() {
+  const wrap = document.getElementById('recipe-calc-box-wrap');
+  if (!wrap) return;
+  const s = calcRecipeStats(_collectRecipeFromEditForm());
+  if (!s || s.totalG === 0) { wrap.innerHTML = ''; return; }
+  wrap.innerHTML = `<div class="calorie-box" style="margin:12px 0 0">
+    <span class="cal-wt">合計:約${s.totalG}g</span>
+    <span class="cal-sep">/</span>
+    <span class="cal-kcal">推定${s.kcal}kcal</span>
+    <span class="cal-est">(自動計算)</span>
+  </div>`;
 }
 
 function addRecipeItem(si) {
