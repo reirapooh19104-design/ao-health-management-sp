@@ -2882,7 +2882,7 @@ function renderAoRecordFormHtml() {
     <div style="margin-bottom:14px;padding:10px;background:#FAF8F6;border-radius:8px;border:1px solid #EDE9E4">
       <div style="margin-bottom:8px">
         <label style="font-size:11px;color:var(--text-light);display:block;margin-bottom:4px">日付</label>
-        <input type="text" id="ao-record-form-date" class="form-input" placeholder="例:2024/09/06">
+        <input type="text" id="ao-record-form-date" class="form-input" placeholder="例:2024/09/06(月日2桁)">
       </div>
       <div style="margin-bottom:8px">
         <label style="font-size:11px;color:var(--text-light);display:block;margin-bottom:4px">カテゴリ</label>
@@ -2918,15 +2918,22 @@ function selectAoRecordCategory(cat) {
   });
 }
 
+function normalizeAoRecordDate(dateStr) {
+  const m = dateStr.match(/^(\d{4})\/(\d{1,2})\/(\d{1,2})$/);
+  if (!m) return dateStr;
+  return `${m[1]}/${m[2].padStart(2,'0')}/${m[3].padStart(2,'0')}`;
+}
+
 function saveAoRecordAdd() {
   const date = (document.getElementById('ao-record-form-date')?.value || '').trim();
   const text = (document.getElementById('ao-record-form-text')?.value || '').trim();
   if (!date) { showToast('日付を入力してください'); return; }
   if (!text) { showToast('内容を入力してください'); return; }
+  const normalizedDate = normalizeAoRecordDate(date);
   const records = getAoRecords();
   records.push({
     id: 'aor_' + Date.now() + '_' + Math.random().toString(36).slice(2,8),
-    date: date,
+    date: normalizedDate,
     category: _aoRecordFormCategory,
     text: text,
     _ts: Date.now()
