@@ -1452,20 +1452,22 @@ function classifyAoRecord(text) {
 }
 
 function migrateAoRecords() {
-  if (localStorage.getItem('ao_records_migrated_v1') === '1') return;
+  if (localStorage.getItem('ao_records_migrated_v2') === '1') return;
   const baseTs = Date.now();
   const records = HOSPITAL_DATA.map(function(entry, idx) {
     return {
-      id: 'rec_' + baseTs + '_' + idx,
+      id: 'rec_migrate_' + idx,   // 決定的ID(全端末で同一)
       date: entry.date,
       category: classifyAoRecord(entry.text),
       text: entry.text,
       _ts: baseTs
     };
   });
+  // v2: v1の重複IDバグ復旧のため強制上書き
   localStorage.setItem('ao_records', JSON.stringify(records));
   localStorage.setItem('_ts_ao_records', String(baseTs));
-  localStorage.setItem('ao_records_migrated_v1', '1');
+  localStorage.setItem('ao_records_migrated_v2', '1');
+  localStorage.removeItem('ao_records_migrated_v1');
 }
 
 function escHtml(str) {
