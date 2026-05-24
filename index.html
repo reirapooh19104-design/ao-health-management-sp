@@ -15,6 +15,11 @@
   --text-light: #888888;
   --border: #E5E4E0;
   --pink: #D4537E;
+  --cat-medical: #BFA0DC;
+  --cat-anomaly: #E58040;
+  --cat-life:    #D4537E;
+  --cat-other:   #B4B2A9;
+  --cat-line:    #F4C0D1;
 }
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body {
@@ -194,10 +199,15 @@ body {
 .gpt-bar.g { background: #F4C0D1; }
 .gpt-bar.y { background: #D4537E; }
 .gpt-bar.r { background: #E05050; }
+#hospital-list { position: relative; }
+#hospital-list::before { content: ''; position: absolute; left: 62px; top: 8px; bottom: 8px; width: 1px; background: var(--cat-line); }
 .hist-item { display: flex; gap: 12px; padding: 8px 0; position: relative; }
-.hist-item:not(:last-child)::after { content: ''; position: absolute; left: 63px; top: 22px; bottom: -8px; width: 1px; background: var(--border); }
 .hist-date { font-size: 11px; color: var(--text-light); width: 55px; flex-shrink: 0; padding-top: 4px; text-align: right; }
-.hist-dot  { width: 8px; height: 8px; border-radius: 50%; background: var(--green); flex-shrink: 0; margin-top: 5px; }
+.hist-dot  { width: 10px; height: 10px; border-radius: 50%; background: var(--cat-line); flex-shrink: 0; margin-top: 5px; box-shadow: 0 0 0 3px var(--card); }
+.hist-dot.cat-medical { background: var(--cat-medical); }
+.hist-dot.cat-anomaly { background: var(--cat-anomaly); }
+.hist-dot.cat-life    { background: var(--cat-life); }
+.hist-dot.cat-other   { background: var(--cat-other); }
 .hist-text { font-size: 14px; line-height: 1.5; }
 .export-row { display: flex; gap: 8px; margin-top: 4px; }
 .scroll-ind { text-align: center; padding: 6px; font-size: 18px; color: var(--text-light); margin-bottom: 4px; }
@@ -2847,7 +2857,7 @@ function renderHospital() {
     [...getAoRecords()].reverse().map(r =>
       `<div class="hist-item">
         <div class="hist-date">${escHtml(r.date)}</div>
-        <div class="hist-dot"></div>
+        <div class="hist-dot cat-${r.category}"></div>
         <div class="hist-text">${escHtml(r.text)}</div>
       </div>`
     ).join('');
