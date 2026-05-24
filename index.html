@@ -320,7 +320,7 @@ body {
   <div class="tab"        onclick="switchTab('recipe')">レシピ</div>
   <div class="tab"        onclick="switchTab('supple')">サプリ</div>
   <div class="tab"        onclick="switchTab('gpt')">GPT推移</div>
-  <div class="tab"        onclick="switchTab('hospital')">病院履歴</div>
+  <div class="tab"        onclick="switchTab('hospital')">あおの記録</div>
   <div class="tab"        onclick="switchTab('weight')">体重グラフ</div>
 </nav>
 
@@ -780,7 +780,7 @@ body {
 <!-- ===== 病院履歴タブ ===== -->
 <div id="pane-hospital" class="tab-pane">
   <div class="card">
-    <div class="section-title" style="margin-bottom:16px">病院履歴</div>
+    <div class="section-title" style="margin-bottom:16px">あおの記録</div>
     <div id="hospital-list"></div>
   </div>
 </div><!-- /hospital -->
@@ -1165,6 +1165,27 @@ async function syncFromCloud() {
         if (chMerged.some(e => !gasChKeySet.has(chKey(e)))) {
           pushToCloud('consultation_history', chMerged);
         }
+      } else if (k === 'ao_records') {
+        // ao_records: エントリ単位マージ + 安全ガード(cloud が空なら保持)
+        const arIsEmpty = gasVal == null || (Array.isArray(gasVal) && gasVal.length === 0);
+        if (arIsEmpty) return;
+        const localAr = getAoRecords();
+        const arKey = e => e.id;
+        const arMap = new Map(localAr.map(e => [arKey(e), e]));
+        (gasVal || []).forEach(ge => {
+          const key = arKey(ge);
+          const le = arMap.get(key);
+          if (!le) { arMap.set(key, ge); }
+          else {
+            if (Number(ge._ts || 0) >= Number(le._ts || 0)) arMap.set(key, ge);
+          }
+        });
+        const arMerged = Array.from(arMap.values());
+        localStorage.setItem('ao_records', JSON.stringify(arMerged));
+        const gasArKeySet = new Set((gasVal || []).map(ge => arKey(ge)));
+        if (arMerged.some(e => !gasArKeySet.has(arKey(e)))) {
+          pushToCloud('ao_records', arMerged);
+        }
       } else if (gasTs > localTs || (gasTs === 0 && localTs === 0)) {
         // 安全ガード: GAS が空配列・null・undefined のときは上書きしない
         // (誤って空になった可能性が高く、ローカル保持を優先)
@@ -1416,6 +1437,36 @@ function getConsultationSummary()       { return load('consultation_summary', []
 function setConsultationSummary(items)  { save('consultation_summary', items); }
 function getConsultationHistory()       { return load('consultation_history', []); }
 function setConsultationHistory(items)  { save('consultation_history', items); }
+
+function getAoRecords() {
+  try { return JSON.parse(localStorage.getItem('ao_records') || '[]'); } catch { return []; }
+}
+function setAoRecords(arr) {
+  localStorage.setItem('ao_records', JSON.stringify(arr));
+}
+
+function classifyAoRecord(text) {
+  if (/誕生|お迎え|別れ|引[っ]?越/.test(text)) return 'life';
+  if (/アレルギー|異常|不振|発作|嘔吐|下痢|痙攣/.test(text)) return 'anomaly';
+  return 'medical';
+}
+
+function migrateAoRecords() {
+  if (localStorage.getItem('ao_records_migrated_v1') === '1') return;
+  const baseTs = Date.now();
+  const records = HOSPITAL_DATA.map(function(entry, idx) {
+    return {
+      id: 'rec_' + baseTs + '_' + idx,
+      date: entry.date,
+      category: classifyAoRecord(entry.text),
+      text: entry.text,
+      _ts: baseTs
+    };
+  });
+  localStorage.setItem('ao_records', JSON.stringify(records));
+  localStorage.setItem('_ts_ao_records', String(baseTs));
+  localStorage.setItem('ao_records_migrated_v1', '1');
+}
 
 function escHtml(str) {
   return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
@@ -2791,11 +2842,11 @@ function renderGPT() {
 // ============================================================
 function renderHospital() {
   document.getElementById('hospital-list').innerHTML =
-    [...HOSPITAL_DATA].reverse().map(r =>
+    [...getAoRecords()].reverse().map(r =>
       `<div class="hist-item">
-        <div class="hist-date">${r.date}</div>
+        <div class="hist-date">${escHtml(r.date)}</div>
         <div class="hist-dot"></div>
-        <div class="hist-text">${r.text}</div>
+        <div class="hist-text">${escHtml(r.text)}</div>
       </div>`
     ).join('');
 }
@@ -3559,6 +3610,7 @@ function renderAll() {
 autoBackup(); // renderAllより前に自動バックアップ
 migrateSupplements();
 migrateNextVisitItems();
+migrateAoRecords();
 initConsultationKeys();
 renderAll();
 document.getElementById('weight-date').value = todayKey();
