@@ -3069,9 +3069,11 @@ function selectAoRecordCategory(cat) {
 }
 
 function normalizeAoRecordDate(dateStr) {
-  const m = dateStr.match(/^(\d{4})\/(\d{1,2})\/(\d{1,2})$/);
-  if (!m) return dateStr;
-  return `${m[1]}/${m[2].padStart(2,'0')}/${m[3].padStart(2,'0')}`;
+  let m = dateStr.match(/^(\d{4})年(\d{1,2})月(\d{1,2})日$/);
+  if (m) return `${m[1]}/${m[2].padStart(2,'0')}/${m[3].padStart(2,'0')}`;
+  m = dateStr.match(/^(\d{4})\/(\d{1,2})\/(\d{1,2})$/);
+  if (m) return `${m[1]}/${m[2].padStart(2,'0')}/${m[3].padStart(2,'0')}`;
+  return dateStr;
 }
 
 function saveAoRecordAdd() {
