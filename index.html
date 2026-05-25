@@ -300,6 +300,12 @@ body {
 .month-nav-all.active { background:var(--green-light); color:#993556; border-color:var(--green); font-weight:600; }
 .month-nav-all:hover { border-color:var(--green); color:#993556; }
 
+/* ── 年切替ナビ (あおの記録) ── */
+.year-nav { display:flex; gap:6px; overflow-x:auto; margin-bottom:12px; -webkit-overflow-scrolling:touch; scrollbar-width:none; }
+.year-nav::-webkit-scrollbar { display:none; }
+.year-nav-tab { background:var(--green-light); color:#993556; border:none; border-radius:8px; padding:6px 12px; font-size:14px; font-weight:600; cursor:pointer; font-family:inherit; flex-shrink:0; white-space:nowrap; }
+.year-nav-tab.active { background:var(--green); color:white; }
+
 /* ── レシピ管理 ── */
 .recipe-toolbar { display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-bottom:10px; }
 .recipe-select { flex:1; min-width:100px; padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:14px; font-family:inherit; background:#FAFAF8; outline:none; color:var(--text); }
@@ -802,6 +808,7 @@ body {
       <div class="section-title" style="margin:0">あおの記録</div>
       <button class="btn-supple" style="padding:5px 12px;font-size:12px" onclick="toggleAoRecordAddForm()">＋ 追加</button>
     </div>
+    <div id="ao-record-year-nav"></div>
     <div id="ao-record-form-container"></div>
     <div id="hospital-list"></div>
   </div>
@@ -1005,7 +1012,8 @@ let _aoRecordFormOpen     = false;
 let _aoRecordFormCategory = 'medical';
 let _aoRecordExpandedId   = null;
 let _aoRecordEditOpenId   = null;
-let _aoRecordEditCategory = 'medical';
+let _aoRecordEditCategory  = 'medical';
+let _aoRecordSelectedYear  = null;
 
 // ============================================================
 // CLOUD SYNC (Google Apps Script)
@@ -2905,30 +2913,63 @@ function getAoRecordSortKey(dateStr) {
   return 0;
 }
 
+function getAoRecordYears() {
+  const years = new Set();
+  getAoRecords().forEach(r => {
+    const key = getAoRecordSortKey(r.date);
+    if (key !== 0) years.add(new Date(key).getFullYear());
+  });
+  return [...years].sort((a, b) => b - a);
+}
+
+function selectAoRecordYear(year) {
+  _aoRecordSelectedYear = year;
+  _aoRecordFormOpen = false;
+  _aoRecordEditOpenId = null;
+  _aoRecordExpandedId = null;
+  renderHospital();
+}
+
 function renderHospital() {
+  const yn = document.getElementById('ao-record-year-nav');
+  if (yn) {
+    const years = getAoRecordYears();
+    yn.innerHTML = `<div class="year-nav">
+      <button class="year-nav-tab${_aoRecordSelectedYear === null ? ' active' : ''}" onclick="selectAoRecordYear(null)">全期間</button>
+      ${years.map(y => `<button class="year-nav-tab${_aoRecordSelectedYear === y ? ' active' : ''}" onclick="selectAoRecordYear(${y})">${y}年</button>`).join('')}
+    </div>`;
+  }
+
   const fc = document.getElementById('ao-record-form-container');
   if (fc) fc.innerHTML = renderAoRecordFormHtml();
 
-  document.getElementById('hospital-list').innerHTML =
-    getAoRecords().slice().sort((a, b) => {
-      const kd = getAoRecordSortKey(b.date) - getAoRecordSortKey(a.date);
-      if (kd !== 0) return kd;
-      return (b._ts || 0) - (a._ts || 0);
-    }).map(r => {
-      const isExp = _aoRecordExpandedId === r.id;
-      return `<div class="hist-item${isExp ? ' expanded' : ''}" onclick="toggleAoRecordExpand('${r.id}')">
-        <div class="hist-date">${escHtml(r.date)}</div>
-        <div class="hist-dot cat-${r.category}"></div>
-        <div class="hist-body">
-          <div class="hist-text">${escHtml(r.text)}</div>
-          ${isExp ? (
-            _aoRecordEditOpenId === r.id
-              ? renderAoRecordEditFormHtml(r)
-              : `<div class="hist-actions" style="display:flex;gap:6px"><button class="btn-supple" style="font-size:12px;padding:4px 12px" onclick="event.stopPropagation();openAoRecordEdit('${r.id}')">編集</button><button class="btn-supple" style="font-size:12px;padding:4px 12px;background:#F0EDE8;color:#888780" onclick="event.stopPropagation();deleteAoRecord('${r.id}')">削除</button></div>`
-          ) : ''}
-        </div>
-      </div>`;
-    }).join('');
+  let sorted = getAoRecords().slice().sort((a, b) => {
+    const kd = getAoRecordSortKey(b.date) - getAoRecordSortKey(a.date);
+    if (kd !== 0) return kd;
+    return (b._ts || 0) - (a._ts || 0);
+  });
+  if (_aoRecordSelectedYear !== null) {
+    sorted = sorted.filter(r => {
+      const key = getAoRecordSortKey(r.date);
+      return key !== 0 && new Date(key).getFullYear() === _aoRecordSelectedYear;
+    });
+  }
+
+  document.getElementById('hospital-list').innerHTML = sorted.map(r => {
+    const isExp = _aoRecordExpandedId === r.id;
+    return `<div class="hist-item${isExp ? ' expanded' : ''}" onclick="toggleAoRecordExpand('${r.id}')">
+      <div class="hist-date">${escHtml(r.date)}</div>
+      <div class="hist-dot cat-${r.category}"></div>
+      <div class="hist-body">
+        <div class="hist-text">${escHtml(r.text)}</div>
+        ${isExp ? (
+          _aoRecordEditOpenId === r.id
+            ? renderAoRecordEditFormHtml(r)
+            : `<div class="hist-actions" style="display:flex;gap:6px"><button class="btn-supple" style="font-size:12px;padding:4px 12px" onclick="event.stopPropagation();openAoRecordEdit('${r.id}')">編集</button><button class="btn-supple" style="font-size:12px;padding:4px 12px;background:#F0EDE8;color:#888780" onclick="event.stopPropagation();deleteAoRecord('${r.id}')">削除</button></div>`
+        ) : ''}
+      </div>
+    </div>`;
+  }).join('');
 }
 
 function toggleAoRecordExpand(id) {
@@ -3093,6 +3134,7 @@ function saveAoRecordAdd() {
   setAoRecords(records);
   _aoRecordFormOpen = false;
   _aoRecordFormCategory = 'medical';
+  _aoRecordSelectedYear = null;
   showToast('追加しました');
   renderHospital();
 }
