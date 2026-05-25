@@ -201,14 +201,17 @@ body {
 .gpt-bar.r { background: #E05050; }
 #hospital-list { position: relative; }
 #hospital-list::before { content: ''; position: absolute; left: 72px; top: 8px; bottom: 8px; width: 1px; background: var(--cat-line); }
-.hist-item { display: flex; gap: 12px; padding: 8px 0; position: relative; }
+.hist-item { display: flex; gap: 12px; padding: 8px 0; position: relative; cursor: pointer; }
+.hist-item.expanded { background: rgba(212, 83, 126, 0.04); border-radius: 8px; margin: 0 -6px; padding: 8px 6px; }
 .hist-date { font-size: 11px; color: var(--text-light); width: 55px; flex-shrink: 0; padding-top: 4px; text-align: right; }
 .hist-dot  { width: 10px; height: 10px; border-radius: 50%; background: var(--cat-line); flex-shrink: 0; margin-top: 5px; box-shadow: 0 0 0 3px var(--card); }
 .hist-dot.cat-medical { background: var(--cat-medical); }
 .hist-dot.cat-anomaly { background: var(--cat-anomaly); }
 .hist-dot.cat-life    { background: var(--cat-life); }
 .hist-dot.cat-other   { background: var(--cat-other); }
+.hist-body  { flex: 1; display: flex; flex-direction: column; }
 .hist-text { font-size: 14px; line-height: 1.5; }
+.hist-actions { margin-top: 6px; }
 .ao-cat-btn { flex: 1; font-size: 11px; padding: 6px 4px; border: 0.5px solid var(--border); border-radius: 14px; background: #fff; color: var(--text-light); cursor: pointer; min-width: 0; font-family: inherit; }
 .ao-cat-btn.cat-medical.sel { background: #F0E5F2; color: #4A3666; border: 1px solid var(--cat-medical); }
 .ao-cat-btn.cat-anomaly.sel { background: #FAE6D5; color: #7A4115; border: 1px solid var(--cat-anomaly); }
@@ -1000,6 +1003,7 @@ let _consultHistoryOpen  = false;
 let _noteEditDate        = null;
 let _aoRecordFormOpen     = false;
 let _aoRecordFormCategory = 'medical';
+let _aoRecordExpandedId   = null;
 
 // ============================================================
 // CLOUD SYNC (Google Apps Script)
@@ -2866,13 +2870,23 @@ function renderHospital() {
   if (fc) fc.innerHTML = renderAoRecordFormHtml();
 
   document.getElementById('hospital-list').innerHTML =
-    [...getAoRecords()].reverse().map(r =>
-      `<div class="hist-item">
+    [...getAoRecords()].reverse().map(r => {
+      const isExp = _aoRecordExpandedId === r.id;
+      return `<div class="hist-item${isExp ? ' expanded' : ''}" onclick="toggleAoRecordExpand('${r.id}')">
         <div class="hist-date">${escHtml(r.date)}</div>
         <div class="hist-dot cat-${r.category}"></div>
-        <div class="hist-text">${escHtml(r.text)}</div>
-      </div>`
-    ).join('');
+        <div class="hist-body">
+          <div class="hist-text">${escHtml(r.text)}</div>
+          ${isExp ? `<div class="hist-actions"><button class="btn-supple" style="font-size:12px;padding:4px 12px" onclick="event.stopPropagation()">編集</button></div>` : ''}
+        </div>
+      </div>`;
+    }).join('');
+}
+
+function toggleAoRecordExpand(id) {
+  if (_aoRecordFormOpen) return;
+  _aoRecordExpandedId = (_aoRecordExpandedId === id) ? null : id;
+  renderHospital();
 }
 
 function renderAoRecordFormHtml() {
