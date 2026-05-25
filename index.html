@@ -1004,6 +1004,8 @@ let _noteEditDate        = null;
 let _aoRecordFormOpen     = false;
 let _aoRecordFormCategory = 'medical';
 let _aoRecordExpandedId   = null;
+let _aoRecordEditOpenId   = null;
+let _aoRecordEditCategory = 'medical';
 
 // ============================================================
 // CLOUD SYNC (Google Apps Script)
@@ -2877,7 +2879,11 @@ function renderHospital() {
         <div class="hist-dot cat-${r.category}"></div>
         <div class="hist-body">
           <div class="hist-text">${escHtml(r.text)}</div>
-          ${isExp ? `<div class="hist-actions"><button class="btn-supple" style="font-size:12px;padding:4px 12px" onclick="event.stopPropagation()">編集</button></div>` : ''}
+          ${isExp ? (
+            _aoRecordEditOpenId === r.id
+              ? renderAoRecordEditFormHtml(r)
+              : `<div class="hist-actions"><button class="btn-supple" style="font-size:12px;padding:4px 12px" onclick="event.stopPropagation();openAoRecordEdit('${r.id}')">編集</button></div>`
+          ) : ''}
         </div>
       </div>`;
     }).join('');
@@ -2886,6 +2892,75 @@ function renderHospital() {
 function toggleAoRecordExpand(id) {
   if (_aoRecordFormOpen) return;
   _aoRecordExpandedId = (_aoRecordExpandedId === id) ? null : id;
+  if (_aoRecordExpandedId !== id) _aoRecordEditOpenId = null;
+  renderHospital();
+}
+
+function renderAoRecordEditFormHtml(r) {
+  const c = _aoRecordEditCategory;
+  return `<div class="hist-actions" onclick="event.stopPropagation()">
+    <div style="padding:10px;background:#FAF8F6;border-radius:8px;border:1px solid #EDE9E4;margin-top:4px">
+      <div style="margin-bottom:8px">
+        <label style="font-size:11px;color:var(--text-light);display:block;margin-bottom:4px">日付</label>
+        <input type="text" id="ao-record-edit-date" class="form-input" value="${escHtml(r.date)}" placeholder="例:2024/09/06(月日2桁)">
+      </div>
+      <div style="margin-bottom:8px">
+        <label style="font-size:11px;color:var(--text-light);display:block;margin-bottom:4px">カテゴリ</label>
+        <div style="display:flex;gap:5px">
+          <button type="button" class="ao-cat-btn cat-medical${c==='medical'?' sel':''}" data-cat="medical" onclick="selectAoRecordEditCategory('medical')">●医療</button>
+          <button type="button" class="ao-cat-btn cat-anomaly${c==='anomaly'?' sel':''}" data-cat="anomaly" onclick="selectAoRecordEditCategory('anomaly')">●異変</button>
+          <button type="button" class="ao-cat-btn cat-life${c==='life'?' sel':''}" data-cat="life" onclick="selectAoRecordEditCategory('life')">●ライフ</button>
+          <button type="button" class="ao-cat-btn cat-other${c==='other'?' sel':''}" data-cat="other" onclick="selectAoRecordEditCategory('other')">●その他</button>
+        </div>
+      </div>
+      <div style="margin-bottom:10px">
+        <label style="font-size:11px;color:var(--text-light);display:block;margin-bottom:4px">内容</label>
+        <textarea id="ao-record-edit-text" class="form-textarea" rows="2">${escHtml(r.text)}</textarea>
+      </div>
+      <div style="display:flex;gap:6px">
+        <button class="btn-supple" style="flex:1" onclick="saveAoRecordEdit()">保存</button>
+        <button class="btn-supple" style="flex:1;background:#F0EDE8;color:#888780" onclick="cancelAoRecordEdit()">キャンセル</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+function openAoRecordEdit(id) {
+  const r = getAoRecords().find(e => e.id === id);
+  if (!r) return;
+  _aoRecordFormOpen = false;
+  _aoRecordFormCategory = 'medical';
+  _aoRecordEditOpenId = id;
+  _aoRecordEditCategory = r.category;
+  renderHospital();
+}
+
+function selectAoRecordEditCategory(cat) {
+  _aoRecordEditCategory = cat;
+  document.querySelectorAll('.ao-cat-btn').forEach(btn => {
+    btn.classList.toggle('sel', btn.dataset.cat === cat);
+  });
+}
+
+function saveAoRecordEdit() {
+  const date = (document.getElementById('ao-record-edit-date')?.value || '').trim();
+  const text = (document.getElementById('ao-record-edit-text')?.value || '').trim();
+  if (!date) { showToast('日付を入力してください'); return; }
+  if (!text) { showToast('内容を入力してください'); return; }
+  const normalizedDate = normalizeAoRecordDate(date);
+  const records = getAoRecords();
+  const idx = records.findIndex(e => e.id === _aoRecordEditOpenId);
+  if (idx === -1) return;
+  records[idx] = { ...records[idx], date: normalizedDate, category: _aoRecordEditCategory, text, _ts: Date.now() };
+  setAoRecords(records);
+  _aoRecordEditOpenId = null;
+  _aoRecordExpandedId = null;
+  showToast('保存しました');
+  renderHospital();
+}
+
+function cancelAoRecordEdit() {
+  _aoRecordEditOpenId = null;
   renderHospital();
 }
 
@@ -2922,6 +2997,7 @@ function renderAoRecordFormHtml() {
 function toggleAoRecordAddForm() {
   _aoRecordFormOpen = !_aoRecordFormOpen;
   _aoRecordFormCategory = 'medical';
+  _aoRecordEditOpenId = null;
   renderHospital();
 }
 
