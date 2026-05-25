@@ -2948,11 +2948,17 @@ function saveAoRecordEdit() {
   if (!date) { showToast('日付を入力してください'); return; }
   if (!text) { showToast('内容を入力してください'); return; }
   const normalizedDate = normalizeAoRecordDate(date);
-  const records = getAoRecords();
-  const idx = records.findIndex(e => e.id === _aoRecordEditOpenId);
-  if (idx === -1) return;
-  records[idx] = { ...records[idx], date: normalizedDate, category: _aoRecordEditCategory, text, _ts: Date.now() };
-  setAoRecords(records);
+  const editId = _aoRecordEditOpenId;
+  const editCat = _aoRecordEditCategory;
+  const ts = Date.now();
+  const arr = getAoRecords();
+  if (!arr.some(r => r.id === editId)) return;
+  const updated = arr.map(r =>
+    r.id === editId
+      ? { ...r, date: normalizedDate, category: editCat, text, _ts: ts }
+      : r
+  );
+  setAoRecords(updated);
   _aoRecordEditOpenId = null;
   _aoRecordExpandedId = null;
   showToast('保存しました');
@@ -2997,6 +3003,7 @@ function renderAoRecordFormHtml() {
 function toggleAoRecordAddForm() {
   _aoRecordFormOpen = !_aoRecordFormOpen;
   _aoRecordFormCategory = 'medical';
+  _aoRecordExpandedId = null;
   _aoRecordEditOpenId = null;
   renderHospital();
 }
