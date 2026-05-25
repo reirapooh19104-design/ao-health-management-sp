@@ -2867,12 +2867,54 @@ function renderGPT() {
 // ============================================================
 // HOSPITAL HISTORY
 // ============================================================
+function getAoRecordSortKey(dateStr) {
+  const s = String(dateStr || '').trim();
+
+  // YYYY/MM/DD or YYYY/M/D
+  let m = s.match(/^(\d{4})\/(\d{1,2})\/(\d{1,2})/);
+  if (m) return new Date(+m[1], +m[2] - 1, +m[3]).getTime();
+
+  // YYYY年M月D日
+  m = s.match(/^(\d{4})年(\d{1,2})月(\d{1,2})日/);
+  if (m) return new Date(+m[1], +m[2] - 1, +m[3]).getTime();
+
+  // YYYY/MM〜MM (range: use start month day 1)
+  m = s.match(/^(\d{4})\/(\d{1,2})〜/);
+  if (m) return new Date(+m[1], +m[2] - 1, 1).getTime();
+
+  // YYYY/MM 下旬
+  m = s.match(/^(\d{4})\/(\d{1,2})下旬/);
+  if (m) return new Date(+m[1], +m[2] - 1, 21).getTime();
+
+  // YYYY/MM 中旬
+  m = s.match(/^(\d{4})\/(\d{1,2})中旬/);
+  if (m) return new Date(+m[1], +m[2] - 1, 11).getTime();
+
+  // YYYY/MM 上旬
+  m = s.match(/^(\d{4})\/(\d{1,2})上旬/);
+  if (m) return new Date(+m[1], +m[2] - 1, 1).getTime();
+
+  // YYYY年M月
+  m = s.match(/^(\d{4})年(\d{1,2})月/);
+  if (m) return new Date(+m[1], +m[2] - 1, 1).getTime();
+
+  // YYYY/MM (month only)
+  m = s.match(/^(\d{4})\/(\d{1,2})$/);
+  if (m) return new Date(+m[1], +m[2] - 1, 1).getTime();
+
+  return 0;
+}
+
 function renderHospital() {
   const fc = document.getElementById('ao-record-form-container');
   if (fc) fc.innerHTML = renderAoRecordFormHtml();
 
   document.getElementById('hospital-list').innerHTML =
-    [...getAoRecords()].reverse().map(r => {
+    getAoRecords().slice().sort((a, b) => {
+      const kd = getAoRecordSortKey(b.date) - getAoRecordSortKey(a.date);
+      if (kd !== 0) return kd;
+      return (b._ts || 0) - (a._ts || 0);
+    }).map(r => {
       const isExp = _aoRecordExpandedId === r.id;
       return `<div class="hist-item${isExp ? ' expanded' : ''}" onclick="toggleAoRecordExpand('${r.id}')">
         <div class="hist-date">${escHtml(r.date)}</div>
