@@ -2882,7 +2882,7 @@ function renderHospital() {
           ${isExp ? (
             _aoRecordEditOpenId === r.id
               ? renderAoRecordEditFormHtml(r)
-              : `<div class="hist-actions"><button class="btn-supple" style="font-size:12px;padding:4px 12px" onclick="event.stopPropagation();openAoRecordEdit('${r.id}')">編集</button></div>`
+              : `<div class="hist-actions" style="display:flex;gap:6px"><button class="btn-supple" style="font-size:12px;padding:4px 12px" onclick="event.stopPropagation();openAoRecordEdit('${r.id}')">編集</button><button class="btn-supple" style="font-size:12px;padding:4px 12px;background:#F0EDE8;color:#888780" onclick="event.stopPropagation();deleteAoRecord('${r.id}')">削除</button></div>`
           ) : ''}
         </div>
       </div>`;
@@ -2967,6 +2967,17 @@ function saveAoRecordEdit() {
 
 function cancelAoRecordEdit() {
   _aoRecordEditOpenId = null;
+  renderHospital();
+}
+
+function deleteAoRecord(id) {
+  const r = getAoRecords().find(e => e.id === id);
+  if (!r) return;
+  if (!confirm('「' + r.text.slice(0, 20) + '」を削除しますか?')) return;
+  const updated = getAoRecords().filter(e => e.id !== id);
+  setAoRecords(updated);
+  _aoRecordExpandedId = null;
+  showToast('削除しました');
   renderHospital();
 }
 
