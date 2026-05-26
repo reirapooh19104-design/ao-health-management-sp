@@ -301,10 +301,22 @@ body {
 .month-nav-all:hover { border-color:var(--green); color:#993556; }
 
 /* ── 年切替ナビ (あおの記録) ── */
-.year-nav { display:flex; gap:6px; overflow-x:auto; margin-bottom:12px; -webkit-overflow-scrolling:touch; scrollbar-width:none; }
+.year-nav { display:flex; gap:0; overflow-x:auto; margin-bottom:8px; -webkit-overflow-scrolling:touch; scrollbar-width:none; border-bottom:0.5px solid var(--cat-line); }
 .year-nav::-webkit-scrollbar { display:none; }
-.year-nav-tab { background:var(--green-light); color:#993556; border:none; border-radius:8px; padding:6px 12px; font-size:14px; font-weight:600; cursor:pointer; font-family:inherit; flex-shrink:0; white-space:nowrap; }
-.year-nav-tab.active { background:var(--green); color:white; }
+.year-nav-tab { background:transparent; color:#C9A0B4; border:none; border-bottom:2px solid transparent; padding:6px 14px; font-size:14px; font-weight:400; cursor:pointer; font-family:inherit; flex-shrink:0; white-space:nowrap; margin-bottom:-0.5px; }
+.year-nav-tab.active { color:var(--green); font-weight:500; border-bottom-color:var(--green); }
+
+/* ── カテゴリフィルタチップ (あおの記録) ── */
+.cat-filter-bar { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:12px; }
+.cat-chip { border-radius:999px; border:1.5px solid; padding:4px 12px; font-size:12px; font-weight:500; cursor:pointer; font-family:inherit; background:#fff; }
+.cat-chip.cat-medical { border-color:var(--cat-medical); color:#4A3666; }
+.cat-chip.cat-anomaly { border-color:var(--cat-anomaly); color:#7A4115; }
+.cat-chip.cat-life    { border-color:var(--cat-life);    color:#72243E; }
+.cat-chip.cat-other   { border-color:var(--cat-other);   color:#444441; }
+.cat-chip.on.cat-medical { background:var(--cat-medical); color:#fff; }
+.cat-chip.on.cat-anomaly { background:var(--cat-anomaly); color:#fff; }
+.cat-chip.on.cat-life    { background:var(--cat-life);    color:#fff; }
+.cat-chip.on.cat-other   { background:var(--cat-other);   color:#fff; }
 
 /* ── レシピ管理 ── */
 .recipe-toolbar { display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-bottom:10px; }
@@ -809,6 +821,7 @@ body {
       <button class="btn-supple" style="padding:5px 12px;font-size:12px" onclick="toggleAoRecordAddForm()">＋ 追加</button>
     </div>
     <div id="ao-record-year-nav"></div>
+    <div id="ao-record-cat-filter"></div>
     <div id="ao-record-form-container"></div>
     <div id="hospital-list"></div>
   </div>
@@ -1014,6 +1027,7 @@ let _aoRecordExpandedId   = null;
 let _aoRecordEditOpenId   = null;
 let _aoRecordEditCategory  = 'medical';
 let _aoRecordSelectedYear  = null;
+let _aoRecordCategoryFilter = { medical: true, anomaly: true, life: true, other: true };
 
 // ============================================================
 // CLOUD SYNC (Google Apps Script)
@@ -2930,6 +2944,16 @@ function selectAoRecordYear(year) {
   renderHospital();
 }
 
+function toggleAoRecordCategoryFilter(cat) {
+  const f = _aoRecordCategoryFilter;
+  if (f[cat] && Object.values(f).filter(Boolean).length === 1) return;
+  f[cat] = !f[cat];
+  _aoRecordFormOpen = false;
+  _aoRecordEditOpenId = null;
+  _aoRecordExpandedId = null;
+  renderHospital();
+}
+
 function renderHospital() {
   const yn = document.getElementById('ao-record-year-nav');
   if (yn) {
@@ -2938,6 +2962,19 @@ function renderHospital() {
       <button class="year-nav-tab${_aoRecordSelectedYear === null ? ' active' : ''}" onclick="selectAoRecordYear(null)">全期間</button>
       ${years.map(y => `<button class="year-nav-tab${_aoRecordSelectedYear === y ? ' active' : ''}" onclick="selectAoRecordYear(${y})">${y}年</button>`).join('')}
     </div>`;
+  }
+
+  const cf = document.getElementById('ao-record-cat-filter');
+  if (cf) {
+    const chips = [
+      { cat: 'medical', label: '医療' },
+      { cat: 'anomaly', label: '異変' },
+      { cat: 'life',    label: 'ライフ' },
+      { cat: 'other',   label: 'その他' },
+    ];
+    cf.innerHTML = `<div class="cat-filter-bar">${chips.map(({cat, label}) =>
+      `<button class="cat-chip cat-${cat}${_aoRecordCategoryFilter[cat] ? ' on' : ''}" onclick="toggleAoRecordCategoryFilter('${cat}')">${label}</button>`
+    ).join('')}</div>`;
   }
 
   const fc = document.getElementById('ao-record-form-container');
@@ -2954,6 +2991,7 @@ function renderHospital() {
       return key !== 0 && new Date(key).getFullYear() === _aoRecordSelectedYear;
     });
   }
+  sorted = sorted.filter(r => _aoRecordCategoryFilter[r.category] !== false);
 
   document.getElementById('hospital-list').innerHTML = sorted.map(r => {
     const isExp = _aoRecordExpandedId === r.id;
@@ -3132,9 +3170,11 @@ function saveAoRecordAdd() {
     _ts: Date.now()
   });
   setAoRecords(records);
+  const savedCat = _aoRecordFormCategory;
   _aoRecordFormOpen = false;
   _aoRecordFormCategory = 'medical';
   _aoRecordSelectedYear = null;
+  if (!_aoRecordCategoryFilter[savedCat]) _aoRecordCategoryFilter[savedCat] = true;
   showToast('追加しました');
   renderHospital();
 }
