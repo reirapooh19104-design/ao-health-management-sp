@@ -149,6 +149,7 @@ body {
 .note-item:last-child { border-bottom: none; }
 .note-date { font-size: 12px; color: var(--text-light); margin-bottom: 3px; }
 .note-text { font-size: 14px; }
+.note-hit { background: #F4C0D1; color: #993556; padding: 0 3px; border-radius: 2px; }
 .vaccine-card { border: 1px solid var(--border); border-radius: 10px; padding: 14px; margin-bottom: 10px; }
 .vaccine-title { font-size: 14px; font-weight: 600; margin-bottom: 6px; }
 .vaccine-detail { font-size: 13px; color: var(--text-light); line-height: 1.6; }
@@ -603,6 +604,7 @@ body {
       <div class="section-title">体調・症状の記録</div>
     </div>
     <div id="notes-month-nav"></div>
+    <div id="notes-search-wrap"></div>
     <div id="notes-list"></div>
   </div>
 
@@ -1028,6 +1030,8 @@ let _aoRecordEditOpenId   = null;
 let _aoRecordEditCategory  = 'medical';
 let _aoRecordSelectedYear  = null;
 let _aoRecordCategoryFilter = { medical: true, anomaly: true, life: true, other: true };
+let _healthNoteSearchQuery = '';
+let _noteSearchDebounce = null;
 
 // ============================================================
 // CLOUD SYNC (Google Apps Script)
@@ -1752,6 +1756,29 @@ function parseNoteDate(dateStr) {
 function renderNotes() {
   const nav = document.getElementById('notes-month-nav');
   if (nav) nav.innerHTML = _monthNavHtml(currentNotesMonth, 'notes');
+
+  // 検索ボックス: 初回のみ構築、2回目以降はDOMに触らない
+  const sw = document.getElementById('notes-search-wrap');
+  if (sw) {
+    if (!document.getElementById('notes-search-input')) {
+      sw.innerHTML = `<div id="notes-search-inner" style="display:flex;align-items:center;gap:8px;background:#FBEAF0;border-radius:999px;padding:9px 14px;margin-bottom:12px;border:1.5px solid transparent">
+        <span style="font-size:15px;flex-shrink:0">🔍</span>
+        <input id="notes-search-input" type="text"
+          placeholder="キーワードで検索"
+          style="flex:1;border:none;background:transparent;font-size:14px;outline:none;font-family:inherit;color:var(--text)"
+          oninput="notesSearchInput(this.value)" />
+        <span id="notes-search-count" style="display:none;background:#D4537E;color:#fff;border-radius:999px;padding:2px 8px;font-size:11px;font-weight:500"></span>
+        <button id="notes-search-clear" onclick="notesSearchClear()" style="display:none;background:none;border:none;cursor:pointer;font-size:16px;color:#D4537E;padding:0;line-height:1;flex-shrink:0">✕</button>
+      </div>`;
+    }
+  }
+
+  // 検索ボックスのビジュアル状態を更新(border・バッジ・✕ボタン)
+  const needle = _healthNoteSearchQuery.trim().toLowerCase();
+  const hasQ = _healthNoteSearchQuery !== '';
+  const inner = document.getElementById('notes-search-inner');
+  if (inner) inner.style.border = hasQ ? '1.5px solid #D4537E' : '1.5px solid transparent';
+
   let notes = [...getNotes()].sort((a, b) => parseNoteDate(b.date) - parseNoteDate(a.date));
   if (currentNotesMonth) {
     notes = notes.filter(n => {
@@ -1761,9 +1788,27 @@ function renderNotes() {
       return parts[0] + '-' + String(parseInt(parts[1])).padStart(2,'0') === currentNotesMonth;
     });
   }
+
+  // 検索フィルタ
+  if (needle !== '') {
+    notes = notes.filter(n => {
+      const haystack = (n.text || '').toLowerCase();
+      return haystack.includes(needle);
+    });
+  }
+
+  // バッジ・クリアボタンを個別更新
+  const badge = document.getElementById('notes-search-count');
+  const clearBtn = document.getElementById('notes-search-clear');
+  if (badge) {
+    badge.style.display = needle !== '' ? '' : 'none';
+    badge.textContent = needle !== '' ? (notes.length + '件') : '';
+  }
+  if (clearBtn) clearBtn.style.display = hasQ ? '' : 'none';
+
   const list = document.getElementById('notes-list');
   if (!notes.length) {
-    list.innerHTML = `<div style="color:var(--text-light);font-size:14px;padding:8px 0">${currentNotesMonth ? 'この月の記録はありません' : '記録はありません'}</div>`;
+    list.innerHTML = `<div style="color:var(--text-light);font-size:14px;padding:8px 0">${needle !== '' ? '一致する記録はありません' : (currentNotesMonth ? 'この月の記録はありません' : '記録はありません')}</div>`;
     return;
   }
   list.innerHTML = notes.map(n => {
@@ -1790,9 +1835,27 @@ function renderNotes() {
         </div>
       </div>`;
     }
+    // 本文テキストのハイライト（キーワード非空のとき）
+    let textHtml;
+    if (needle !== '' && n.text) {
+      const re = new RegExp(needle.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
+      const raw = n.text;
+      let result = '';
+      let lastIdx = 0;
+      let m;
+      while ((m = re.exec(raw)) !== null) {
+        result += escHtml(raw.slice(lastIdx, m.index));
+        result += `<mark class="note-hit">${escHtml(m[0])}</mark>`;
+        lastIdx = m.index + m[0].length;
+      }
+      result += escHtml(raw.slice(lastIdx));
+      textHtml = result;
+    } else {
+      textHtml = escHtml(n.text);
+    }
     return `<div class="note-item">
       ${header}
-      <div class="note-text">${escHtml(n.text)}</div>
+      <div class="note-text">${textHtml}</div>
     </div>`;
   }).join('');
   // 編集フォームの初期値をJSで安全に設定（特殊文字対応）
@@ -1801,6 +1864,24 @@ function renderNotes() {
     const ta = document.getElementById('note-edit-textarea');
     if (ta && editNote) { ta.value = editNote.text || ''; ta.focus(); }
   }
+}
+function notesSearchInput(val) {
+  clearTimeout(_noteSearchDebounce);
+  _noteSearchDebounce = setTimeout(() => {
+    const wasEmpty = _healthNoteSearchQuery === '';
+    _healthNoteSearchQuery = val;
+    if (wasEmpty && val.trim() !== '') {
+      currentNotesMonth = null;
+      localStorage.setItem('view_month_notes', 'null');
+    }
+    renderNotes();
+  }, 200);
+}
+function notesSearchClear() {
+  _healthNoteSearchQuery = '';
+  const inp = document.getElementById('notes-search-input');
+  if (inp) inp.value = '';
+  renderNotes();
 }
 function clearNotes() {
   if (!confirm('体調記録をすべて削除しますか？')) return;
