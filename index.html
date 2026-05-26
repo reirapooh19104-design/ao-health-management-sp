@@ -305,8 +305,8 @@ body {
 .notes-nav-wrap { display:flex; align-items:center; justify-content:center; gap:12px; margin-bottom:12px; padding:4px 0; }
 .notes-nav-btn { background:#FBEAF0; color:#D4537E; border:none; border-radius:50%; width:30px; height:30px; font-size:15px; font-weight:600; cursor:pointer; font-family:inherit; flex-shrink:0; display:flex; align-items:center; justify-content:center; }
 .notes-nav-btn:hover { background:#F0B3C5; }
-.notes-nav-label { font-size:13px; font-weight:500; color:#444441; }
-.notes-nav-label.clickable { cursor:pointer; text-decoration:underline; text-underline-offset:2px; text-decoration-color:#D4537E; }
+.notes-nav-label { font-size:13px; font-weight:500; color:#444441; cursor:default; }
+.notes-nav-label.clickable { background:#FBEAF0; color:#D4537E; padding:6px 16px; border-radius:999px; font-weight:500; font-size:13px; cursor:pointer; }
 
 /* ── 年切替ナビ (あおの記録) ── */
 .year-nav { display:flex; gap:0; overflow-x:auto; margin-bottom:8px; -webkit-overflow-scrolling:touch; scrollbar-width:none; border-bottom:0.5px solid var(--cat-line); }
@@ -359,13 +359,13 @@ body {
 <nav class="tabs">
   <div class="tab active" onclick="switchTab('today')">今日</div>
   <div class="tab"        onclick="switchTab('notes')">健康ノート</div>
-  <div class="tab"        onclick="switchTab('blood')">血液検査</div>
+  <div class="tab"        onclick="switchTab('weight')">体重グラフ</div>
+  <div class="tab"        onclick="switchTab('hospital')">あおの記録</div>
   <div class="tab"        onclick="switchTab('diary')">食事日誌</div>
   <div class="tab"        onclick="switchTab('recipe')">レシピ</div>
   <div class="tab"        onclick="switchTab('supple')">サプリ</div>
+  <div class="tab"        onclick="switchTab('blood')">血液検査</div>
   <div class="tab"        onclick="switchTab('gpt')">GPT推移</div>
-  <div class="tab"        onclick="switchTab('hospital')">あおの記録</div>
-  <div class="tab"        onclick="switchTab('weight')">体重グラフ</div>
 </nav>
 
 <div class="content">
@@ -3829,7 +3829,7 @@ function renderWeightGraph() {
 // ============================================================
 // TAB SWITCHING
 // ============================================================
-const TAB_NAMES = ['today','notes','blood','diary','recipe','supple','gpt','hospital','weight'];
+const TAB_NAMES = ['today','notes','weight','hospital','diary','recipe','supple','blood','gpt'];
 function switchTab(name) {
   document.querySelectorAll('.tab').forEach((t,i) => t.classList.toggle('active', TAB_NAMES[i] === name));
   document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
