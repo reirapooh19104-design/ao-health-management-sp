@@ -150,6 +150,7 @@ body {
 .note-date { font-size: 12px; color: var(--text-light); margin-bottom: 3px; }
 .note-text { font-size: 14px; }
 .note-hit { background: #F4C0D1; color: #993556; padding: 0 3px; border-radius: 2px; }
+.ao-hit   { background: #F4C0D1; color: #993556; padding: 0 3px; border-radius: 2px; }
 .vaccine-card { border: 1px solid var(--border); border-radius: 10px; padding: 14px; margin-bottom: 10px; }
 .vaccine-title { font-size: 14px; font-weight: 600; margin-bottom: 6px; }
 .vaccine-detail { font-size: 13px; color: var(--text-light); line-height: 1.6; }
@@ -831,6 +832,7 @@ body {
     </div>
     <div id="ao-record-year-nav"></div>
     <div id="ao-record-cat-filter"></div>
+    <div id="ao-search-box-container"></div>
     <div id="ao-record-form-container"></div>
     <div id="hospital-list"></div>
   </div>
@@ -1037,6 +1039,8 @@ let _aoRecordEditOpenId   = null;
 let _aoRecordEditCategory  = 'medical';
 let _aoRecordSelectedYear  = null;
 let _aoRecordCategoryFilter = { medical: true, anomaly: true, life: true, other: true };
+let _aoRecordSearchQuery    = '';
+let _aoRecordSearchDebounce = null;
 let _healthNoteSearchQuery = '';
 let _noteSearchDebounce = null;
 
@@ -3077,9 +3081,31 @@ function renderHospital() {
     ).join('')}</div>`;
   }
 
+  // 検索ボックス: 初回のみDOM構築、2回目以降は触らない
+  const sc = document.getElementById('ao-search-box-container');
+  if (sc && !document.getElementById('ao-search-input')) {
+    sc.innerHTML = `<div id="ao-search-box-inner" style="display:flex;align-items:center;gap:8px;background:#FBEAF0;border-radius:999px;padding:9px 14px;margin-bottom:12px;border:1.5px solid transparent">
+      <span style="font-size:15px;flex-shrink:0">🔍</span>
+      <input id="ao-search-input" type="text"
+        placeholder="あおの記録を検索"
+        style="flex:1;border:none;background:transparent;font-size:14px;outline:none;font-family:inherit;color:var(--text)"
+        oninput="aoRecordSearchInput(this.value)" />
+      <span id="ao-search-count" style="display:none;background:#D4537E;color:#fff;border-radius:999px;padding:2px 8px;font-size:11px;font-weight:500"></span>
+      <button id="ao-search-clear" onclick="aoRecordSearchClear()" style="display:none;background:none;border:none;cursor:pointer;font-size:16px;color:#D4537E;padding:0;line-height:1;flex-shrink:0">✕</button>
+    </div>`;
+    console.log('[AoSearch] 検索ボックスDOM構築');
+  }
+
+  // 検索ボックスのビジュアル状態を更新
+  const needle = _aoRecordSearchQuery.trim().toLowerCase();
+  const hasQ   = _aoRecordSearchQuery !== '';
+  const inner  = document.getElementById('ao-search-box-inner');
+  if (inner) inner.style.border = hasQ ? '1.5px solid #D4537E' : '1.5px solid transparent';
+
   const fc = document.getElementById('ao-record-form-container');
   if (fc) fc.innerHTML = renderAoRecordFormHtml();
 
+  // ソート → 年フィルタ → カテゴリフィルタ → 検索フィルタ → 描画
   let sorted = getAoRecords().slice().sort((a, b) => {
     const kd = getAoRecordSortKey(b.date) - getAoRecordSortKey(a.date);
     if (kd !== 0) return kd;
@@ -3092,14 +3118,45 @@ function renderHospital() {
     });
   }
   sorted = sorted.filter(r => _aoRecordCategoryFilter[r.category] !== false);
+  if (needle !== '') {
+    sorted = sorted.filter(r => (r.text || '').toLowerCase().includes(needle));
+    console.log('[AoSearch] needle:', needle, '→', sorted.length, '件');
+  }
+
+  // バッジ・クリアボタンを個別更新
+  const badge    = document.getElementById('ao-search-count');
+  const clearBtn = document.getElementById('ao-search-clear');
+  if (badge) {
+    badge.style.display = needle !== '' ? '' : 'none';
+    badge.textContent   = needle !== '' ? (sorted.length + '件') : '';
+  }
+  if (clearBtn) clearBtn.style.display = hasQ ? '' : 'none';
 
   document.getElementById('hospital-list').innerHTML = sorted.map(r => {
     const isExp = _aoRecordExpandedId === r.id;
+    // 本文ハイライト
+    let textHtml;
+    if (needle !== '' && r.text) {
+      const re = new RegExp(needle.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
+      const raw = r.text;
+      let result = '';
+      let lastIdx = 0;
+      let m;
+      while ((m = re.exec(raw)) !== null) {
+        result += escHtml(raw.slice(lastIdx, m.index));
+        result += `<mark class="ao-hit">${escHtml(m[0])}</mark>`;
+        lastIdx = m.index + m[0].length;
+      }
+      result += escHtml(raw.slice(lastIdx));
+      textHtml = result;
+    } else {
+      textHtml = escHtml(r.text);
+    }
     return `<div class="hist-item${isExp ? ' expanded' : ''}" onclick="toggleAoRecordExpand('${r.id}')">
       <div class="hist-date">${escHtml(r.date)}</div>
       <div class="hist-dot cat-${r.category}"></div>
       <div class="hist-body">
-        <div class="hist-text">${escHtml(r.text)}</div>
+        <div class="hist-text">${textHtml}</div>
         ${isExp ? (
           _aoRecordEditOpenId === r.id
             ? renderAoRecordEditFormHtml(r)
@@ -3108,6 +3165,28 @@ function renderHospital() {
       </div>
     </div>`;
   }).join('');
+}
+
+function aoRecordSearchInput(val) {
+  clearTimeout(_aoRecordSearchDebounce);
+  _aoRecordSearchDebounce = setTimeout(() => {
+    const wasEmpty = _aoRecordSearchQuery === '';
+    _aoRecordSearchQuery = val;
+    if (wasEmpty && val.trim() !== '') {
+      // 検索開始時: 全期間・カテゴリ全ONにリセット
+      _aoRecordSelectedYear = null;
+      _aoRecordCategoryFilter = { medical: true, anomaly: true, life: true, other: true };
+      console.log('[AoSearch] 検索開始 → 全期間・全カテゴリにリセット');
+    }
+    renderHospital();
+  }, 200);
+}
+
+function aoRecordSearchClear() {
+  _aoRecordSearchQuery = '';
+  const inp = document.getElementById('ao-search-input');
+  if (inp) inp.value = '';
+  renderHospital();
 }
 
 function toggleAoRecordExpand(id) {
