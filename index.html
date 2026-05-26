@@ -301,6 +301,13 @@ body {
 .month-nav-all.active { background:var(--green-light); color:#993556; border-color:var(--green); font-weight:600; }
 .month-nav-all:hover { border-color:var(--green); color:#993556; }
 
+/* ── 健康ノート専用・コンパクト月切替ナビ ── */
+.notes-nav-wrap { display:flex; align-items:center; justify-content:center; gap:12px; margin-bottom:12px; padding:4px 0; }
+.notes-nav-btn { background:#FBEAF0; color:#D4537E; border:none; border-radius:50%; width:30px; height:30px; font-size:15px; font-weight:600; cursor:pointer; font-family:inherit; flex-shrink:0; display:flex; align-items:center; justify-content:center; }
+.notes-nav-btn:hover { background:#F0B3C5; }
+.notes-nav-label { font-size:13px; font-weight:500; color:#444441; }
+.notes-nav-label.clickable { cursor:pointer; text-decoration:underline; text-underline-offset:2px; text-decoration-color:#D4537E; }
+
 /* ── 年切替ナビ (あおの記録) ── */
 .year-nav { display:flex; gap:0; overflow-x:auto; margin-bottom:8px; -webkit-overflow-scrolling:touch; scrollbar-width:none; border-bottom:0.5px solid var(--cat-line); }
 .year-nav::-webkit-scrollbar { display:none; }
@@ -1711,6 +1718,18 @@ function _shiftMonth(ym, delta) {
   const d = new Date(y, m - 1 + delta, 1);
   return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0');
 }
+function _notesMonthNavHtml(current) {
+  const label = current
+    ? (current.split('-')[0] + '年' + parseInt(current.split('-')[1]) + '月')
+    : '全期間';
+  const labelClass = current ? 'notes-nav-label clickable' : 'notes-nav-label';
+  const labelClick = current ? ' onclick="notesSetMonthAll()" title="タップで全期間に戻る"' : '';
+  return `<div class="notes-nav-wrap">
+    <button class="notes-nav-btn" onclick="notesShiftMonth(-1)">‹</button>
+    <span class="${labelClass}"${labelClick}>${label}</span>
+    <button class="notes-nav-btn" onclick="notesShiftMonth(1)">›</button>
+  </div>`;
+}
 function _monthNavHtml(current, prefix) {
   const label = current
     ? (current.split('-')[0] + '年' + parseInt(current.split('-')[1]) + '月')
@@ -1755,7 +1774,7 @@ function parseNoteDate(dateStr) {
 
 function renderNotes() {
   const nav = document.getElementById('notes-month-nav');
-  if (nav) nav.innerHTML = _monthNavHtml(currentNotesMonth, 'notes');
+  if (nav) nav.innerHTML = _notesMonthNavHtml(currentNotesMonth);
 
   // 検索ボックス: 初回のみ構築、2回目以降はDOMに触らない
   const sw = document.getElementById('notes-search-wrap');
