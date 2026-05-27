@@ -921,7 +921,6 @@ function convertGram(el) {
 // ============================================================
 // CONSTANTS
 // ============================================================
-const URSO_START   = new Date('2026-04-11T00:00:00');
 const DOG_BIRTHDAY = new Date('2023-01-11T00:00:00');
 const ALL_CHECKS   = ['meal_am','meal_pm','urso','coll_am','coll_pm','bacter','water','walk','cough','energy'];
 const MEAL_CHECKS  = ['meal_am','meal_pm'];
@@ -1569,11 +1568,14 @@ function migrateUrsoSetting() {
 // URSO LOGIC
 // ============================================================
 function ursoStatus(dateObj) {
+  const cfg = getUrsoSetting();
+  if (!cfg) return { todayIs: null, settingStatus: 'active' };
+  if (cfg.status !== 'active') return { todayIs: null, settingStatus: cfg.status };
   const d0 = new Date(dateObj); d0.setHours(0,0,0,0);
-  const s0 = new Date(URSO_START); s0.setHours(0,0,0,0);
+  const s0 = new Date(cfg.startDate + 'T00:00:00'); s0.setHours(0,0,0,0);
   const diff = Math.round((d0 - s0) / 86400000);
-  if (diff < 0) return null;
-  return diff % 2 === 0 ? 'drink' : 'rest';
+  if (diff < 0) return { todayIs: null, settingStatus: 'active' };
+  return { todayIs: diff % cfg.interval === 0 ? 'drink' : 'rest', settingStatus: 'active' };
 }
 const ursoLabel = s => s === 'drink' ? '飲む' : '休む';
 
@@ -1600,7 +1602,7 @@ function renderBanner() {
     today.getFullYear() + '年' + (today.getMonth()+1) + '月' + today.getDate() + '日（' + DOW[today.getDay()] + '）';
   const yest = new Date(today); yest.setDate(today.getDate()-1);
   const tmrw = new Date(today); tmrw.setDate(today.getDate()+1);
-  const ts = ursoStatus(today), ys = ursoStatus(yest), ms = ursoStatus(tmrw);
+  const ts = ursoStatus(today).todayIs, ys = ursoStatus(yest).todayIs, ms = ursoStatus(tmrw).todayIs;
   const banner = document.getElementById('urso-banner');
   banner.className = 'urso-banner ' + ts;
   document.getElementById('urso-title').textContent = ts === 'drink' ? '今日はウルソを飲む日' : '今日はウルソを休む日';
@@ -1631,7 +1633,7 @@ function renderCalendar() {
   for (let d = 1; d <= last; d++) {
     const date = new Date(y, m, d);
     const dateStr = y + '-' + String(m+1).padStart(2,'0') + '-' + String(d).padStart(2,'0');
-    const st = ursoStatus(date);
+    const st = ursoStatus(date).todayIs;
     const isToday = d === today.getDate();
     const isPast = date <= today;
     let cls = 'cal-d';
@@ -1704,7 +1706,7 @@ function saveTodayAll() {
   const specialNote = document.getElementById('memo-special').value.trim();
   const memoOther   = document.getElementById('memo-other').value.trim();
   const entry = { date, protein, grain, veg, other, weight, kcal: kcalTxt, finish, memo,
-                  urso: ursoStatus(new Date(date)), walk, coughN, coughL, energyLv, specialNote, memoOther, _ts: Date.now() };
+                  urso: ursoStatus(new Date(date)).todayIs, walk, coughN, coughL, energyLv, specialNote, memoOther, _ts: Date.now() };
   const diary = getDiary();
   const idx = diary.findIndex(e => e.date === date);
   if (idx >= 0) diary[idx] = entry; else diary.unshift(entry);
