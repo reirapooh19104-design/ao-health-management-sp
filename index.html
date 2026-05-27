@@ -1537,6 +1537,35 @@ function escHtml(str) {
 }
 
 // ============================================================
+// URSO SETTING (read / write / migrate)
+// ============================================================
+function getUrsoSetting() {
+  try {
+    const v = localStorage.getItem('urso_setting');
+    return v ? JSON.parse(v) : null;
+  } catch { return null; }
+}
+
+function saveUrsoSetting(val) {
+  save('urso_setting', val);
+}
+
+function migrateUrsoSetting() {
+  if (localStorage.getItem('urso_setting')) return;
+  const startDate = '2026-04-11';
+  const initial = {
+    status: 'active',
+    interval: 2,
+    startDate: startDate,
+    history: [
+      { status: 'active', interval: 2, startDate: startDate, endDate: null }
+    ]
+  };
+  // save() は使わない（起動時マイグレーションでは同期を走らせない）
+  localStorage.setItem('urso_setting', JSON.stringify(initial));
+}
+
+// ============================================================
 // URSO LOGIC
 // ============================================================
 function ursoStatus(dateObj) {
@@ -4121,6 +4150,7 @@ autoBackup(); // renderAllより前に自動バックアップ
 migrateSupplements();
 migrateNextVisitItems();
 migrateAoRecords();
+migrateUrsoSetting();
 initConsultationKeys();
 renderAll();
 document.getElementById('weight-date').value = todayKey();
