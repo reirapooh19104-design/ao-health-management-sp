@@ -377,7 +377,7 @@ body {
   </div>
 
   <div class="card">
-    <div id="cal-month" class="card-title">— ウルソカレンダー</div>
+    <div class="card-title">🌸 <span id="cal-month">—</span> あおのカレンダー 🌸</div>
     <div id="cal-grid" class="cal-grid"></div>
     <div class="cal-legend">
       <div class="cal-legend-item"><div class="cal-legend-dot" style="background:#F4C0D1"></div>飲む</div>
@@ -1631,7 +1631,7 @@ function renderBanner() {
 function renderCalendar() {
   const today = new Date();
   const y = today.getFullYear(), m = today.getMonth();
-  document.getElementById('cal-month').textContent = (m+1) + '月 ウルソカレンダー';
+  document.getElementById('cal-month').textContent = (m+1) + '月';
   const first = new Date(y, m, 1);
   const last  = new Date(y, m+1, 0).getDate();
   const jsToCol = d => (d + 1) % 7;
