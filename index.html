@@ -1685,10 +1685,10 @@ function renderCalendar() {
   document.getElementById('cal-month').textContent = (m+1) + '月';
   const first = new Date(y, m, 1);
   const last  = new Date(y, m+1, 0).getDate();
-  const jsToCol = d => (d + 1) % 7;
+  const jsToCol = d => d;
   const startOffset = jsToCol(first.getDay());
   const diaryMap = new Map(getDiary().map(e => [e.date, e]));
-  let html = ['土','日','月','火','水','木','金'].map(d => `<div class="cal-h">${d}</div>`).join('');
+  let html = ['日','月','火','水','木','金','土'].map(d => `<div class="cal-h">${d}</div>`).join('');
   for (let i = 0; i < startOffset; i++) html += `<div></div>`;
   for (let d = 1; d <= last; d++) {
     const date = new Date(y, m, d);
