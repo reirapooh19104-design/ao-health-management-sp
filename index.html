@@ -1040,7 +1040,12 @@ let _noteSearchDebounce = null;
 // ============================================================
 // CLOUD SYNC (Google Apps Script)
 // ============================================================
-const GAS_URL = 'https://script.google.com/macros/s/AKfycbyUDtY2DCsUgPN1mEDEZnj-khI5nNNUQn1Daawmiuj4VvWxqiSf3NcNxjSQEsyB34JLOQ/exec';
+function getGasUrl() {
+  return localStorage.getItem('gas_url') || '';
+}
+function setGasUrl(url) {
+  localStorage.setItem('gas_url', url);
+}
 
 function _syncStatus(msg, type) {
   const el = document.getElementById('sync-status');
@@ -1050,9 +1055,9 @@ function _syncStatus(msg, type) {
 }
 
 async function pushToCloud(key, val) {
-  if (!GAS_URL) return;
+  if (!getGasUrl()) return;
   try {
-    await fetch(GAS_URL, {
+    await fetch(getGasUrl(), {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain' },
       body: JSON.stringify({ key, value: val })
@@ -1061,14 +1066,14 @@ async function pushToCloud(key, val) {
 }
 
 async function syncFromCloud() {
-  if (!GAS_URL) return;
+  if (!getGasUrl()) return;
   _syncStatus('同期中…', 'syncing');
   try {
-    const res = await fetch(GAS_URL + '?action=getAll', { cache: 'no-store' });
+    const res = await fetch(getGasUrl() + '?action=getAll', { cache: 'no-store' });
     const gasData = await res.json();
 
     Object.keys(gasData).forEach(k => {
-      if (k.startsWith('autobackup_') || k.startsWith('_ts_')) return;
+      if (k.startsWith('autobackup_') || k.startsWith('_ts_') || k === 'gas_url') return;
 
       const gasVal  = gasData[k];
       const gasTs   = Number(gasData['_ts_' + k] || 0);
@@ -1267,13 +1272,13 @@ async function syncFromCloud() {
 
 // 全データを50ms間隔でGASへ手動同期
 async function pushAllToCloud() {
-  if (!GAS_URL) { showToast('GAS URLが設定されていません'); return; }
+  if (!getGasUrl()) { showToast('GAS URLが設定されていません'); return; }
   _syncStatus('同期中…', 'syncing');
   // データキーのみ収集（autobackup_・_ts_ は除外）
   const dataKeys = [];
   for (let i = 0; i < localStorage.length; i++) {
     const k = localStorage.key(i);
-    if (k && !k.startsWith('autobackup_') && !k.startsWith('_ts_')) dataKeys.push(k);
+    if (k && !k.startsWith('autobackup_') && !k.startsWith('_ts_') && k !== 'gas_url') dataKeys.push(k);
   }
   // 動的キー（chk_・day_memo_）で空値のものをスキップ（静的キーは必ず送る）
   const filteredDataKeys = dataKeys.filter(k => {
@@ -1310,7 +1315,7 @@ async function pushAllToCloud() {
         const raw = localStorage.getItem(k);
         if (raw === null) return Promise.resolve();
         try {
-          return fetch(GAS_URL, {
+          return fetch(getGasUrl(), {
             method: 'POST',
             headers: { 'Content-Type': 'text/plain' },
             body: JSON.stringify({ key: k, value: JSON.parse(raw) })
@@ -1348,7 +1353,7 @@ async function pushAllToCloud() {
           const raw = localStorage.getItem(k);
           if (raw === null) return Promise.resolve();
           try {
-            return fetch(GAS_URL, {
+            return fetch(getGasUrl(), {
               method: 'POST',
               headers: { 'Content-Type': 'text/plain' },
               body: JSON.stringify({ key: k, value: JSON.parse(raw) })
