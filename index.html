@@ -377,7 +377,8 @@ body {
   </div>
 
   <div class="card">
-    <div class="card-title">🌸 <span id="cal-month">—</span> あおのカレンダー 🌸</div>
+    <div class="card-title">🌸 あおのカレンダー 🌸</div>
+    <div id="cal-nav" class="notes-nav-wrap"></div>
     <div id="cal-grid" class="cal-grid"></div>
     <div class="cal-legend">
       <div class="cal-legend-item"><div class="cal-legend-dot" style="background:#F4C0D1"></div>飲む</div>
@@ -1033,6 +1034,7 @@ let _currentFormDate = todayKey();
 const _todayYM = () => { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0'); };
 let currentNotesMonth = (() => { const v = localStorage.getItem('view_month_notes'); return v === 'null' ? null : (v || _todayYM()); })();
 let currentDiaryMonth = (() => { const v = localStorage.getItem('view_month_diary'); return v === 'null' ? null : (v || _todayYM()); })();
+let currentCalMonth   = _todayYM();
 let _suppleStoppedOpen = false;
 let _suppleFormOpenId  = null;
 let _suppleEditOpenId  = null;
@@ -1681,20 +1683,29 @@ function renderBanner() {
 // ============================================================
 function renderCalendar() {
   const today = new Date();
-  const y = today.getFullYear(), m = today.getMonth();
-  document.getElementById('cal-month').textContent = (m+1) + '月';
-  const first = new Date(y, m, 1);
-  const last  = new Date(y, m+1, 0).getDate();
-  const jsToCol = d => d;
-  const startOffset = jsToCol(first.getDay());
+  const [cy, cm] = currentCalMonth.split('-').map(Number);
+  const first = new Date(cy, cm - 1, 1);
+  const last  = new Date(cy, cm, 0).getDate();
+  const startOffset = first.getDay();
+  const isCurrentMonth = currentCalMonth === _todayYM();
+
+  // ナビUI更新
+  const navLabel = cy + '年' + cm + '月';
+  const navEl = document.getElementById('cal-nav');
+  if (navEl) navEl.innerHTML =
+    `<button class="notes-nav-btn" onclick="calShiftMonth(-1)">‹</button>` +
+    `<span class="notes-nav-label${isCurrentMonth ? '' : ' clickable'}"` +
+    `${isCurrentMonth ? '' : ' onclick="calSetMonthToday()" title="今月に戻る"'}>${navLabel}</span>` +
+    `<button class="notes-nav-btn" onclick="calShiftMonth(1)">›</button>`;
+
   const diaryMap = new Map(getDiary().map(e => [e.date, e]));
   let html = ['日','月','火','水','木','金','土'].map(d => `<div class="cal-h">${d}</div>`).join('');
   for (let i = 0; i < startOffset; i++) html += `<div></div>`;
   for (let d = 1; d <= last; d++) {
-    const date = new Date(y, m, d);
-    const dateStr = y + '-' + String(m+1).padStart(2,'0') + '-' + String(d).padStart(2,'0');
+    const date = new Date(cy, cm - 1, d);
+    const dateStr = cy + '-' + String(cm).padStart(2,'0') + '-' + String(d).padStart(2,'0');
     const st = ursoStatus(date).todayIs;
-    const isToday = d === today.getDate();
+    const isToday = isCurrentMonth && d === today.getDate();
     const isPast = date <= today;
     let cls = 'cal-d';
     if (st) cls += isToday ? ' today-' + st : ' ' + st;
@@ -1835,6 +1846,14 @@ function _monthNavHtml(current, prefix) {
     <button class="month-nav-btn" onclick="${prefix}ShiftMonth(1)">▶</button>
     <button class="month-nav-all${current ? '' : ' active'}" onclick="${prefix}SetMonthAll()">全期間</button>
   </div>`;
+}
+function calShiftMonth(delta) {
+  currentCalMonth = _shiftMonth(currentCalMonth, delta);
+  renderCalendar();
+}
+function calSetMonthToday() {
+  currentCalMonth = _todayYM();
+  renderCalendar();
 }
 function notesShiftMonth(delta) {
   currentNotesMonth = _shiftMonth(currentNotesMonth || _todayYM(), delta);
