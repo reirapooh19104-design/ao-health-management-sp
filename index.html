@@ -360,6 +360,16 @@ body {
 .filaria-banner-title { font-size:22px; font-weight:400; color:#E05555; margin-bottom:4px; display:flex; align-items:center; gap:6px; }
 .filaria-banner-sub { font-size:13px; color:#E05555; opacity:0.8; }
 .cal-filaria-mark { position:absolute; top:1px; right:2px; line-height:1; pointer-events:none; }
+/* ── チェック項目編集 ── */
+.btn-check-edit { background:#fff; border:1px solid #F4C0D1; color:#D4537E; border-radius:8px; padding:4px 10px; font-size:12px; cursor:pointer; font-family:inherit; display:inline-flex; align-items:center; gap:3px; line-height:1.4; }
+.btn-check-edit.done { background:var(--green-light); border-color:var(--green); color:var(--green); }
+.check-edit-row { display:flex; align-items:center; gap:8px; padding:9px 0; border-bottom:1px solid var(--border); cursor:default; }
+.check-edit-row:last-of-type { border-bottom:none; }
+.check-edit-grip { color:#D0CCC8; font-size:18px; flex-shrink:0; cursor:grab; }
+.check-edit-actions { display:flex; gap:2px; flex-shrink:0; margin-left:auto; }
+.btn-edit-icon { background:none; border:none; padding:4px 6px; cursor:pointer; font-size:15px; color:var(--text-light); line-height:1; }
+.btn-edit-icon.danger { color:#E05050; }
+.check-edit-row.drag-over { border-top:2px solid var(--green); }
 </style>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3/dist/tabler-icons.min.css">
@@ -443,17 +453,7 @@ body {
 
   <div class="scroll-ind">↓</div>
 
-  <div class="card">
-    <div class="card-title">食事</div>
-    <div class="check-item" onclick="toggleCheck('meal_am')">
-      <div class="check-circle" id="ck-meal_am"></div>
-      <div class="check-label">朝ごはん<span class="check-memo">コラーゲン混ぜる（0.15〜0.25g）</span></div>
-    </div>
-    <div class="check-item" onclick="toggleCheck('meal_pm')">
-      <div class="check-circle" id="ck-meal_pm"></div>
-      <div class="check-label">夜ごはん<span class="check-memo">コラーゲン混ぜる（0.15〜0.25g）</span></div>
-    </div>
-  </div>
+  <div id="meal-check-card"></div>
 
   <div class="card">
     <div class="card-title">投薬・サプリ</div>
@@ -1033,10 +1033,21 @@ function convertGram(el) {
 // CONSTANTS
 // ============================================================
 const DOG_BIRTHDAY = new Date('2023-01-11T00:00:00');
-const ALL_CHECKS_STATIC = ['meal_am','meal_pm','water','walk','cough','energy'];
-const MEAL_CHECKS  = ['meal_am','meal_pm'];
+const DEFAULT_MEAL_CHECKS = [
+  { id: 'meal_am', label: '朝ごはん',   sub: 'コラーゲン混ぜる（0.15〜0.25g）' },
+  { id: 'meal_pm', label: '夜ごはん',   sub: 'コラーゲン混ぜる（0.15〜0.25g）' }
+];
+const ALL_CHECKS_STATIC = ['water','walk','cough','energy'];
 let _dynamicCheckIds = [];
-function getAllCheckIds() { return [...ALL_CHECKS_STATIC, ..._dynamicCheckIds]; }
+function getMealChecks() {
+  try { return JSON.parse(localStorage.getItem('custom_meal_checks') || 'null') || DEFAULT_MEAL_CHECKS.map(i=>({...i})); }
+  catch { return DEFAULT_MEAL_CHECKS.map(i=>({...i})); }
+}
+function setMealChecks(d) { localStorage.setItem('custom_meal_checks', JSON.stringify(d)); }
+function getAllCheckIds() {
+  const mealIds = getMealChecks().map(i => i.id);
+  return [...mealIds, ...ALL_CHECKS_STATIC, ..._dynamicCheckIds];
+}
 const DENSITY      = { protein: 1.15, grain: 1.60, veg: 0.20 };
 
 // Blood test reference ranges
@@ -1143,6 +1154,9 @@ let _addFormType       = 'supple';
 let _medEditOpenId     = null;
 let _medFormOpenId     = null;
 let _medEndPendingId   = null;
+let _mealEditMode      = false;
+let _mealEditItemId    = null;
+let _mealDragSrcIdx    = null;
 let _csEditOpenId        = null;
 let _csResultOpenId      = null;
 let _csAggPending        = null;
@@ -1196,7 +1210,7 @@ async function syncFromCloud() {
     const gasData = await res.json();
 
     Object.keys(gasData).forEach(k => {
-      if (k.startsWith('autobackup_') || k.startsWith('_ts_') || k === 'gas_url' || k.startsWith('filaria_')) return;
+      if (k.startsWith('autobackup_') || k.startsWith('_ts_') || k === 'gas_url' || k.startsWith('filaria_') || k.startsWith('custom_')) return;
 
       const gasVal  = gasData[k];
       const gasTs   = Number(gasData['_ts_' + k] || 0);
@@ -1401,7 +1415,7 @@ async function pushAllToCloud() {
   const dataKeys = [];
   for (let i = 0; i < localStorage.length; i++) {
     const k = localStorage.key(i);
-    if (k && !k.startsWith('autobackup_') && !k.startsWith('_ts_') && k !== 'gas_url' && !k.startsWith('filaria_')) dataKeys.push(k);
+    if (k && !k.startsWith('autobackup_') && !k.startsWith('_ts_') && k !== 'gas_url' && !k.startsWith('filaria_') && !k.startsWith('custom_')) dataKeys.push(k);
   }
   // 動的キー（chk_・day_memo_）で空値のものをスキップ（静的キーは必ず送る）
   const filteredDataKeys = dataKeys.filter(k => {
@@ -1914,17 +1928,164 @@ function renderChecks() {
 }
 function updateMetrics() {
   const c = getChecks();
-  const allIds = getAllCheckIds();
-  const total = allIds.length;
-  const mealDone  = MEAL_CHECKS.filter(id => c[id]).length;
+  const mealItems = getMealChecks();
+  const allIds    = getAllCheckIds();
+  const total     = allIds.length;
+  const mealDone  = mealItems.filter(i => c[i.id]).length;
   const totalDone = allIds.filter(id => c[id]).length;
   const pct = total > 0 ? Math.round(totalDone / total * 100) : 0;
-  document.getElementById('m-meal').textContent  = mealDone  + '/2';
+  document.getElementById('m-meal').textContent  = mealDone + '/' + mealItems.length;
   document.getElementById('m-check').textContent = totalDone + '/' + total;
   document.getElementById('m-pct').textContent   = pct + '%';
-  document.getElementById('p-meal').style.width  = (mealDone/2*100) + '%';
+  document.getElementById('p-meal').style.width  = (mealItems.length > 0 ? mealDone/mealItems.length*100 : 0) + '%';
   document.getElementById('p-check').style.width = (total > 0 ? totalDone/total*100 : 0) + '%';
   document.getElementById('p-total').style.width = pct + '%';
+}
+
+// ============================================================
+// MEAL CHECK CARD (編集可能)
+// ============================================================
+function renderMealCard() {
+  const el = document.getElementById('meal-check-card');
+  if (!el) return;
+  const items = getMealChecks();
+  const c = getChecks();
+
+  const editBtn = _mealEditMode
+    ? `<button class="btn-check-edit done" onclick="toggleMealEditMode()">完了</button>`
+    : `<button class="btn-check-edit" onclick="toggleMealEditMode()"><i class="ti ti-settings" style="font-size:12px"></i> 編集</button>`;
+
+  let listHtml = '';
+  if (_mealEditMode) {
+    listHtml = items.map((item, idx) => {
+      if (_mealEditItemId === item.id) {
+        return `<div class="check-edit-row" style="flex-direction:column;align-items:stretch">
+          <div style="margin-bottom:5px">
+            <div style="font-size:11px;color:var(--text-light);margin-bottom:2px">項目名</div>
+            <input type="text" class="form-input" id="meal-edit-label" style="font-size:13px;padding:6px 10px">
+          </div>
+          <div style="margin-bottom:8px">
+            <div style="font-size:11px;color:var(--text-light);margin-bottom:2px">サブテキスト（任意）</div>
+            <input type="text" class="form-input" id="meal-edit-sub" style="font-size:13px;padding:6px 10px">
+          </div>
+          <div style="display:flex;gap:6px">
+            <button class="btn-supple" style="flex:1" onclick="saveMealItemEdit('${item.id}')">保存</button>
+            <button class="btn-supple" style="flex:1;background:#F0EDE8;color:#888780" onclick="cancelMealItemEdit()">キャンセル</button>
+          </div>
+        </div>`;
+      }
+      return `<div class="check-edit-row"
+          draggable="true"
+          ondragstart="mealDragStart(event,${idx})"
+          ondragover="mealDragOver(event,${idx})"
+          ondrop="mealDrop(event,${idx})"
+          ondragleave="this.classList.remove('drag-over')">
+        <i class="ti ti-grip-vertical check-edit-grip"></i>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:14px;color:var(--text)">${escHtml(item.label)}</div>
+          ${item.sub ? `<div style="font-size:12px;color:var(--text-light)">${escHtml(item.sub)}</div>` : ''}
+        </div>
+        <div class="check-edit-actions">
+          <button class="btn-edit-icon" onclick="openMealItemEdit('${item.id}')"><i class="ti ti-pencil"></i></button>
+          <button class="btn-edit-icon danger" onclick="deleteMealItem('${item.id}')"><i class="ti ti-trash"></i></button>
+        </div>
+      </div>`;
+    }).join('');
+    listHtml += `<div style="margin-top:10px;display:flex;gap:8px;align-items:center">
+      <input type="text" class="form-input" id="meal-add-input" style="flex:1;font-size:13px;padding:8px 10px" placeholder="新しい項目を追加...">
+      <button class="btn-supple" style="flex-shrink:0" onclick="addMealItem()">追加</button>
+    </div>`;
+  } else {
+    listHtml = items.map(item =>
+      `<div class="check-item" onclick="toggleCheck('${item.id}')">
+        <div class="check-circle${c[item.id] ? ' on' : ''}" id="ck-${item.id}"></div>
+        <div class="check-label">${escHtml(item.label)}${item.sub ? `<span class="check-memo">${escHtml(item.sub)}</span>` : ''}</div>
+      </div>`
+    ).join('');
+  }
+
+  el.innerHTML = `<div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:${_mealEditMode ? '10px' : '0'}">
+      <div class="card-title" style="margin:0">食事</div>
+      ${editBtn}
+    </div>
+    ${listHtml}
+  </div>`;
+
+  // 編集フォームの初期値を安全に設定
+  if (_mealEditMode && _mealEditItemId) {
+    const item = items.find(i => i.id === _mealEditItemId);
+    if (item) {
+      const le = document.getElementById('meal-edit-label');
+      const se = document.getElementById('meal-edit-sub');
+      if (le) le.value = item.label || '';
+      if (se) se.value = item.sub   || '';
+    }
+  }
+}
+
+function toggleMealEditMode() {
+  _mealEditMode = !_mealEditMode;
+  _mealEditItemId = null;
+  renderMealCard();
+}
+function openMealItemEdit(id) {
+  _mealEditItemId = id;
+  renderMealCard();
+}
+function cancelMealItemEdit() {
+  _mealEditItemId = null;
+  renderMealCard();
+}
+function saveMealItemEdit(id) {
+  const label = (document.getElementById('meal-edit-label')?.value || '').trim();
+  if (!label) { showToast('項目名を入力してください'); return; }
+  const sub = (document.getElementById('meal-edit-sub')?.value || '').trim();
+  const items = getMealChecks();
+  const item = items.find(i => i.id === id);
+  if (!item) return;
+  item.label = label; item.sub = sub;
+  setMealChecks(items);
+  _mealEditItemId = null;
+  renderMealCard();
+}
+function deleteMealItem(id) {
+  const items = getMealChecks();
+  const item = items.find(i => i.id === id);
+  if (!item) return;
+  if (!confirm(`「${item.label}」を削除しますか？`)) return;
+  setMealChecks(items.filter(i => i.id !== id));
+  _mealEditItemId = null;
+  renderMealCard();
+  updateMetrics();
+}
+function addMealItem() {
+  const label = (document.getElementById('meal-add-input')?.value || '').trim();
+  if (!label) { showToast('項目名を入力してください'); return; }
+  const items = getMealChecks();
+  items.push({ id: 'meal_' + Date.now(), label, sub: '' });
+  setMealChecks(items);
+  renderMealCard();
+  updateMetrics();
+}
+function mealDragStart(e, idx) {
+  _mealDragSrcIdx = idx;
+  e.dataTransfer.effectAllowed = 'move';
+}
+function mealDragOver(e, idx) {
+  e.preventDefault();
+  e.currentTarget.classList.add('drag-over');
+}
+function mealDrop(e, idx) {
+  e.preventDefault();
+  e.currentTarget.classList.remove('drag-over');
+  if (_mealDragSrcIdx === null || _mealDragSrcIdx === idx) { _mealDragSrcIdx = null; return; }
+  const items = getMealChecks();
+  const [moved] = items.splice(_mealDragSrcIdx, 1);
+  items.splice(idx, 0, moved);
+  setMealChecks(items);
+  _mealDragSrcIdx = null;
+  renderMealCard();
 }
 
 // ============================================================
@@ -4813,6 +4974,7 @@ function renderAll() {
   renderBanner();
   renderFilariaBanner();
   renderCalendar();
+  renderMealCard();
   renderChecks();
   updateMetrics();
   renderNotes();
