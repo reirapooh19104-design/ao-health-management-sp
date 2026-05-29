@@ -443,10 +443,7 @@ body {
 
   <div class="card">
     <div class="card-title">投薬・サプリ</div>
-    <div class="check-item" onclick="toggleCheck('urso')">
-      <div class="check-circle" id="ck-urso"></div>
-      <div class="check-label">ウルソ 1/4錠<span class="check-memo" id="urso-check-note">食後に与える</span></div>
-    </div>
+    <div id="today-med-supple-checks"></div>
     <div class="check-item" onclick="toggleCheck('coll_am')">
       <div class="check-circle" id="ck-coll_am"></div>
       <div class="check-label">ニッピコラーゲン（朝）<span class="check-memo">0.15〜0.25g・ごはんに混ぜる</span></div>
@@ -1020,9 +1017,10 @@ function convertGram(el) {
 // CONSTANTS
 // ============================================================
 const DOG_BIRTHDAY = new Date('2023-01-11T00:00:00');
-const ALL_CHECKS   = ['meal_am','meal_pm','urso','coll_am','coll_pm','bacter','water','walk','cough','energy'];
+const ALL_CHECKS_STATIC = ['meal_am','meal_pm','coll_am','coll_pm','bacter','water','walk','cough','energy'];
 const MEAL_CHECKS  = ['meal_am','meal_pm'];
-const TOTAL_CHECKS = ALL_CHECKS.length;
+let _dynamicCheckIds = [];
+function getAllCheckIds() { return [...ALL_CHECKS_STATIC, ..._dynamicCheckIds]; }
 const DENSITY      = { protein: 1.15, grain: 1.60, veg: 0.20 };
 
 // Blood test reference ranges
@@ -1630,6 +1628,8 @@ function getBloodTests()     { return load('blood_tests', DEFAULT_BLOOD_TESTS); 
 function setBloodTests(d)    { save('blood_tests', d); }
 function getSupple()       { return load('supple', DEFAULT_SUPPLE); }
 function setSupple(d)      { save('supple', d); }
+function getMedList()      { try { return JSON.parse(localStorage.getItem('med_list') || '[]'); } catch { return []; } }
+function setMedList(d)     { save('med_list', d); }
 function getNextVisitItems() { return load('next_visit', DEFAULT_NEXT_VISIT); }
 function setNextVisitItems(items) { save('next_visit', items); }
 function getBodyWeights()  { return load('bodyWeights', []); }
@@ -1702,18 +1702,36 @@ function migrateUrsoSetting() {
   localStorage.setItem('urso_setting', JSON.stringify(initial));
 }
 
+function migrateMedList() {
+  if (localStorage.getItem('med_list')) return;
+  const cfg = getUrsoSetting();
+  const entry = {
+    id: 'urso',
+    name: 'ウルソ',
+    interval_days: cfg ? cfg.interval : 2,
+    start_date: cfg ? cfg.startDate : '2026-04-11',
+    purpose: '肝機能サポート',
+    memo: '',
+    status: cfg ? cfg.status : 'active',
+    show_in_today: true
+  };
+  // save() は使わない（起動時マイグレーションでは同期を走らせない）
+  localStorage.setItem('med_list', JSON.stringify([entry]));
+}
+
 // ============================================================
 // URSO LOGIC
 // ============================================================
 function ursoStatus(dateObj) {
-  const cfg = getUrsoSetting();
-  if (!cfg) return { todayIs: null, settingStatus: 'active' };
-  if (cfg.status !== 'active') return { todayIs: null, settingStatus: cfg.status };
+  const medList = getMedList();
+  const urso = medList.find(m => m.id === 'urso');
+  if (!urso) return { todayIs: null, settingStatus: 'active' };
+  if (urso.status !== 'active') return { todayIs: null, settingStatus: urso.status };
   const d0 = new Date(dateObj); d0.setHours(0,0,0,0);
-  const s0 = new Date(cfg.startDate + 'T00:00:00'); s0.setHours(0,0,0,0);
+  const s0 = new Date((urso.start_date || '2026-04-11') + 'T00:00:00'); s0.setHours(0,0,0,0);
   const diff = Math.round((d0 - s0) / 86400000);
   if (diff < 0) return { todayIs: null, settingStatus: 'active' };
-  return { todayIs: diff % cfg.interval === 0 ? 'drink' : 'rest', settingStatus: 'active' };
+  return { todayIs: diff % (urso.interval_days || 2) === 0 ? 'drink' : 'rest', settingStatus: 'active' };
 }
 const ursoLabel = s => s === 'drink' ? '飲む' : '休む';
 
@@ -1741,11 +1759,9 @@ function renderBanner() {
 
   const { todayIs: ts, settingStatus } = ursoStatus(today);
   const banner = document.getElementById('urso-banner');
-  const note   = document.getElementById('urso-check-note');
 
   if (settingStatus === 'ended') {
     banner.style.display = 'none';
-    note.textContent = '';
     return;
   }
   banner.style.display = '';
@@ -1754,7 +1770,6 @@ function renderBanner() {
     banner.className = 'urso-banner paused';
     document.getElementById('urso-title').textContent = '現在ウルソは休薬中';
     document.getElementById('urso-sub').textContent   = '再開するときは設定から変更できます';
-    note.textContent = '現在休薬中';
     return;
   }
 
@@ -1766,7 +1781,6 @@ function renderBanner() {
   document.getElementById('urso-title').textContent = ts === 'drink' ? '今日はウルソを飲む日' : '今日はウルソを休む日';
   document.getElementById('urso-sub').textContent =
     '昨日：' + (ys ? ursoLabel(ys) : '—') + '　明日：' + (ms ? ursoLabel(ms) : '—');
-  note.textContent = ts === 'drink' ? '今日は飲む日・食後に与える' : '今日は休む日';
 }
 
 // ============================================================
@@ -1828,22 +1842,25 @@ function toggleCheck(id) {
   updateMetrics();
 }
 function renderChecks() {
+  renderTodayMedSuppleChecks();
   const c = getChecks();
-  ALL_CHECKS.forEach(id => {
+  getAllCheckIds().forEach(id => {
     const el = document.getElementById('ck-' + id);
     if (el) el.className = 'check-circle' + (c[id] ? ' on' : '');
   });
 }
 function updateMetrics() {
   const c = getChecks();
+  const allIds = getAllCheckIds();
+  const total = allIds.length;
   const mealDone  = MEAL_CHECKS.filter(id => c[id]).length;
-  const totalDone = ALL_CHECKS.filter(id => c[id]).length;
-  const pct = Math.round(totalDone / TOTAL_CHECKS * 100);
+  const totalDone = allIds.filter(id => c[id]).length;
+  const pct = total > 0 ? Math.round(totalDone / total * 100) : 0;
   document.getElementById('m-meal').textContent  = mealDone  + '/2';
-  document.getElementById('m-check').textContent = totalDone + '/' + TOTAL_CHECKS;
+  document.getElementById('m-check').textContent = totalDone + '/' + total;
   document.getElementById('m-pct').textContent   = pct + '%';
   document.getElementById('p-meal').style.width  = (mealDone/2*100) + '%';
-  document.getElementById('p-check').style.width = (totalDone/TOTAL_CHECKS*100) + '%';
+  document.getElementById('p-check').style.width = (total > 0 ? totalDone/total*100 : 0) + '%';
   document.getElementById('p-total').style.width = pct + '%';
 }
 
@@ -2487,15 +2504,286 @@ function addSupple() {
   showToast(name + ' を追加しました');
 }
 
-// placeholder – 薬CRUD はCommit2で実装
-function addMed() { showToast('準備中です'); }
-function renderMed() {}
-function renderTodayMedSuppleChecks() {}
-function getMedList() { try { return JSON.parse(localStorage.getItem('med_list') || '[]'); } catch { return []; } }
-function setMedList(d) { save('med_list', d); }
-function openMedEndModal() {}
-function closeMedEndModal() { document.getElementById('med-end-modal').style.display = 'none'; }
-function confirmMedEnd() {}
+// ============================================================
+// 薬 (MED LIST) LOGIC
+// ============================================================
+
+function renderTodayMedSuppleChecks() {
+  const container = document.getElementById('today-med-supple-checks');
+  if (!container) return;
+  const c = getChecks();
+
+  const medItems    = getMedList().filter(m => m.show_in_today && m.status !== 'ended');
+  const suppleItems = getSupple().filter(s => s.show_in_today && s.status !== 'stopped');
+  _dynamicCheckIds  = [
+    ...medItems.map(m => m.id),
+    ...suppleItems.map(s => s.id)
+  ];
+
+  const { todayIs: ursoTs } = ursoStatus(new Date());
+
+  const medHtml = medItems.map(m => {
+    let noteText = '';
+    if (m.id === 'urso') {
+      noteText = ursoTs === 'drink' ? '今日は飲む日・食後に与える' : (ursoTs === 'rest' ? '今日は休む日' : '');
+    } else {
+      noteText = m.purpose || '';
+    }
+    return `<div class="check-item" onclick="toggleCheck('${m.id}')">
+      <div class="check-circle${c[m.id] ? ' on' : ''}" id="ck-${m.id}"></div>
+      <div class="check-label">${escHtml(m.name)}${noteText ? `<span class="check-memo">${escHtml(noteText)}</span>` : ''}</div>
+    </div>`;
+  }).join('');
+
+  const suppleHtml = suppleItems.map(s => {
+    const sid = s.id;
+    return `<div class="check-item" onclick="toggleCheck('${sid}')">
+      <div class="check-circle${c[sid] ? ' on' : ''}" id="ck-${sid}"></div>
+      <div class="check-label">${escHtml(s.name)}${s.detail ? `<span class="check-memo">${escHtml(s.detail)}</span>` : ''}</div>
+    </div>`;
+  }).join('');
+
+  container.innerHTML = medHtml + suppleHtml;
+}
+
+function renderMed() {
+  const list = getMedList();
+  const el   = document.getElementById('med-list');
+  if (!el) return;
+
+  if (!list.length) {
+    el.innerHTML = '<div style="color:var(--text-light);font-size:14px;padding:8px 0">登録された薬はありません</div>';
+    return;
+  }
+
+  const statusLabel = { active: '通常', pause: '休薬中', ended: '服用終了' };
+
+  const cardHtml = m => {
+    const mid = escHtml(m.id);
+    const midJs = (m.id || '').replace(/'/g, "\\'");
+    const isEditOpen = _medEditOpenId === m.id;
+    const showInToday = !!m.show_in_today;
+    const badge = m.status === 'active'
+      ? `<span class="med-status-badge active">通常</span>`
+      : m.status === 'pause'
+        ? `<span class="med-status-badge pause">休薬中</span>`
+        : `<span class="med-status-badge ended">服用終了</span>`;
+
+    const toggleHtml = `<label class="today-toggle-wrap" onclick="toggleShowInTodayMed('${midJs}')">
+      <div class="today-toggle-track${showInToday ? ' on' : ''}"><div class="today-toggle-thumb"></div></div>
+      <span class="today-toggle-lbl">今日表示</span>
+    </label>`;
+
+    const editState = _medEditState[m.id] || m.status;
+    const editFormHtml = `<div style="margin-top:8px;padding:10px;background:#FAF8F6;border-radius:8px;border:1px solid #EDE9E4">
+      <div style="margin-bottom:6px">
+        <div style="font-size:12px;color:#888780;margin-bottom:3px">薬名</div>
+        <input type="text" class="form-input" id="med-edit-name-${mid}" style="font-size:13px;padding:7px 10px">
+      </div>
+      <div style="margin-bottom:6px">
+        <div style="font-size:12px;color:#888780;margin-bottom:3px">服用間隔</div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <input type="number" class="form-input" id="med-edit-interval-${mid}" min="1" style="width:80px;flex-shrink:0;font-size:13px;padding:7px 10px">
+          <span style="font-size:13px;color:var(--text-light);flex-shrink:0">日に1回</span>
+        </div>
+      </div>
+      <div style="margin-bottom:6px">
+        <div style="font-size:12px;color:#888780;margin-bottom:3px">目的</div>
+        <input type="text" class="form-input" id="med-edit-purpose-${mid}" style="font-size:13px;padding:7px 10px">
+      </div>
+      <div style="margin-bottom:8px">
+        <div style="font-size:12px;color:#888780;margin-bottom:3px">メモ</div>
+        <textarea class="form-textarea" id="med-edit-memo-${mid}" style="min-height:52px;font-size:13px;padding:7px 10px"></textarea>
+      </div>
+      <div style="margin-bottom:10px">
+        <div style="font-size:12px;color:#888780;margin-bottom:6px">服用状態</div>
+        <div class="med-state-btns">
+          <button class="med-state-btn${editState==='active' ? ' sel-active' : ''}" onclick="selectMedState('${midJs}','active')">通常</button>
+          <button class="med-state-btn${editState==='pause'  ? ' sel-pause'  : ''}" onclick="selectMedState('${midJs}','pause')">休薬中</button>
+          <button class="med-state-btn${editState==='ended'  ? ' sel-ended'  : ''}" onclick="selectMedState('${midJs}','ended')">服用終了</button>
+        </div>
+      </div>
+      <button class="btn-primary" onclick="saveMedEdit('${midJs}')">保存する</button>
+      <div style="text-align:center;margin-top:8px">
+        <button style="background:none;border:none;color:#888780;font-size:12px;cursor:pointer;font-family:inherit;padding:2px" onclick="cancelMedEdit()">キャンセル</button>
+      </div>
+    </div>`;
+
+    return `<div class="supple-item"${m.status==='ended' ? ' style="opacity:0.75"' : ''}>
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">
+        <div style="flex:1;min-width:0">
+          ${isEditOpen ? editFormHtml : `
+            <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
+              <span class="supple-name" style="margin:0">${escHtml(m.name)}</span>
+              ${badge}
+            </div>
+            <div class="supple-detail">${m.interval_days}日に1回${m.purpose ? '　目的：' + escHtml(m.purpose) : ''}</div>`}
+        </div>
+        <div style="display:flex;flex-direction:column;gap:6px;flex-shrink:0;align-items:flex-end">
+          ${toggleHtml}
+          <button class="btn-supple" onclick="editMed('${midJs}')">${isEditOpen ? '編集中' : '編集'}</button>
+        </div>
+      </div>
+    </div>`;
+  };
+
+  el.innerHTML = list.map(cardHtml).join('');
+
+  // 編集フォームの初期値を JS で安全に設定
+  if (_medEditOpenId) {
+    const m = list.find(e => e.id === _medEditOpenId);
+    if (m) {
+      const ne = document.getElementById('med-edit-name-' + _medEditOpenId);
+      const ie = document.getElementById('med-edit-interval-' + _medEditOpenId);
+      const pe = document.getElementById('med-edit-purpose-' + _medEditOpenId);
+      const me = document.getElementById('med-edit-memo-' + _medEditOpenId);
+      if (ne) ne.value = m.name          || '';
+      if (ie) ie.value = m.interval_days || '';
+      if (pe) pe.value = m.purpose       || '';
+      if (me) me.value = m.memo          || '';
+    }
+  }
+}
+
+const _medEditState = {};
+
+function editMed(id) {
+  if (_medEditOpenId === id) {
+    _medEditOpenId = null;
+    delete _medEditState[id];
+  } else {
+    _medEditOpenId = id;
+    const m = getMedList().find(e => e.id === id);
+    if (m) _medEditState[id] = m.status;
+  }
+  renderMed();
+}
+
+function selectMedState(id, state) {
+  _medEditState[id] = state;
+  renderMed();
+  // 編集フォームの入力値を再設定（renderMedで再描画されるため）
+  const m = getMedList().find(e => e.id === id);
+  if (m) {
+    const ne = document.getElementById('med-edit-name-' + id);
+    const ie = document.getElementById('med-edit-interval-' + id);
+    const pe = document.getElementById('med-edit-purpose-' + id);
+    const me = document.getElementById('med-edit-memo-' + id);
+    if (ne) ne.value = m.name          || '';
+    if (ie) ie.value = m.interval_days || '';
+    if (pe) pe.value = m.purpose       || '';
+    if (me) me.value = m.memo          || '';
+  }
+}
+
+function saveMedEdit(id) {
+  const name     = (document.getElementById('med-edit-name-' + id)?.value     || '').trim();
+  const interval = parseInt(document.getElementById('med-edit-interval-' + id)?.value || '0', 10);
+  const purpose  = (document.getElementById('med-edit-purpose-' + id)?.value  || '').trim();
+  const memo     = (document.getElementById('med-edit-memo-' + id)?.value     || '').trim();
+  if (!name) { showToast('薬名を入力してください'); return; }
+  if (!interval || interval < 1) { showToast('服用間隔を入力してください'); return; }
+
+  const newStatus = _medEditState[id] || 'active';
+
+  if (newStatus === 'ended') {
+    _medEndPendingId = id;
+    // 確認モーダルを開く前に入力値を仮保存
+    _medEndPendingEdit = { name, interval_days: interval, purpose, memo };
+    document.getElementById('med-end-modal').style.display = 'flex';
+    return;
+  }
+
+  const list = getMedList();
+  const m = list.find(e => e.id === id);
+  if (!m) return;
+  m.name = name; m.interval_days = interval; m.purpose = purpose; m.memo = memo;
+  m.status = newStatus;
+  _medEditOpenId = null;
+  delete _medEditState[id];
+  setMedList(list);
+  renderMed();
+  renderBanner();
+  renderCalendar();
+  renderChecks();
+  showToast('保存しました');
+}
+
+function cancelMedEdit() {
+  if (_medEditOpenId) delete _medEditState[_medEditOpenId];
+  _medEditOpenId = null;
+  renderMed();
+}
+
+function toggleShowInTodayMed(id) {
+  const list = getMedList();
+  const m = list.find(e => e.id === id);
+  if (!m) return;
+  m.show_in_today = !m.show_in_today;
+  setMedList(list);
+  renderMed();
+  renderChecks();
+}
+
+function openMedEndModal(id) {
+  _medEndPendingId = id;
+  document.getElementById('med-end-modal').style.display = 'flex';
+}
+
+function closeMedEndModal() {
+  _medEndPendingId = null;
+  _medEndPendingEdit = null;
+  document.getElementById('med-end-modal').style.display = 'none';
+  renderMed();
+}
+
+let _medEndPendingEdit = null;
+
+function confirmMedEnd() {
+  const id = _medEndPendingId;
+  if (!id) return;
+  const list = getMedList();
+  const m = list.find(e => e.id === id);
+  if (m) {
+    if (_medEndPendingEdit) {
+      Object.assign(m, _medEndPendingEdit);
+    }
+    m.status = 'ended';
+    _medEditOpenId = null;
+    delete _medEditState[id];
+    setMedList(list);
+  }
+  _medEndPendingId = null;
+  _medEndPendingEdit = null;
+  document.getElementById('med-end-modal').style.display = 'none';
+  renderMed();
+  renderBanner();
+  renderCalendar();
+  renderChecks();
+  showToast('服用終了に変更しました');
+}
+
+function addMed() {
+  const name     = (document.getElementById('med-name')?.value || '').trim();
+  const interval = parseInt(document.getElementById('med-interval')?.value || '0', 10);
+  const purpose  = (document.getElementById('med-purpose')?.value || '').trim();
+  const memo     = (document.getElementById('med-add-memo')?.value || '').trim();
+  if (!name) { showToast('薬名を入力してください'); return; }
+  if (!interval || interval < 1) { showToast('服用間隔を入力してください'); return; }
+  const list = getMedList();
+  list.push({
+    id: 'med_' + Date.now() + '_' + Math.random().toString(36).slice(2,8),
+    name, interval_days: interval, purpose, memo,
+    start_date: todayKey(), status: 'active', show_in_today: false
+  });
+  setMedList(list);
+  renderMed();
+  if (document.getElementById('med-name'))     document.getElementById('med-name').value     = '';
+  if (document.getElementById('med-interval')) document.getElementById('med-interval').value = '';
+  if (document.getElementById('med-purpose'))  document.getElementById('med-purpose').value  = '';
+  if (document.getElementById('med-add-memo')) document.getElementById('med-add-memo').value = '';
+  showToast(name + ' を追加しました');
+}
 
 function deleteSupple(idx) {
   const list = getSupple();
@@ -4366,6 +4654,7 @@ migrateSupplements();
 migrateNextVisitItems();
 migrateAoRecords();
 migrateUrsoSetting();
+migrateMedList();
 initConsultationKeys();
 renderAll();
 document.getElementById('weight-date').value = todayKey();
