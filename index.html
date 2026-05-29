@@ -3379,7 +3379,9 @@ function addNextVisitItem() {
 }
 function deleteNextVisitItem(idx) {
   const items = getNextVisitItems();
+  const id = items[idx]?.id;
   items.splice(idx, 1);
+  if (id) addDeletedId('next_visit', id);
   setNextVisitItems(items);
   renderNextVisitItems();
 }
@@ -3488,6 +3490,7 @@ function addConsultationSummaryItem() {
 function deleteConsultationSummaryItem(id) {
   _csEditOpenId = null;
   _csResultOpenId = null;
+  addDeletedId('consultation_summary', id);
   setConsultationSummary(getConsultationSummary().filter(e => typeof e === 'string' ? false : e.id !== id));
   renderConsultationSummary();
 }
@@ -3587,6 +3590,7 @@ function deleteConsultationHistory(id) {
   if (!entry) return;
   const dateDisp = (entry.date || '').replace(/-/g, '/');
   if (!confirm(dateDisp + ' の診察記録を削除します。よろしいですか?')) return;
+  addDeletedId('consultation_history', id);
   setConsultationHistory(history.filter(function(e) { return e.id !== id; }));
   renderConsultationHistory();
 }
