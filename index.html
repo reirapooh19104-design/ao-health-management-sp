@@ -1199,6 +1199,52 @@ async function pushToCloud(key, val) {
   } catch {}
 }
 
+// ── tombstone helpers ──────────────────────────────
+function getDeletedIds() {
+  try {
+    return JSON.parse(localStorage.getItem('deleted_ids') || '{}');
+  } catch(e) {
+    return {};
+  }
+}
+
+function addDeletedId(keyName, id) {
+  const d = getDeletedIds();
+  if (!d[keyName]) d[keyName] = [];
+  if (!d[keyName].includes(String(id))) {
+    d[keyName].push(String(id));
+    localStorage.setItem('deleted_ids', JSON.stringify(d));
+    pushToCloud('deleted_ids', d);
+  }
+}
+
+function mergeDeletedIds(remote) {
+  const local = getDeletedIds();
+  const merged = { ...local };
+  for (const [key, ids] of Object.entries(remote || {})) {
+    if (!merged[key]) merged[key] = [];
+    for (const id of ids) {
+      if (!merged[key].includes(String(id))) {
+        merged[key].push(String(id));
+      }
+    }
+  }
+  localStorage.setItem('deleted_ids', JSON.stringify(merged));
+  return merged;
+}
+
+function filterByTombstone(keyName, arr) {
+  const d = getDeletedIds();
+  const ids = d[keyName] || [];
+  if (ids.length === 0) return arr;
+  // health_notes は id がないため date で比較、それ以外は id で比較
+  return arr.filter(item => {
+    const key = item.id !== undefined ? String(item.id) : String(item.date);
+    return !ids.includes(key);
+  });
+}
+// ──────────────────────────────────────────────────
+
 async function syncFromCloud() {
   if (!getGasUrl()) return;
   _syncStatus('同期中…', 'syncing');
