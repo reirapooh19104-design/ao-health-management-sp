@@ -401,6 +401,14 @@ body {
     <div id="urso-sub"   class="urso-sub">昨日：— 　明日：—</div>
   </div>
 
+  <div id="filaria-banner" style="display:none" class="filaria-banner">
+    <div class="filaria-banner-title">
+      <i class="ti ti-heart-plus" style="font-size:22px"></i>
+      フィラリア予防薬の日です
+    </div>
+    <div class="filaria-banner-sub" id="filaria-banner-sub"></div>
+  </div>
+
   <div class="card">
     <div class="card-title">🌸 あおのカレンダー 🌸</div>
     <div id="cal-nav" class="notes-nav-wrap"></div>
@@ -1816,6 +1824,24 @@ function renderBanner() {
     '昨日：' + (ys ? ursoLabel(ys) : '—') + '　明日：' + (ms ? ursoLabel(ms) : '—');
 }
 
+function renderFilariaBanner() {
+  const fb = document.getElementById('filaria-banner');
+  if (!fb) return;
+  const today = new Date(); today.setHours(0,0,0,0);
+  const mon = today.getMonth() + 1;
+  // フィラリア期間外（12〜5月）は非表示
+  if (mon < 6 || mon > 11) { fb.style.display = 'none'; return; }
+  const todayStr = todayKey();
+  const scheduledDates = getFilariaScheduledDates(today.getFullYear());
+  if (!scheduledDates.has(todayStr)) { fb.style.display = 'none'; return; }
+  // 投与日 → バナー表示
+  const hist = getFilariaHistory();
+  const done = hist.some(h => h.scheduledDate === todayStr);
+  const subEl = document.getElementById('filaria-banner-sub');
+  fb.style.display = '';
+  if (subEl) subEl.textContent = done ? '投与済み ✓' : '今日が投与予定日です';
+}
+
 // ============================================================
 // RENDER CALENDAR
 // ============================================================
@@ -2526,9 +2552,17 @@ function renderTodayMedSuppleChecks() {
 
   const medItems    = getMedList().filter(m => m.show_in_today && m.status !== 'ended');
   const suppleItems = getSupple().filter(s => s.show_in_today && s.status !== 'stopped');
-  _dynamicCheckIds  = [
+
+  // フィラリア：投与予定日のみチェック項目追加
+  const today = new Date(); today.setHours(0,0,0,0);
+  const todayStr = todayKey();
+  const mon = today.getMonth() + 1;
+  const isFilariaDay = (mon >= 6 && mon <= 11) && getFilariaScheduledDates(today.getFullYear()).has(todayStr);
+
+  _dynamicCheckIds = [
     ...medItems.map(m => m.id),
-    ...suppleItems.map(s => s.id)
+    ...suppleItems.map(s => s.id),
+    ...(isFilariaDay ? ['filaria_today'] : [])
   ];
 
   const { todayIs: ursoTs } = ursoStatus(new Date());
@@ -2554,7 +2588,37 @@ function renderTodayMedSuppleChecks() {
     </div>`;
   }).join('');
 
-  container.innerHTML = medHtml + suppleHtml;
+  const filariaHtml = isFilariaDay
+    ? `<div class="check-item" onclick="toggleFialariaCheck()">
+        <div class="check-circle${c['filaria_today'] ? ' on' : ''}" id="ck-filaria_today"></div>
+        <div class="check-label" style="display:flex;align-items:center;gap:4px">
+          ${_flariaHeartSvg(13)}フィラリア予防薬<span class="check-memo">投与済みにする</span>
+        </div>
+      </div>`
+    : '';
+
+  container.innerHTML = medHtml + suppleHtml + filariaHtml;
+}
+
+function toggleFialariaCheck() {
+  const c = getChecks();
+  const todayStr = todayKey();
+  const newVal = !c['filaria_today'];
+  c['filaria_today'] = newVal;
+  setChecks(c);
+  if (newVal) {
+    // 履歴に記録
+    const hist = getFilariaHistory();
+    const already = hist.some(h => h.scheduledDate === todayStr);
+    if (!already) {
+      hist.push({ scheduledDate: todayStr, administeredAt: new Date().toISOString() });
+      setFilariaHistory(hist);
+      renderFilaria();
+    }
+  }
+  renderChecks();
+  renderFilariaBanner();
+  updateMetrics();
 }
 
 function renderMed() {
@@ -2830,14 +2894,48 @@ function renderFilaria() {
   }
 
   const dates = [...getFilariaScheduledDates(currentYear)].sort();
+  const hist  = getFilariaHistory();
   const datesHtml = dates.map((ds, i) => {
     const d = new Date(ds + 'T00:00:00');
     const label = (d.getMonth()+1) + '月' + d.getDate() + '日';
+    const rec = hist.find(h => h.scheduledDate === ds);
+    const badge = rec
+      ? `<span style="font-size:10px;color:#FF6B6B;margin-left:4px">投与済み ✓</span>`
+      : '';
     return `<div style="font-size:13px;padding:3px 0;display:flex;align-items:center;gap:8px">
       <span style="font-size:11px;color:#FF6B6B;font-weight:700;min-width:20px">${i+1}回</span>
-      <span>${label}</span>
+      <span>${label}</span>${badge}
     </div>`;
   }).join('');
+
+  // 履歴（年ごと折りたたみ）
+  const histByYear = {};
+  hist.forEach(h => {
+    const y = h.scheduledDate.split('-')[0];
+    if (!histByYear[y]) histByYear[y] = [];
+    histByYear[y].push(h);
+  });
+  const histYears = Object.keys(histByYear).sort((a,b) => b - a);
+  const histHtml = histYears.length
+    ? histYears.map(y => {
+        const rows = histByYear[y].sort((a,b) => a.scheduledDate > b.scheduledDate ? 1 : -1).map(h => {
+          const sd = new Date(h.scheduledDate + 'T00:00:00');
+          const at = h.administeredAt ? new Date(h.administeredAt) : null;
+          const atStr = at ? (at.getMonth()+1) + '/' + at.getDate() + ' ' + String(at.getHours()).padStart(2,'0') + ':' + String(at.getMinutes()).padStart(2,'0') : '';
+          return `<div style="font-size:12px;padding:3px 0;display:flex;gap:8px;color:var(--text)">
+            <span style="color:var(--text-light)">${(sd.getMonth()+1)}/${sd.getDate()}</span>
+            <span>${atStr ? '記録：' + atStr : '—'}</span>
+          </div>`;
+        }).join('');
+        return `<details style="margin-top:4px">
+          <summary class="supple-summary supple-section-label" style="font-size:12px;padding:4px 0">
+            <span>${y}年（${histByYear[y].length}回）</span>
+            <span style="font-size:10px;color:var(--text-light)">▼</span>
+          </summary>
+          <div style="margin-top:4px;padding-left:4px">${rows}</div>
+        </details>`;
+      }).join('')
+    : '<div style="font-size:13px;color:var(--text-light);padding:4px 0">まだ投与記録がありません</div>';
 
   el.innerHTML =
     `<div style="margin-bottom:10px">
@@ -2847,6 +2945,10 @@ function renderFilaria() {
     <div style="margin-bottom:14px">
       <div style="font-size:12px;color:var(--text-light);margin-bottom:6px">投与予定日（全${dates.length}回）</div>
       ${datesHtml}
+    </div>
+    <div style="margin-bottom:14px;border-top:1px solid var(--border);padding-top:12px">
+      <div style="font-size:12px;color:var(--text-light);margin-bottom:4px;font-weight:600">投与履歴</div>
+      ${histHtml}
     </div>
     <button class="btn-secondary" onclick="resetFilariaSettings()">初回日を変更</button>`;
 }
@@ -4709,6 +4811,7 @@ function renderAll() {
 
   document.getElementById('dog-age').textContent = calcAge();
   renderBanner();
+  renderFilariaBanner();
   renderCalendar();
   renderChecks();
   updateMetrics();
