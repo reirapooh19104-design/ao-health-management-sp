@@ -2245,45 +2245,12 @@ function renderSupple() {
       ? `<button class="btn-supple" onclick="stopSupple('${sid}')">停止</button>`
       : `<button class="btn-supple" onclick="resumeSupple('${sid}')">再開</button>`;
 
-    // メモ履歴（新しい順＝配列末尾が最新）
-    const memos = s.memos || [];
-    const memoRows = [...memos].reverse().map((m, revIdx) => {
-      const origIdx = memos.length - 1 - revIdx;
-      const dateLabel = m.date
-        ? m.date.split('-').map((p, i) => i === 0 ? p : String(Number(p))).join('/')
-        : '';
-      return `<div style="padding:5px 0;border-bottom:1px solid #F0EDE8;display:flex;align-items:flex-start;gap:4px">
-        <div style="flex:1;min-width:0">
-          ${dateLabel
-            ? `<div style="font-size:11px;color:#888780">${escHtml(dateLabel)}</div>`
-            : `<div style="font-size:11px;color:#B0ADA8">日付未記入</div>`}
-          <div style="font-size:13px;color:var(--text);white-space:pre-wrap">${escHtml(m.text)}</div>
-        </div>
-        <button style="background:none;border:none;color:#CCBBB8;font-size:12px;cursor:pointer;padding:2px 4px;flex-shrink:0;line-height:1" onclick="deleteSuppleMemo('${sid}',${origIdx})" title="削除">✕</button>
-      </div>`;
-    }).join('');
-
-    const isFormOpen = _suppleFormOpenId === s.id;
-    const formHtml = isFormOpen
-      ? `<div style="margin-top:8px;padding:10px;background:#FAF8F6;border-radius:8px;border:1px solid #EDE9E4">
-          <input type="date" class="form-input" id="supple-memo-date" style="font-size:13px;padding:7px 10px;margin-bottom:6px" value="${todayKey()}">
-          <textarea class="form-textarea" id="supple-memo-text" style="min-height:60px;font-size:13px;padding:7px 10px;margin-bottom:6px" placeholder="メモを入力..."></textarea>
-          <div style="display:flex;gap:6px">
-            <button class="btn-supple" style="flex:1" onclick="saveSuppleMemo()">保存</button>
-            <button class="btn-supple" style="flex:1;background:#F0EDE8;color:#888780" onclick="cancelSuppleMemo()">キャンセル</button>
-          </div>
-        </div>`
-      : '';
-
-    const memoSection =
-      `<div style="margin-top:10px;border-top:1px solid #F0EDE8;padding-top:8px">
-        <div style="font-size:12px;color:#888780;font-weight:600;margin-bottom:4px">メモ</div>
-        ${memoRows || '<div style="font-size:13px;color:#B0ADA8;padding:3px 0">まだメモがありません</div>'}
-        <button class="btn-supple" style="margin-top:8px;font-size:12px;padding:4px 10px" onclick="toggleSuppleMemoForm('${sid}')">＋ 新しい記録を追加</button>
-        ${formHtml}
-      </div>`;
-
     const isEditOpen = _suppleEditOpenId === s.id;
+    const memoText = s.memo || '';
+    const memoLine = memoText
+      ? `<div style="font-size:12px;color:var(--text-light);margin-top:3px">${escHtml(memoText)}</div>`
+      : `<div style="font-size:12px;color:#ccc;margin-top:3px">メモなし</div>`;
+
     const editFormHtml = isEditOpen
       ? `<div style="margin-bottom:8px;padding:10px;background:#FAF8F6;border-radius:8px;border:1px solid #EDE9E4">
           <div style="margin-bottom:6px">
@@ -2294,9 +2261,13 @@ function renderSupple() {
             <div style="font-size:12px;color:#888780;margin-bottom:3px">開始日・量・タイミング</div>
             <textarea class="form-textarea" id="supple-edit-detail" style="min-height:52px;font-size:13px;padding:7px 10px"></textarea>
           </div>
-          <div style="margin-bottom:8px">
+          <div style="margin-bottom:6px">
             <div style="font-size:12px;color:#888780;margin-bottom:3px">目的</div>
             <input type="text" class="form-input" id="supple-edit-goal" style="font-size:13px;padding:7px 10px">
+          </div>
+          <div style="margin-bottom:8px">
+            <div style="font-size:12px;color:#888780;margin-bottom:3px">メモ</div>
+            <textarea class="form-textarea" id="supple-edit-memo" style="min-height:52px;font-size:13px;padding:7px 10px"></textarea>
           </div>
           <div style="display:flex;gap:6px">
             <button class="btn-supple" style="flex:1" onclick="saveSuppleEdit()">保存</button>
@@ -2319,8 +2290,8 @@ function renderSupple() {
           ${isEditOpen ? editFormHtml : `
             <div class="supple-name">${escHtml(s.name)}</div>
             ${detailText ? `<div class="supple-detail">${detailText}</div>` : ''}
-            ${s.goal ? `<div class="supple-goal">目的：${escHtml(s.goal)}</div>` : ''}`}
-          ${memoSection}
+            ${s.goal ? `<div class="supple-goal">目的：${escHtml(s.goal)}</div>` : ''}
+            ${memoLine}`}
         </div>
         <div style="display:flex;flex-direction:column;gap:6px;flex-shrink:0;align-items:flex-end">
           ${toggleHtml}
@@ -2360,9 +2331,11 @@ function renderSupple() {
       const ne = document.getElementById('supple-edit-name');
       const de = document.getElementById('supple-edit-detail');
       const ge = document.getElementById('supple-edit-goal');
+      const me = document.getElementById('supple-edit-memo');
       if (ne) ne.value = et.name   || '';
       if (de) de.value = et.detail || '';
       if (ge) ge.value = et.goal   || '';
+      if (me) me.value = et.memo   || '';
     }
   }
 }
@@ -2436,11 +2409,12 @@ function saveSuppleEdit() {
   const name   = (document.getElementById('supple-edit-name')?.value   || '').trim();
   const detail = (document.getElementById('supple-edit-detail')?.value || '').trim();
   const goal   = (document.getElementById('supple-edit-goal')?.value   || '').trim();
+  const memo   = (document.getElementById('supple-edit-memo')?.value   || '').trim();
   if (!name) { showToast('サプリ名を入力してください'); return; }
   const list = getSupple();
   const s = list.find(e => e.id === _suppleEditOpenId);
   if (!s) return;
-  s.name = name; s.detail = detail; s.goal = goal; s._ts = Date.now();
+  s.name = name; s.detail = detail; s.goal = goal; s.memo = memo; s._ts = Date.now();
   _suppleEditOpenId = null;
   setSupple(list);
   renderSupple();
