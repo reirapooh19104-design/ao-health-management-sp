@@ -4343,6 +4343,7 @@ function deleteAoRecord(id) {
   if (!r) return;
   if (!confirm('「' + r.text.slice(0, 20) + '」を削除しますか?')) return;
   const updated = getAoRecords().filter(e => e.id !== id);
+  addDeletedId('ao_records', id);
   setAoRecords(updated);
   _aoRecordExpandedId = null;
   showToast('削除しました');
