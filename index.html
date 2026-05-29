@@ -378,7 +378,7 @@ body {
   <div class="tab"        onclick="switchTab('hospital')">あおの記録</div>
   <div class="tab"        onclick="switchTab('diary')">食事日誌</div>
   <div class="tab"        onclick="switchTab('recipe')">レシピ</div>
-  <div class="tab"        onclick="switchTab('supple')">薬・サプリ</div>
+  <div class="tab"        onclick="switchTab('supple')">サプリ・薬</div>
   <div class="tab"        onclick="switchTab('blood')">血液検査</div>
   <div class="tab"        onclick="switchTab('gpt')">GPT推移</div>
 </nav>
@@ -444,18 +444,6 @@ body {
   <div class="card">
     <div class="card-title">投薬・サプリ</div>
     <div id="today-med-supple-checks"></div>
-    <div class="check-item" onclick="toggleCheck('coll_am')">
-      <div class="check-circle" id="ck-coll_am"></div>
-      <div class="check-label">ニッピコラーゲン（朝）<span class="check-memo">0.15〜0.25g・ごはんに混ぜる</span></div>
-    </div>
-    <div class="check-item" onclick="toggleCheck('coll_pm')">
-      <div class="check-circle" id="ck-coll_pm"></div>
-      <div class="check-label">ニッピコラーゲン（夜）<span class="check-memo">0.15〜0.25g・ごはんに混ぜる</span></div>
-    </div>
-    <div class="check-item" onclick="toggleCheck('bacter')">
-      <div class="check-circle" id="ck-bacter"></div>
-      <div class="check-label">バクチャーペット<span class="check-memo">1滴（水またはごはんに）</span></div>
-    </div>
   </div>
 
   <div class="card">
@@ -1017,7 +1005,7 @@ function convertGram(el) {
 // CONSTANTS
 // ============================================================
 const DOG_BIRTHDAY = new Date('2023-01-11T00:00:00');
-const ALL_CHECKS_STATIC = ['meal_am','meal_pm','coll_am','coll_pm','bacter','water','walk','cough','energy'];
+const ALL_CHECKS_STATIC = ['meal_am','meal_pm','water','walk','cough','energy'];
 const MEAL_CHECKS  = ['meal_am','meal_pm'];
 let _dynamicCheckIds = [];
 function getAllCheckIds() { return [...ALL_CHECKS_STATIC, ..._dynamicCheckIds]; }
