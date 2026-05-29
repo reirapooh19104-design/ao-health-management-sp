@@ -3340,6 +3340,7 @@ function deleteSuppleById(id) {
   if (!s) return;
   if (!confirm(`「${s.name}」を完全に削除します。よろしいですか？(この操作は取り消せません)`)) return;
   _suppleEditOpenId = null;
+  addDeletedId('supple', id);
   setSupple(list.filter(e => e.id !== id));
   renderSupple();
   showToast('削除しました');
