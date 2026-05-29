@@ -355,8 +355,14 @@ body {
 .med-state-btn.sel-active { background:var(--green-light); color:var(--green); border-color:var(--green); }
 .med-state-btn.sel-pause  { background:#FFF8E7; color:#C07A00; border-color:#F0C070; }
 .med-state-btn.sel-ended  { background:#FFF0EF; color:#E05050; border-color:#ffd0d0; }
+/* ── フィラリア ── */
+.filaria-banner { border-radius:12px; padding:16px; margin-bottom:12px; background:#FFF0F0; }
+.filaria-banner-title { font-size:18px; font-weight:700; color:#E05555; margin-bottom:4px; display:flex; align-items:center; gap:6px; }
+.filaria-banner-sub { font-size:13px; color:#E05555; opacity:0.8; }
+.cal-filaria-mark { position:absolute; top:1px; right:2px; line-height:1; pointer-events:none; }
 </style>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3/dist/tabler-icons.min.css">
 </head>
 <body>
 
@@ -800,6 +806,20 @@ body {
     </details>
   </div>
 
+  <!-- フィラリア予防薬セクション -->
+  <div class="card">
+    <details id="filaria-section-details" open>
+      <summary class="supple-summary" style="padding:4px 0 12px">
+        <span style="display:flex;align-items:center;gap:6px">
+          <i class="ti ti-heart-plus" style="color:#FF6B6B;font-size:18px;line-height:1"></i>
+          <span class="section-title" style="margin:0">フィラリア予防薬</span>
+        </span>
+        <span style="font-size:10px;color:var(--text-light)">▼</span>
+      </summary>
+      <div id="filaria-section-body"></div>
+    </details>
+  </div>
+
   <!-- 統合追加フォーム -->
   <div class="card">
     <div class="card-title" style="margin-bottom:12px">追加</div>
@@ -1168,7 +1188,7 @@ async function syncFromCloud() {
     const gasData = await res.json();
 
     Object.keys(gasData).forEach(k => {
-      if (k.startsWith('autobackup_') || k.startsWith('_ts_') || k === 'gas_url') return;
+      if (k.startsWith('autobackup_') || k.startsWith('_ts_') || k === 'gas_url' || k.startsWith('filaria_')) return;
 
       const gasVal  = gasData[k];
       const gasTs   = Number(gasData['_ts_' + k] || 0);
@@ -1373,7 +1393,7 @@ async function pushAllToCloud() {
   const dataKeys = [];
   for (let i = 0; i < localStorage.length; i++) {
     const k = localStorage.key(i);
-    if (k && !k.startsWith('autobackup_') && !k.startsWith('_ts_') && k !== 'gas_url') dataKeys.push(k);
+    if (k && !k.startsWith('autobackup_') && !k.startsWith('_ts_') && k !== 'gas_url' && !k.startsWith('filaria_')) dataKeys.push(k);
   }
   // 動的キー（chk_・day_memo_）で空値のものをスキップ（静的キーは必ず送る）
   const filteredDataKeys = dataKeys.filter(k => {
@@ -1632,6 +1652,31 @@ function getAoRecords() {
 }
 function setAoRecords(arr) { save('ao_records', arr); }
 
+// ── フィラリア（GAS同期対象外・localStorage直接管理）──
+function getFilariaSettings() {
+  try { return JSON.parse(localStorage.getItem('filaria_settings') || 'null'); } catch { return null; }
+}
+function setFilariaSettings(d) { localStorage.setItem('filaria_settings', JSON.stringify(d)); }
+function getFilariaHistory() {
+  try { return JSON.parse(localStorage.getItem('filaria_history') || '[]'); } catch { return []; }
+}
+function setFilariaHistory(d) { localStorage.setItem('filaria_history', JSON.stringify(d)); }
+function getFilariaScheduledDates(year) {
+  const cfg = getFilariaSettings();
+  if (!cfg || cfg.year !== year) return new Set();
+  const dates = new Set();
+  const nov30 = new Date(year, 10, 30);
+  let d = new Date(cfg.firstDoseDate + 'T00:00:00');
+  while (d <= nov30) {
+    const mon = d.getMonth() + 1;
+    if (d.getFullYear() === year && mon >= 6 && mon <= 11) {
+      dates.add(year + '-' + String(mon).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0'));
+    }
+    d = new Date(d.getTime() + 42 * 86400000);
+  }
+  return dates;
+}
+
 function classifyAoRecord(text) {
   if (/誕生|お迎え|別れ|引[っ]?越/.test(text)) return 'life';
   if (/アレルギー|異常|不振|発作|嘔吐|下痢|痙攣/.test(text)) return 'anomaly';
@@ -1792,6 +1837,7 @@ function renderCalendar() {
     `<button class="notes-nav-btn" onclick="calShiftMonth(1)">›</button>`;
 
   const diaryMap = new Map(getDiary().map(e => [e.date, e]));
+  const filariaDates = getFilariaScheduledDates(cy);
   let html = ['日','月','火','水','木','金','土'].map(d => `<div class="cal-h">${d}</div>`).join('');
   for (let i = 0; i < startOffset; i++) html += `<div></div>`;
   for (let d = 1; d <= last; d++) {
@@ -1814,7 +1860,10 @@ function renderCalendar() {
         if (dots.length) dotsHtml = '<div class="cal-dots">' + dots.join('') + '</div>';
       }
     }
-    html += `<div class="${cls}" onclick="goToDate('${dateStr}')">${d}${dotsHtml}</div>`;
+    const heartHtml = filariaDates.has(dateStr)
+      ? `<span class="cal-filaria-mark">${_flariaHeartSvg(9)}</span>`
+      : '';
+    html += `<div class="${cls}" onclick="goToDate('${dateStr}')">${d}${heartHtml}${dotsHtml}</div>`;
   }
   document.getElementById('cal-grid').innerHTML = html;
 }
@@ -2745,6 +2794,77 @@ function addMed() {
   if (document.getElementById('med-purpose'))  document.getElementById('med-purpose').value  = '';
   if (document.getElementById('med-add-memo')) document.getElementById('med-add-memo').value = '';
   showToast(name + ' を追加しました');
+}
+
+// ============================================================
+// FILARIA
+// ============================================================
+
+const _flariaHeartSvg = (sz = 9) =>
+  `<svg xmlns="http://www.w3.org/2000/svg" width="${sz}" height="${sz}" viewBox="0 0 24 24" fill="none" stroke="#FF6B6B" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">` +
+  `<path stroke="none" d="M0 0h24v24H0z" fill="none"/>` +
+  `<path d="M19.5 12.572l-7.5 7.428l-7.5 -7.428a5 5 0 1 1 7.5 -6.566a5 5 0 1 1 7.5 6.572"/>` +
+  `<path d="M12 6l0 4"/><path d="M10 8l4 0"/></svg>`;
+
+function _dateJa(dateStr) {
+  const d = new Date(dateStr + 'T00:00:00');
+  return d.getFullYear() + '年' + (d.getMonth()+1) + '月' + d.getDate() + '日';
+}
+
+function renderFilaria() {
+  const el = document.getElementById('filaria-section-body');
+  if (!el) return;
+  const cfg = getFilariaSettings();
+  const currentYear = new Date().getFullYear();
+
+  if (!cfg || cfg.year !== currentYear) {
+    el.innerHTML =
+      `<div style="font-size:13px;color:var(--text-light);margin-bottom:12px">${currentYear}年の初回投与日を設定してください。</div>
+      <div class="form-group">
+        <label class="form-label">初回投与日</label>
+        <input type="date" class="form-input" id="filaria-first-date"
+               min="${currentYear}-06-01" max="${currentYear}-11-30">
+      </div>
+      <button class="btn-primary" onclick="saveFilariaFirstDate()">保存する</button>`;
+    return;
+  }
+
+  const dates = [...getFilariaScheduledDates(currentYear)].sort();
+  const datesHtml = dates.map((ds, i) => {
+    const d = new Date(ds + 'T00:00:00');
+    const label = (d.getMonth()+1) + '月' + d.getDate() + '日';
+    return `<div style="font-size:13px;padding:3px 0;display:flex;align-items:center;gap:8px">
+      <span style="font-size:11px;color:#FF6B6B;font-weight:700;min-width:20px">${i+1}回</span>
+      <span>${label}</span>
+    </div>`;
+  }).join('');
+
+  el.innerHTML =
+    `<div style="margin-bottom:10px">
+      <div style="font-size:12px;color:var(--text-light);margin-bottom:2px">初回投与日</div>
+      <div style="font-size:15px;font-weight:600">${_dateJa(cfg.firstDoseDate)}</div>
+    </div>
+    <div style="margin-bottom:14px">
+      <div style="font-size:12px;color:var(--text-light);margin-bottom:6px">投与予定日（全${dates.length}回）</div>
+      ${datesHtml}
+    </div>
+    <button class="btn-secondary" onclick="resetFilariaSettings()">初回日を変更</button>`;
+}
+
+function saveFilariaFirstDate() {
+  const val = document.getElementById('filaria-first-date')?.value;
+  if (!val) { showToast('日付を入力してください'); return; }
+  const year = new Date(val + 'T00:00:00').getFullYear();
+  setFilariaSettings({ firstDoseDate: val, year });
+  renderFilaria();
+  renderCalendar();
+  showToast('フィラリア設定を保存しました');
+}
+
+function resetFilariaSettings() {
+  localStorage.removeItem('filaria_settings');
+  renderFilaria();
+  renderCalendar();
 }
 
 function deleteSupple(idx) {
@@ -4598,6 +4718,7 @@ function renderAll() {
   renderConsultationHistory();
   renderSupple();
   renderMed();
+  renderFilaria();
   renderDiary();
   renderBloodTestHistory();
   renderGPT();
