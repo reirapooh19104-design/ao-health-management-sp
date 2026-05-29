@@ -336,6 +336,25 @@ body {
 .recipe-del-btn:hover { color:#E05050; }
 .recipe-hint { font-size:12px; color:var(--text-light); border-left:2px solid var(--border); padding-left:10px; margin-top:4px; line-height:1.6; white-space:pre-line; }
 .recipe-hint:empty { display:none; }
+/* ── 薬・サプリ タブ ── */
+.add-type-toggle { display:flex; gap:4px; margin-bottom:14px; }
+.add-type-btn { flex:1; padding:8px; border-radius:8px; border:1.5px solid var(--border); background:#F8F6F3; color:var(--text-light); font-size:14px; font-weight:600; cursor:pointer; font-family:inherit; transition:all 0.15s; }
+.add-type-btn.active { background:var(--green-light); color:var(--green); border-color:var(--green); }
+.today-toggle-wrap { display:inline-flex; align-items:center; gap:4px; cursor:pointer; }
+.today-toggle-track { width:30px; height:17px; background:#DDD; border-radius:9px; position:relative; transition:background 0.2s; flex-shrink:0; }
+.today-toggle-track.on { background:var(--green); }
+.today-toggle-thumb { position:absolute; top:2px; left:2px; width:13px; height:13px; background:#FFF; border-radius:50%; transition:left 0.15s; box-shadow:0 1px 2px rgba(0,0,0,0.15); }
+.today-toggle-track.on .today-toggle-thumb { left:15px; }
+.today-toggle-lbl { font-size:10px; color:var(--text-light); white-space:nowrap; }
+.med-status-badge { font-size:11px; padding:2px 8px; border-radius:20px; font-weight:600; }
+.med-status-badge.active { background:var(--green-light); color:var(--green); }
+.med-status-badge.pause  { background:#FFF8E7; color:#C07A00; }
+.med-status-badge.ended  { background:#F5F4F0; color:#999; }
+.med-state-btns { display:flex; gap:6px; }
+.med-state-btn { flex:1; padding:7px 4px; border-radius:8px; border:1.5px solid var(--border); background:#F8F6F3; color:var(--text-light); font-size:13px; cursor:pointer; font-family:inherit; transition:all 0.15s; text-align:center; }
+.med-state-btn.sel-active { background:var(--green-light); color:var(--green); border-color:var(--green); }
+.med-state-btn.sel-pause  { background:#FFF8E7; color:#C07A00; border-color:#F0C070; }
+.med-state-btn.sel-ended  { background:#FFF0EF; color:#E05050; border-color:#ffd0d0; }
 </style>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
 </head>
@@ -359,7 +378,7 @@ body {
   <div class="tab"        onclick="switchTab('hospital')">あおの記録</div>
   <div class="tab"        onclick="switchTab('diary')">食事日誌</div>
   <div class="tab"        onclick="switchTab('recipe')">レシピ</div>
-  <div class="tab"        onclick="switchTab('supple')">サプリ</div>
+  <div class="tab"        onclick="switchTab('supple')">薬・サプリ</div>
   <div class="tab"        onclick="switchTab('blood')">血液検査</div>
   <div class="tab"        onclick="switchTab('gpt')">GPT推移</div>
 </nav>
@@ -771,30 +790,85 @@ body {
   <div id="recipe-view"></div>
 </div><!-- /recipe -->
 
-<!-- ===== サプリタブ ===== -->
+<!-- ===== 薬・サプリタブ ===== -->
 <div id="pane-supple" class="tab-pane">
-  <div class="card">
-    <div class="section-header">
-      <div class="section-title">サプリメント</div>
-    </div>
-    <div id="supple-list"></div>
 
-    <div style="height:1px;background:var(--border);margin:16px 0"></div>
-    <div class="card-title" style="margin-bottom:10px">新しいサプリを追加</div>
-    <div class="form-group">
-      <label class="form-label">サプリ名</label>
-      <input type="text" class="form-input" id="supple-name" placeholder="例：オメガ3フィッシュオイル">
-    </div>
-    <div class="form-group">
-      <label class="form-label">量・タイミング</label>
-      <input type="text" class="form-input" id="supple-detail" placeholder="例：朝1粒・ごはんに混ぜる">
-    </div>
-    <div class="form-group">
-      <label class="form-label">目的</label>
-      <input type="text" class="form-input" id="supple-goal" placeholder="例：皮膚・被毛ケア">
-    </div>
-    <button class="btn-primary" onclick="addSupple()">追加</button>
+  <!-- サプリメントセクション -->
+  <div class="card">
+    <details id="supple-section-details" open>
+      <summary class="supple-summary" style="padding:4px 0 12px">
+        <span class="section-title" style="margin:0">サプリメント</span>
+        <span style="font-size:10px;color:var(--text-light)">▼</span>
+      </summary>
+      <div id="supple-list"></div>
+    </details>
   </div>
+
+  <!-- 薬セクション -->
+  <div class="card">
+    <details id="med-section-details" open>
+      <summary class="supple-summary" style="padding:4px 0 12px">
+        <span class="section-title" style="margin:0">薬</span>
+        <span style="font-size:10px;color:var(--text-light)">▼</span>
+      </summary>
+      <div id="med-list"></div>
+    </details>
+  </div>
+
+  <!-- 統合追加フォーム -->
+  <div class="card">
+    <div class="card-title" style="margin-bottom:12px">追加</div>
+    <div class="add-type-toggle">
+      <button id="add-type-supple-btn" class="add-type-btn active" onclick="switchAddFormType('supple')">サプリ</button>
+      <button id="add-type-med-btn"    class="add-type-btn"        onclick="switchAddFormType('med')">薬</button>
+    </div>
+
+    <!-- サプリ追加フォーム -->
+    <div id="add-form-supple">
+      <div class="form-group">
+        <label class="form-label">サプリ名</label>
+        <input type="text" class="form-input" id="supple-name" placeholder="例：オメガ3フィッシュオイル">
+      </div>
+      <div class="form-group">
+        <label class="form-label">量・タイミング</label>
+        <input type="text" class="form-input" id="supple-detail" placeholder="例：朝1粒・ごはんに混ぜる">
+      </div>
+      <div class="form-group">
+        <label class="form-label">目的</label>
+        <input type="text" class="form-input" id="supple-goal" placeholder="例：皮膚・被毛ケア">
+      </div>
+      <div class="form-group">
+        <label class="form-label">メモ（任意）</label>
+        <textarea class="form-textarea" id="supple-add-memo" style="min-height:52px" placeholder="メモを入力..."></textarea>
+      </div>
+      <button class="btn-primary" onclick="addSupple()">サプリを追加</button>
+    </div>
+
+    <!-- 薬追加フォーム -->
+    <div id="add-form-med" style="display:none">
+      <div class="form-group">
+        <label class="form-label">薬名</label>
+        <input type="text" class="form-input" id="med-name" placeholder="例：アモキシシリン">
+      </div>
+      <div class="form-group">
+        <label class="form-label">服用間隔</label>
+        <div style="display:flex;align-items:center;gap:8px">
+          <input type="number" class="form-input" id="med-interval" min="1" style="width:80px;flex-shrink:0" placeholder="2">
+          <span style="font-size:14px;color:var(--text-light);flex-shrink:0">日に1回</span>
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">目的</label>
+        <input type="text" class="form-input" id="med-purpose" placeholder="例：肝機能サポート">
+      </div>
+      <div class="form-group">
+        <label class="form-label">メモ（任意）</label>
+        <textarea class="form-textarea" id="med-add-memo" style="min-height:52px" placeholder="メモを入力..."></textarea>
+      </div>
+      <button class="btn-primary" onclick="addMed()">薬を追加</button>
+    </div>
+  </div>
+
 </div><!-- /supple -->
 
 <!-- ===== GPT推移タブ ===== -->
@@ -905,6 +979,19 @@ body {
     <div id="gas-url-error" style="color:#c0392b;font-size:13px;margin-bottom:8px;display:none"></div>
     <button class="btn-primary" style="width:100%" onclick="saveGasUrlFromModal()">保存して同期を有効にする</button>
     <button class="btn-secondary" style="width:100%;margin-top:8px" onclick="closeGasUrlModal()">キャンセル</button>
+  </div>
+</div>
+
+<!-- 薬：服用終了確認モーダル -->
+<div id="med-end-modal" class="modal-overlay" style="display:none" onclick="if(event.target===this)closeMedEndModal()">
+  <div class="modal-sheet">
+    <button class="modal-close" onclick="closeMedEndModal()">×</button>
+    <div class="modal-title">服用終了の確認</div>
+    <div class="modal-sub">本当に服用終了にしますか？　今後カレンダーへの色表示が停止されます。</div>
+    <div style="display:flex;gap:8px;margin-top:16px">
+      <button class="btn-primary" style="flex:1;background:#E05050" onclick="confirmMedEnd()">終了する</button>
+      <button class="btn-secondary" style="flex:1;padding:12px" onclick="closeMedEndModal()">キャンセル</button>
+    </div>
   </div>
 </div>
 
@@ -1038,6 +1125,10 @@ let currentCalMonth   = _todayYM();
 let _suppleStoppedOpen = false;
 let _suppleFormOpenId  = null;
 let _suppleEditOpenId  = null;
+let _addFormType       = 'supple';
+let _medEditOpenId     = null;
+let _medFormOpenId     = null;
+let _medEndPendingId   = null;
 let _csEditOpenId        = null;
 let _csResultOpenId      = null;
 let _csAggPending        = null;
@@ -2212,6 +2303,11 @@ function renderSupple() {
         </div>`
       : '';
 
+    const showInToday = !!s.show_in_today;
+    const toggleHtml = `<label class="today-toggle-wrap" onclick="toggleShowInTodaySupple('${sid}')">
+      <div class="today-toggle-track${showInToday ? ' on' : ''}"><div class="today-toggle-thumb"></div></div>
+      <span class="today-toggle-lbl">今日表示</span>
+    </label>`;
     return `<div class="supple-item"${!isActive ? ' style="opacity:0.85"' : ''}>
       <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">
         <div style="flex:1;min-width:0">
@@ -2221,7 +2317,8 @@ function renderSupple() {
             ${s.goal ? `<div class="supple-goal">目的：${escHtml(s.goal)}</div>` : ''}`}
           ${memoSection}
         </div>
-        <div style="display:flex;flex-direction:column;gap:6px;flex-shrink:0">
+        <div style="display:flex;flex-direction:column;gap:6px;flex-shrink:0;align-items:flex-end">
+          ${toggleHtml}
           <button class="btn-supple" onclick="editSupple('${sid}')">${isEditOpen ? '編集中' : '編集'}</button>
           ${actionBtn}
         </div>
@@ -2349,20 +2446,56 @@ function cancelSuppleEdit() {
   renderSupple();
 }
 
+function switchAddFormType(type) {
+  _addFormType = type;
+  const suppleBtn = document.getElementById('add-type-supple-btn');
+  const medBtn    = document.getElementById('add-type-med-btn');
+  const suppleForm = document.getElementById('add-form-supple');
+  const medForm    = document.getElementById('add-form-med');
+  if (suppleBtn) suppleBtn.className = 'add-type-btn' + (type === 'supple' ? ' active' : '');
+  if (medBtn)    medBtn.className    = 'add-type-btn' + (type === 'med'    ? ' active' : '');
+  if (suppleForm) suppleForm.style.display = type === 'supple' ? '' : 'none';
+  if (medForm)    medForm.style.display    = type === 'med'    ? '' : 'none';
+}
+
+function toggleShowInTodaySupple(id) {
+  const list = getSupple();
+  const s = list.find(e => e.id === id);
+  if (!s) return;
+  s.show_in_today = !s.show_in_today;
+  s._ts = Date.now();
+  setSupple(list);
+  renderSupple();
+  renderTodayMedSuppleChecks();
+}
+
 function addSupple() {
   const name   = document.getElementById('supple-name').value.trim();
   const detail = document.getElementById('supple-detail').value.trim();
   const goal   = document.getElementById('supple-goal').value.trim();
+  const memoText = (document.getElementById('supple-add-memo')?.value || '').trim();
   if (!name) { showToast('サプリ名を入力してください'); return; }
   const list = getSupple();
-  list.push({ id: 'supple_' + Date.now() + '_' + Math.random().toString(36).slice(2,8), name, detail, goal, status: 'active', stoppedAt: '', memos: [], _ts: Date.now() });
+  const memos = memoText ? [{ date: todayKey(), text: memoText }] : [];
+  list.push({ id: 'supple_' + Date.now() + '_' + Math.random().toString(36).slice(2,8), name, detail, goal, status: 'active', stoppedAt: '', memos, show_in_today: false, _ts: Date.now() });
   setSupple(list);
   renderSupple();
   document.getElementById('supple-name').value   = '';
   document.getElementById('supple-detail').value = '';
   document.getElementById('supple-goal').value   = '';
+  if (document.getElementById('supple-add-memo')) document.getElementById('supple-add-memo').value = '';
   showToast(name + ' を追加しました');
 }
+
+// placeholder – 薬CRUD はCommit2で実装
+function addMed() { showToast('準備中です'); }
+function renderMed() {}
+function renderTodayMedSuppleChecks() {}
+function getMedList() { try { return JSON.parse(localStorage.getItem('med_list') || '[]'); } catch { return []; } }
+function setMedList(d) { save('med_list', d); }
+function openMedEndModal() {}
+function closeMedEndModal() { document.getElementById('med-end-modal').style.display = 'none'; }
+function confirmMedEnd() {}
 
 function deleteSupple(idx) {
   const list = getSupple();
@@ -4214,6 +4347,7 @@ function renderAll() {
   renderConsultationSummary();
   renderConsultationHistory();
   renderSupple();
+  renderMed();
   renderDiary();
   renderBloodTestHistory();
   renderGPT();
