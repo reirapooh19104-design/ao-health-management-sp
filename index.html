@@ -2554,6 +2554,7 @@ function deleteHealthNote(dateStr) {
   const idx = notes.findIndex(n => n.date === dateStr);
   if (idx < 0) return;
   notes.splice(idx, 1);
+  addDeletedId('health_notes', dateStr);
   setNotes(notes);
   // 夜エントリは diary と独立して存在するため diary/day_memo はクリアしない。
   // 通常エントリのみ diary の health memo fields と day_memo をクリアして整合を取る。
