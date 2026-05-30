@@ -1252,6 +1252,11 @@ async function syncFromCloud() {
     const res = await fetch(getGasUrl() + '?action=getAll', { cache: 'no-store' });
     const gasData = await res.json();
 
+    // tombstone: deleted_ids を先にマージしてから各キーを処理する
+    if (gasData['deleted_ids']) {
+      mergeDeletedIds(gasData['deleted_ids']);
+    }
+
     Object.keys(gasData).forEach(k => {
       if (k.startsWith('autobackup_') || k.startsWith('_ts_') || k === 'gas_url' || k.startsWith('filaria_') || k.startsWith('custom_')) return;
 
