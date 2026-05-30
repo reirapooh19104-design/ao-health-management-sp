@@ -1492,84 +1492,51 @@ async function pushAllToCloud() {
   const allKeys = [];
   filteredDataKeys.forEach(k => { allKeys.push(k); allKeys.push('_ts_' + k); });
 
-  const CHUNK_SIZE = 5;
-  const chunkCount = Math.ceil(allKeys.length / CHUNK_SIZE);
-  console.log('[pushAllToCloud] 開始: ' + allKeys.length + 'キーを' + chunkCount + 'チャンクで並列送信');
+  // 一括送信オブジェクトを構築
+  const bulkData = {};
+  let skipCount = 0;
+  allKeys.forEach(k => {
+    const raw = localStorage.getItem(k);
+    if (raw === null) { skipCount++; return; }
+    try {
+      bulkData[k] = JSON.parse(raw);
+    } catch (e) {
+      console.warn('[pushAllToCloud] parse error, skipping:', k, 'value:', raw);
+      skipCount++;
+    }
+  });
+  const sendCount = Object.keys(bulkData).length;
+  console.log('[pushAllToCloud] 開始: ' + sendCount + 'キーを一括送信（' + skipCount + '件スキップ）');
   const startTime = performance.now();
-  const failedKeys = [];
 
   showToast('GASへ全データ同期中...');
-  for (let i = 0; i < allKeys.length; i += CHUNK_SIZE) {
-    const chunk = allKeys.slice(i, i + CHUNK_SIZE);
-    const results = await Promise.allSettled(
-      chunk.map(k => {
-        const raw = localStorage.getItem(k);
-        if (raw === null) return Promise.resolve();
-        try {
-          return fetch(getGasUrl(), {
-            method: 'POST',
-            headers: { 'Content-Type': 'text/plain' },
-            body: JSON.stringify({ key: k, value: JSON.parse(raw) })
-          });
-        } catch (e) {
-          console.warn('[pushAllToCloud] parse error, skipping:', k, 'value:', raw);
-          return Promise.resolve();
-        }
-      })
-    );
-    results.forEach((r, idx) => {
-      if (r.status === 'rejected') failedKeys.push(chunk[idx]);
-    });
-    const chunkIdx = Math.floor(i / CHUNK_SIZE) + 1;
-    if (chunkIdx % 2 === 0 || chunkIdx === chunkCount) {
-      showToast('GAS同期中 ' + chunkIdx + '/' + chunkCount + ' チャンク');
-    }
-    await new Promise(r => setTimeout(r, 50));
-  }
 
-  // リトライロジック（GAS500エラー対策・最大3回）
-  let retriedCount = 0;
+  let success = false;
+  let lastAttempt = 0;
   const MAX_RETRY = 3;
-  let retryAttempt = 0;
-  while (failedKeys.length > 0 && retryAttempt < MAX_RETRY) {
-    retryAttempt++;
-    const retryTargets = [...failedKeys];
-    const retryStart = performance.now();
-    console.log('[pushAllToCloud] リトライ ' + retryAttempt + '/' + MAX_RETRY + ': ' + retryTargets.length + '件試行');
-    const stillFailed = [];
-    for (let i = 0; i < retryTargets.length; i += CHUNK_SIZE) {
-      const chunk = retryTargets.slice(i, i + CHUNK_SIZE);
-      const results = await Promise.allSettled(
-        chunk.map(k => {
-          const raw = localStorage.getItem(k);
-          if (raw === null) return Promise.resolve();
-          try {
-            return fetch(getGasUrl(), {
-              method: 'POST',
-              headers: { 'Content-Type': 'text/plain' },
-              body: JSON.stringify({ key: k, value: JSON.parse(raw) })
-            });
-          } catch (e) {
-            console.warn('[pushAllToCloud] parse error, skipping:', k, 'value:', raw);
-            return Promise.resolve();
-          }
-        })
-      );
-      results.forEach((r, idx) => {
-        if (r.status === 'rejected') stillFailed.push(chunk[idx]);
-      });
+  for (let attempt = 0; attempt <= MAX_RETRY && !success; attempt++) {
+    lastAttempt = attempt;
+    if (attempt > 0) {
       await new Promise(r => setTimeout(r, 200));
+      console.log('[pushAllToCloud] リトライ ' + attempt + '/' + MAX_RETRY);
     }
-    const retrySuccess = retryTargets.length - stillFailed.length;
-    const retryElapsed = ((performance.now() - retryStart) / 1000).toFixed(1);
-    console.log('[pushAllToCloud] リトライ' + retryAttempt + ' 完了: ' + retryElapsed + '秒, 成功' + retrySuccess + '件, 失敗' + stillFailed.length + '件');
-    retriedCount += retrySuccess;
-    failedKeys.length = 0;
-    stillFailed.forEach(k => failedKeys.push(k));
+    try {
+      const res = await fetch(getGasUrl(), {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain' },
+        body: JSON.stringify({ bulk: true, data: bulkData })
+      });
+      if (res.ok) success = true;
+      else console.warn('[pushAllToCloud] HTTPエラー: ' + res.status);
+    } catch (e) {
+      console.warn('[pushAllToCloud] fetch失敗: ' + e.message);
+    }
   }
+  const retriedCount = success && lastAttempt > 0 ? sendCount : 0;
+  const failedKeys = success ? [] : Object.keys(bulkData);
 
   const elapsed = ((performance.now() - startTime) / 1000).toFixed(1);
-  const successCount = allKeys.length - failedKeys.length;
+  const successCount = success ? sendCount : 0;
   console.log('[pushAllToCloud] 最終完了: ' + elapsed + '秒, 成功' + successCount + '件, 失敗' + failedKeys.length + '件');
   let toastMsg;
   if (failedKeys.length > 0) {
