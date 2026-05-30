@@ -4843,23 +4843,33 @@ function deleteBodyWeight(date) {
 function renderBodyWeights() {
   const list = document.getElementById('weight-recent-list');
   if (!list) return;
-  const recent = getBodyWeights().slice().sort((a, b) => b.date < a.date ? -1 : 1).slice(0, 5);
-  if (recent.length === 0) {
+  const all = getBodyWeights().slice().sort((a, b) => b.date < a.date ? -1 : 1);
+  if (all.length === 0) {
     list.innerHTML = '<p style="color:var(--text-light);font-size:13px;text-align:center;padding:16px 0">まだ記録がありません</p>';
     return;
   }
-  list.innerHTML = recent.map(w =>
+  const displayed = _weightListExpanded ? all : all.slice(0, 5);
+  let html = displayed.map(w =>
     '<div class="weight-entry">' +
       '<span class="weight-entry-date">' + w.date + '</span>' +
       '<span class="weight-entry-val">' + Number(w.weight).toFixed(2) + ' kg</span>' +
       '<button class="btn-delete" onclick="deleteBodyWeight(\'' + w.date + '\')">削除</button>' +
     '</div>'
   ).join('');
+  if (all.length > 5) {
+    if (_weightListExpanded) {
+      html += '<button onclick="_weightListExpanded=false;renderBodyWeights()" style="display:block;width:100%;margin-top:10px;padding:7px;background:none;border:none;color:var(--green);font-size:13px;cursor:pointer;font-family:inherit;text-align:center">▲ 折りたたむ</button>';
+    } else {
+      html += '<button onclick="_weightListExpanded=true;renderBodyWeights()" style="display:block;width:100%;margin-top:10px;padding:7px;background:var(--green-light);border:none;border-radius:8px;color:#993556;font-size:13px;cursor:pointer;font-family:inherit;text-align:center">▼ 過去の記録を見る（全' + all.length + '件）</button>';
+    }
+  }
+  list.innerHTML = html;
 }
 
 // ============================================================
 // WEIGHT GRAPH
 // ============================================================
+var _weightListExpanded = false;
 var _weightChart = null;
 var _weightPeriodDays = 30;
 
