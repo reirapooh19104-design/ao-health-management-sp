@@ -80,7 +80,7 @@ body {
 .urso-banner.drink  { background: #FBEAF0; }
 .urso-banner.rest   { background: #F0EFEB; }
 .urso-banner.paused { background: #FFF8E7; }
-.urso-title { font-size: 22px; font-weight: 700; margin-bottom: 4px; }
+.urso-title { font-size: 22px; font-weight: 400; color: var(--green); margin-bottom: 4px; }
 .urso-sub   { font-size: 13px; color: var(--text-light); margin-bottom: 14px; }
 .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; margin-top: 8px; }
 .cal-h { text-align: center; font-size: 11px; color: var(--text-light); padding: 4px 0; }
@@ -357,7 +357,7 @@ body {
 .med-state-btn.sel-ended  { background:#FFF0EF; color:#E05050; border-color:#ffd0d0; }
 /* ── フィラリア ── */
 .filaria-banner { border-radius:12px; padding:16px; margin-bottom:12px; background:#FFF0F0; }
-.filaria-banner-title { font-size:18px; font-weight:700; color:#E05555; margin-bottom:4px; display:flex; align-items:center; gap:6px; }
+.filaria-banner-title { font-size:22px; font-weight:400; color:#E05555; margin-bottom:4px; display:flex; align-items:center; gap:6px; }
 .filaria-banner-sub { font-size:13px; color:#E05555; opacity:0.8; }
 .cal-filaria-mark { position:absolute; top:1px; right:2px; line-height:1; pointer-events:none; }
 </style>
@@ -404,7 +404,7 @@ body {
   <div id="filaria-banner" style="display:none" class="filaria-banner">
     <div class="filaria-banner-title">
       <i class="ti ti-heart-plus" style="font-size:22px"></i>
-      フィラリア予防薬の日です
+      フィラリア予防薬の日
     </div>
     <div class="filaria-banner-sub" id="filaria-banner-sub"></div>
   </div>
@@ -1887,7 +1887,7 @@ function renderCalendar() {
       }
     }
     const heartHtml = filariaDates.has(dateStr)
-      ? `<span class="cal-filaria-mark">${_flariaHeartSvg(9)}</span>`
+      ? `<span class="cal-filaria-mark">${_flariaHeartSvg(14)}</span>`
       : '';
     html += `<div class="${cls}" onclick="goToDate('${dateStr}')">${d}${heartHtml}${dotsHtml}</div>`;
   }
