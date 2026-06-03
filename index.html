@@ -3630,7 +3630,7 @@ function collectAbnormalRecords(periodKey) {
     if (specialMatch) prefixParts.push('⚠️' + specialMatch[1].trim());
     items.push({
       id: 'cs_' + ts + '_' + Math.random().toString(36).slice(2, 8),
-      text: '【体調記録】' + n.date + '(' + prefixParts.join('/') + ') ' + text,
+      text: '【体調記録】' + n.date + ': ' + text,
       source: 'auto',
       sourceKey: 'hn_' + n.date,
       result: '',
