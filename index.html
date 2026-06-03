@@ -4991,6 +4991,9 @@ function exportData() {
     supple: getSupple(),
     nextVisit: getNextVisitItems(),
     bodyWeights: getBodyWeights(),
+    aoRecords: getAoRecords(),
+    consultationSummary: getConsultationSummary(),
+    consultationHistory: getConsultationHistory(),
     checks: {}
   };
   for (let i = 0; i < localStorage.length; i++) {
@@ -5024,10 +5027,13 @@ function importData(e) {
           }
         });
       }
-      if (d.bloodTests)   setBloodTests(d.bloodTests);
-      if (d.supple)       setSupple(d.supple);
-      if (d.nextVisit)    setNextVisitItems(d.nextVisit);
-      if (d.bodyWeights)  setBodyWeights(d.bodyWeights);
+      if (d.bloodTests)          setBloodTests(d.bloodTests);
+      if (d.supple)              setSupple(d.supple);
+      if (d.nextVisit)           setNextVisitItems(d.nextVisit);
+      if (d.bodyWeights)         setBodyWeights(d.bodyWeights);
+      if (d.aoRecords)           setAoRecords(d.aoRecords);
+      if (d.consultationSummary) setConsultationSummary(d.consultationSummary);
+      if (d.consultationHistory) setConsultationHistory(d.consultationHistory);
       if (d.checks) Object.keys(d.checks).forEach(k => save(k, d.checks[k]));
       renderAll();
       showToast('インポートしました');
@@ -5192,6 +5198,7 @@ migrateNextVisitItems();
 migrateAoRecords();
 migrateUrsoSetting();
 migrateMedList();
+localStorage.removeItem('last_backup_date');
 initConsultationKeys();
 renderAll();
 document.getElementById('weight-date').value = todayKey();
