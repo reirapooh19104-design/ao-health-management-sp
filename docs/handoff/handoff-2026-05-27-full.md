@@ -116,7 +116,6 @@ erisaさんの傾向
 	•	インラインフォーム + 排他制御パターンの実例集
 	•	旧形式キー last_backup_date の localStorage クリーンアップ
 	•	GAS側コード所在不明問題
-	•	GAS同期のさらなる高速化案
 	•	GPT推移タブ・正常値の文字色見直し
 	•	health_notes/diary 復旧用JSON生成手法
 	•	save() の同期完了通知UX改善案(現状不要)
