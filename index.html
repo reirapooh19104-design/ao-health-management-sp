@@ -1474,7 +1474,7 @@ async function pushAllToCloud() {
   const dataKeys = [];
   for (let i = 0; i < localStorage.length; i++) {
     const k = localStorage.key(i);
-    if (k && !k.startsWith('autobackup_') && !k.startsWith('_ts_') && k !== 'gas_url' && !k.startsWith('filaria_') && !k.startsWith('custom_')) dataKeys.push(k);
+    if (k && !k.startsWith('autobackup_') && !k.startsWith('_ts_') && k !== 'gas_url' && !k.startsWith('filaria_') && !k.startsWith('custom_') && k !== 'view_month_diary' && k !== 'view_month_notes' && k !== 'selected_recipe_id') dataKeys.push(k);
   }
   // 動的キー（chk_・day_memo_）で空値のものをスキップ（静的キーは必ず送る）
   const filteredDataKeys = dataKeys.filter(k => {
