@@ -1809,7 +1809,8 @@ function ursoStatus(dateObj) {
   if (!urso) return { todayIs: null, settingStatus: 'active' };
   if (urso.status !== 'active') return { todayIs: null, settingStatus: urso.status };
   const d0 = new Date(dateObj); d0.setHours(0,0,0,0);
-  const s0 = new Date((urso.start_date || '2026-04-11') + 'T00:00:00'); s0.setHours(0,0,0,0);
+  const baseStr = urso.last_taken_date || urso.start_date || '2026-04-11';
+  const s0 = new Date(baseStr + 'T00:00:00'); s0.setHours(0,0,0,0);
   const diff = Math.round((d0 - s0) / 86400000);
   if (diff < 0) return { todayIs: null, settingStatus: 'active' };
   return { todayIs: diff % (urso.interval_days || 2) === 0 ? 'drink' : 'rest', settingStatus: 'active' };
@@ -2996,6 +2997,10 @@ function renderMed() {
         </div>
       </div>
       <div style="margin-bottom:6px">
+        <div style="font-size:12px;color:#888780;margin-bottom:3px">最後に飲んだ日</div>
+        <input type="date" class="form-input" id="med-edit-last-taken-${mid}" style="font-size:13px;padding:7px 10px">
+      </div>
+      <div style="margin-bottom:6px">
         <div style="font-size:12px;color:#888780;margin-bottom:3px">目的</div>
         <input type="text" class="form-input" id="med-edit-purpose-${mid}" style="font-size:13px;padding:7px 10px">
       </div>
@@ -3043,12 +3048,14 @@ function renderMed() {
     if (m) {
       const ne = document.getElementById('med-edit-name-' + _medEditOpenId);
       const ie = document.getElementById('med-edit-interval-' + _medEditOpenId);
+      const le = document.getElementById('med-edit-last-taken-' + _medEditOpenId);
       const pe = document.getElementById('med-edit-purpose-' + _medEditOpenId);
       const me = document.getElementById('med-edit-memo-' + _medEditOpenId);
-      if (ne) ne.value = m.name          || '';
-      if (ie) ie.value = m.interval_days || '';
-      if (pe) pe.value = m.purpose       || '';
-      if (me) me.value = m.memo          || '';
+      if (ne) ne.value = m.name            || '';
+      if (ie) ie.value = m.interval_days   || '';
+      if (le) le.value = m.last_taken_date || '';
+      if (pe) pe.value = m.purpose         || '';
+      if (me) me.value = m.memo            || '';
     }
   }
 }
@@ -3075,20 +3082,23 @@ function selectMedState(id, state) {
   if (m) {
     const ne = document.getElementById('med-edit-name-' + id);
     const ie = document.getElementById('med-edit-interval-' + id);
+    const le = document.getElementById('med-edit-last-taken-' + id);
     const pe = document.getElementById('med-edit-purpose-' + id);
     const me = document.getElementById('med-edit-memo-' + id);
-    if (ne) ne.value = m.name          || '';
-    if (ie) ie.value = m.interval_days || '';
-    if (pe) pe.value = m.purpose       || '';
-    if (me) me.value = m.memo          || '';
+    if (ne) ne.value = m.name            || '';
+    if (ie) ie.value = m.interval_days   || '';
+    if (le) le.value = m.last_taken_date || '';
+    if (pe) pe.value = m.purpose         || '';
+    if (me) me.value = m.memo            || '';
   }
 }
 
 function saveMedEdit(id) {
-  const name     = (document.getElementById('med-edit-name-' + id)?.value     || '').trim();
-  const interval = parseInt(document.getElementById('med-edit-interval-' + id)?.value || '0', 10);
-  const purpose  = (document.getElementById('med-edit-purpose-' + id)?.value  || '').trim();
-  const memo     = (document.getElementById('med-edit-memo-' + id)?.value     || '').trim();
+  const name      = (document.getElementById('med-edit-name-' + id)?.value      || '').trim();
+  const interval  = parseInt(document.getElementById('med-edit-interval-' + id)?.value || '0', 10);
+  const lastTaken = (document.getElementById('med-edit-last-taken-' + id)?.value || '').trim();
+  const purpose   = (document.getElementById('med-edit-purpose-' + id)?.value   || '').trim();
+  const memo      = (document.getElementById('med-edit-memo-' + id)?.value      || '').trim();
   if (!name) { showToast('薬名を入力してください'); return; }
   if (!interval || interval < 1) { showToast('服用間隔を入力してください'); return; }
 
@@ -3097,7 +3107,7 @@ function saveMedEdit(id) {
   if (newStatus === 'ended') {
     _medEndPendingId = id;
     // 確認モーダルを開く前に入力値を仮保存
-    _medEndPendingEdit = { name, interval_days: interval, purpose, memo };
+    _medEndPendingEdit = { name, interval_days: interval, last_taken_date: lastTaken || undefined, purpose, memo };
     document.getElementById('med-end-modal').style.display = 'flex';
     return;
   }
@@ -3106,6 +3116,7 @@ function saveMedEdit(id) {
   const m = list.find(e => e.id === id);
   if (!m) return;
   m.name = name; m.interval_days = interval; m.purpose = purpose; m.memo = memo;
+  if (lastTaken) m.last_taken_date = lastTaken;
   m.status = newStatus;
   _medEditOpenId = null;
   delete _medEditState[id];
