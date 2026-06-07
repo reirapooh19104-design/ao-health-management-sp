@@ -2899,7 +2899,7 @@ function renderTodayMedSuppleChecks() {
     ...(isFilariaDay ? ['filaria_today'] : [])
   ];
 
-  const { todayIs: ursoTs } = ursoStatus(new Date());
+  const { todayIs: ursoTs } = ursoStatus(new Date(_currentFormDate));
 
   const medHtml = medItems.map(m => {
     let noteText = '';
