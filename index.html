@@ -4794,7 +4794,7 @@ function cancelEditRecipe() {
   renderRecipe();
 }
 
-function getRecipeValuesForForm() {
+function getRecipeValuesForForm(includeMemo = true) {
   const CAT_MAP = {
     '動物性タンパク質': 'protein',
     '穀類・芋類':       'grain',
@@ -4812,7 +4812,7 @@ function getRecipeValuesForForm() {
       .filter(item => item.name || item.amount)
       .map(item => [item.name, item.amount].filter(Boolean).join(' '))
       .join(' / ');
-    result[key] = sec.memo ? itemsText + '\n' + sec.memo : itemsText;
+    result[key] = (includeMemo && sec.memo) ? itemsText + '\n' + sec.memo : itemsText;
   });
   return result;
 }
@@ -5112,7 +5112,7 @@ function loadFormForDate(date) {
     if (badge) badge.style.display = 'block';
   } else {
     if (isToday) {
-      const rv = getRecipeValuesForForm();
+      const rv = getRecipeValuesForForm(false);
       document.getElementById('d-protein').value = rv.protein || DIARY_DEFAULTS.protein;
       document.getElementById('d-grain').value   = rv.grain   || DIARY_DEFAULTS.grain;
       document.getElementById('d-veg').value     = rv.veg     || DIARY_DEFAULTS.veg;
