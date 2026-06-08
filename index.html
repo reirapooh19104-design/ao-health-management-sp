@@ -4794,31 +4794,40 @@ function cancelEditRecipe() {
   renderRecipe();
 }
 
-function renderRecipeHint() {
+function getRecipeValuesForForm() {
   const CAT_MAP = {
-    '動物性タンパク質': 'hint-protein',
-    '穀類・芋類':       'hint-grain',
-    '野菜・きのこ類':   'hint-veg',
-    'その他・調味料':   'hint-other'
+    '動物性タンパク質': 'protein',
+    '穀類・芋類':       'grain',
+    '野菜・きのこ類':   'veg',
+    'その他・調味料':   'other'
   };
-  const ids = Object.values(CAT_MAP);
+  const result = { protein: '', grain: '', veg: '', other: '' };
   const recipes = getRecipes();
   const recipe = _currentRecipeId ? recipes.find(r => r.id === _currentRecipeId) : null;
-  if (!recipe) {
-    ids.forEach(id => { const el = document.getElementById(id); if (el) el.textContent = ''; });
-    return;
-  }
-  ids.forEach(id => { const el = document.getElementById(id); if (el) el.textContent = ''; });
+  if (!recipe) return result;
   (recipe.sections || []).forEach(sec => {
-    const elId = CAT_MAP[sec.title];
-    if (!elId) return;
-    const el = document.getElementById(elId);
-    if (!el) return;
+    const key = CAT_MAP[sec.title];
+    if (!key) return;
     const itemsText = (sec.items || [])
       .filter(item => item.name || item.amount)
       .map(item => [item.name, item.amount].filter(Boolean).join(' '))
       .join(' / ');
-    el.textContent = sec.memo ? itemsText + '\n' + sec.memo : itemsText;
+    result[key] = sec.memo ? itemsText + '\n' + sec.memo : itemsText;
+  });
+  return result;
+}
+
+function renderRecipeHint() {
+  const FIELD_TO_HINT = {
+    protein: 'hint-protein',
+    grain:   'hint-grain',
+    veg:     'hint-veg',
+    other:   'hint-other'
+  };
+  const vals = getRecipeValuesForForm();
+  Object.entries(FIELD_TO_HINT).forEach(([field, id]) => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = vals[field];
   });
 }
 
@@ -5102,10 +5111,18 @@ function loadFormForDate(date) {
     else autoCalc();
     if (badge) badge.style.display = 'block';
   } else {
-    document.getElementById('d-protein').value = isToday ? DIARY_DEFAULTS.protein : '';
-    document.getElementById('d-grain').value   = isToday ? DIARY_DEFAULTS.grain   : '';
-    document.getElementById('d-veg').value     = isToday ? DIARY_DEFAULTS.veg     : '';
-    document.getElementById('d-other').value   = isToday ? DIARY_DEFAULTS.other   : '';
+    if (isToday) {
+      const rv = getRecipeValuesForForm();
+      document.getElementById('d-protein').value = rv.protein || DIARY_DEFAULTS.protein;
+      document.getElementById('d-grain').value   = rv.grain   || DIARY_DEFAULTS.grain;
+      document.getElementById('d-veg').value     = rv.veg     || DIARY_DEFAULTS.veg;
+      document.getElementById('d-other').value   = rv.other   || DIARY_DEFAULTS.other;
+    } else {
+      document.getElementById('d-protein').value = '';
+      document.getElementById('d-grain').value   = '';
+      document.getElementById('d-veg').value     = '';
+      document.getElementById('d-other').value   = '';
+    }
     document.getElementById('d-weight').value  = '';
     document.getElementById('d-finish').value  = '完食';
     document.getElementById('d-memo').value    = '';
