@@ -4811,7 +4811,7 @@ function getRecipeValuesForForm(includeMemo = true) {
     const itemsText = (sec.items || [])
       .filter(item => item.name || item.amount)
       .map(item => [item.name, item.amount].filter(Boolean).join(' '))
-      .join(' / ');
+      .join('・');
     result[key] = (includeMemo && sec.memo) ? itemsText + '\n' + sec.memo : itemsText;
   });
   return result;
