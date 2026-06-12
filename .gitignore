@@ -1,0 +1,10 @@
+# あおの健康データ・バックアップ類（GitHubには上げない）
+ao健康バックアップ/
+バックアップ/
+ao-health-*.json
+
+# GASコードのローカル保管ファイル（GAS URLを含む可能性があるため上げない）
+Google Apps Script*.gas
+Google Apps Script*.txt
+*コード最新版*
+*コード（変更前*
