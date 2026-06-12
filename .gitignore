@@ -8,3 +8,9 @@ Google Apps Script*.gas
 Google Apps Script*.txt
 *コード最新版*
 *コード（変更前*
+
+# macOS が自動生成するファイル（不要）
+.DS_Store
+
+# 古いCLAUDE.md（ローカル保管のみ・GitHubには上げない）
+CLAUDE-old.md
