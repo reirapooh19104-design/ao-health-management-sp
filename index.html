@@ -1263,7 +1263,7 @@ async function syncFromCloud() {
     }
 
     Object.keys(gasData).forEach(k => {
-      if (k.startsWith('autobackup_') || k.startsWith('_ts_') || k === 'gas_url' || k.startsWith('filaria_') || k.startsWith('custom_')) return;
+      if (k.startsWith('autobackup_') || k.startsWith('_ts_') || k === 'gas_url' || k.startsWith('filaria_') || (k.startsWith('custom_') && k !== 'custom_meal_checks' && k !== 'custom_health_checks')) return;
 
       // tombstone: deleted_ids はマージして早期リターン
       if (k === 'deleted_ids') {
@@ -1350,6 +1350,24 @@ async function syncFromCloud() {
           }
         });
         localStorage.setItem('supple', JSON.stringify(filterByTombstone('supple', Array.from(suppleMap.values()))));
+      } else if (k === 'custom_meal_checks' || k === 'custom_health_checks') {
+        // チェック項目定義: id単位マージ + 安全ガード(cloud が空なら保持) + tombstone
+        const isEmpty = gasVal == null || (Array.isArray(gasVal) && gasVal.length === 0);
+        if (isEmpty) return;
+        const localItems = load(k, []);
+        const itemMap = new Map(localItems.map(e => [e.id, e]));
+        (gasVal || []).forEach(ge => {
+          if (!ge.id) return;
+          const le = itemMap.get(ge.id);
+          if (!le) {
+            itemMap.set(ge.id, ge);
+          } else {
+            const geTs = Number(ge._ts || 0);
+            const leTs = Number(le._ts || 0);
+            if (geTs >= leTs) itemMap.set(ge.id, ge);
+          }
+        });
+        localStorage.setItem(k, JSON.stringify(filterByTombstone(k, Array.from(itemMap.values()))));
       } else if (k === 'next_visit') {
         // next_visit: エントリ単位マージ + 安全ガード(cloud が空なら保持)
         const nvIsEmpty = gasVal == null || (Array.isArray(gasVal) && gasVal.length === 0);
@@ -2081,6 +2099,7 @@ function deleteMealItem(id) {
   const item = items.find(i => i.id === id);
   if (!item) return;
   if (!confirm(`「${item.label}」を削除しますか？`)) return;
+  addDeletedId('custom_meal_checks', id);
   setMealChecks(items.filter(i => i.id !== id));
   _mealEditItemId = null;
   renderMealCard();
@@ -2230,6 +2249,7 @@ function deleteHealthItem(id) {
   const item = items.find(i => i.id === id);
   if (!item) return;
   if (!confirm(`「${item.label}」を削除しますか？`)) return;
+  addDeletedId('custom_health_checks', id);
   setHealthChecks(items.filter(i => i.id !== id));
   _healthEditItemId = null;
   renderHealthCard();
