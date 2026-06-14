@@ -1975,7 +1975,7 @@ function updateMetrics() {
 function renderMealCard() {
   const el = document.getElementById('meal-check-card');
   if (!el) return;
-  const items = getMealChecks();
+  const items = getMealChecks().slice().sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
   const c = getChecks();
 
   const editBtn = _mealEditMode
@@ -2071,7 +2071,7 @@ function saveMealItemEdit(id) {
   const items = getMealChecks();
   const item = items.find(i => i.id === id);
   if (!item) return;
-  item.label = label; item.sub = sub;
+  item.label = label; item.sub = sub; item._ts = Date.now();
   setMealChecks(items);
   _mealEditItemId = null;
   renderMealCard();
@@ -2090,7 +2090,9 @@ function addMealItem() {
   const label = (document.getElementById('meal-add-input')?.value || '').trim();
   if (!label) { showToast('項目名を入力してください'); return; }
   const items = getMealChecks();
-  items.push({ id: 'meal_' + Date.now(), label, sub: '' });
+  const maxOrder = items.reduce((m, i) => Math.max(m, i.order ?? -1), -1);
+  const now = Date.now();
+  items.push({ id: 'meal_' + now, label, sub: '', _ts: now, order: maxOrder + 1 });
   setMealChecks(items);
   renderMealCard();
   updateMetrics();
@@ -2107,9 +2109,11 @@ function mealDrop(e, idx) {
   e.preventDefault();
   e.currentTarget.classList.remove('drag-over');
   if (_mealDragSrcIdx === null || _mealDragSrcIdx === idx) { _mealDragSrcIdx = null; return; }
-  const items = getMealChecks();
+  const items = getMealChecks().slice().sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
   const [moved] = items.splice(_mealDragSrcIdx, 1);
   items.splice(idx, 0, moved);
+  const now = Date.now();
+  items.forEach((item, i) => { item.order = i; item._ts = now; });
   setMealChecks(items);
   _mealDragSrcIdx = null;
   renderMealCard();
@@ -2121,7 +2125,7 @@ function mealDrop(e, idx) {
 function renderHealthCard() {
   const el = document.getElementById('health-check-card');
   if (!el) return;
-  const items = getHealthChecks();
+  const items = getHealthChecks().slice().sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
   const c = getChecks();
 
   const editBtn = _healthEditMode
@@ -2216,7 +2220,7 @@ function saveHealthItemEdit(id) {
   const items = getHealthChecks();
   const item = items.find(i => i.id === id);
   if (!item) return;
-  item.label = label; item.sub = sub;
+  item.label = label; item.sub = sub; item._ts = Date.now();
   setHealthChecks(items);
   _healthEditItemId = null;
   renderHealthCard();
@@ -2235,7 +2239,9 @@ function addHealthItem() {
   const label = (document.getElementById('health-add-input')?.value || '').trim();
   if (!label) { showToast('項目名を入力してください'); return; }
   const items = getHealthChecks();
-  items.push({ id: 'health_' + Date.now(), label, sub: '' });
+  const maxOrder = items.reduce((m, i) => Math.max(m, i.order ?? -1), -1);
+  const now = Date.now();
+  items.push({ id: 'health_' + now, label, sub: '', _ts: now, order: maxOrder + 1 });
   setHealthChecks(items);
   renderHealthCard();
   updateMetrics();
@@ -2252,9 +2258,11 @@ function healthDrop(e, idx) {
   e.preventDefault();
   e.currentTarget.classList.remove('drag-over');
   if (_healthDragSrcIdx === null || _healthDragSrcIdx === idx) { _healthDragSrcIdx = null; return; }
-  const items = getHealthChecks();
+  const items = getHealthChecks().slice().sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
   const [moved] = items.splice(_healthDragSrcIdx, 1);
   items.splice(idx, 0, moved);
+  const now = Date.now();
+  items.forEach((item, i) => { item.order = i; item._ts = now; });
   setHealthChecks(items);
   _healthDragSrcIdx = null;
   renderHealthCard();
@@ -2576,6 +2584,38 @@ function cancelNoteEdit() {
 // ============================================================
 // SUPPLEMENTS
 // ============================================================
+function migrateCheckItems() {
+  const now = Date.now();
+  [
+    { key: 'custom_meal_checks',   defaults: DEFAULT_MEAL_CHECKS },
+    { key: 'custom_health_checks', defaults: DEFAULT_HEALTH_CHECKS },
+  ].forEach(({ key, defaults }) => {
+    const raw = localStorage.getItem(key);
+    let items;
+    if (raw) {
+      try { items = JSON.parse(raw); } catch { return; }
+    } else {
+      items = defaults.map(i => ({ ...i }));
+    }
+    if (!Array.isArray(items)) return;
+    let changed = !raw;
+    const migrated = items.map((item, idx) => {
+      const needsTs    = !('_ts' in item);
+      const needsOrder = !('order' in item);
+      if (!needsTs && !needsOrder) return item;
+      changed = true;
+      const entry = { ...item };
+      if (needsTs)    entry._ts   = now;
+      if (needsOrder) entry.order = idx;
+      return entry;
+    });
+    if (changed) {
+      localStorage.setItem(key, JSON.stringify(migrated));
+      console.log('[migrateCheckItems] ' + key + ': ' + migrated.length + ' entries');
+    }
+  });
+}
+
 function migrateSupplements() {
   const list = load('supple', null);
   if (!list || !Array.isArray(list)) return;
@@ -5221,6 +5261,7 @@ function renderAll() {
 }
 
 autoBackup(); // renderAllより前に自動バックアップ
+migrateCheckItems();
 migrateSupplements();
 migrateNextVisitItems();
 migrateAoRecords();
