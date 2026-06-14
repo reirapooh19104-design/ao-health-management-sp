@@ -1036,12 +1036,12 @@ function getMealChecks() {
   try { return JSON.parse(localStorage.getItem('custom_meal_checks') || 'null') || DEFAULT_MEAL_CHECKS.map(i=>({...i})); }
   catch { return DEFAULT_MEAL_CHECKS.map(i=>({...i})); }
 }
-function setMealChecks(d) { localStorage.setItem('custom_meal_checks', JSON.stringify(d)); }
+function setMealChecks(d) { save('custom_meal_checks', d); }
 function getHealthChecks() {
   try { return JSON.parse(localStorage.getItem('custom_health_checks') || 'null') || DEFAULT_HEALTH_CHECKS.map(i=>({...i})); }
   catch { return DEFAULT_HEALTH_CHECKS.map(i=>({...i})); }
 }
-function setHealthChecks(d) { localStorage.setItem('custom_health_checks', JSON.stringify(d)); }
+function setHealthChecks(d) { save('custom_health_checks', d); }
 function getAllCheckIds() {
   const mealIds   = getMealChecks().map(i => i.id);
   const healthIds = getHealthChecks().map(i => i.id);
@@ -1474,7 +1474,7 @@ async function pushAllToCloud() {
   const dataKeys = [];
   for (let i = 0; i < localStorage.length; i++) {
     const k = localStorage.key(i);
-    if (k && !k.startsWith('autobackup_') && !k.startsWith('_ts_') && k !== 'gas_url' && !k.startsWith('filaria_') && !k.startsWith('custom_') && k !== 'view_month_diary' && k !== 'view_month_notes' && k !== 'selected_recipe_id') dataKeys.push(k);
+    if (k && !k.startsWith('autobackup_') && !k.startsWith('_ts_') && k !== 'gas_url' && !k.startsWith('filaria_') && (k === 'custom_meal_checks' || k === 'custom_health_checks' || !k.startsWith('custom_')) && k !== 'view_month_diary' && k !== 'view_month_notes' && k !== 'selected_recipe_id') dataKeys.push(k);
   }
   // 動的キー（chk_・day_memo_）で空値のものをスキップ（静的キーは必ず送る）
   const filteredDataKeys = dataKeys.filter(k => {
