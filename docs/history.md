@@ -41,6 +41,7 @@
 - URL設定UI（今日タブのボタン＋初回起動モーダル・バリデーション・6162edc）
 - gas_url は pushAllToCloud/syncFromCloud の対象外（送らない・上書きされない）
 - restoreFromBackup でも gas_url を保護
+- ※ gas_url を同期・復元から保護する設計判断の理由は decisions.md「gas_url を同期・復元から保護する理由」を参照
 - 旧デプロイ（2026/04/29・AKfycbyUDtY2…）はアーカイブ済み＝旧URL失効済み
 - 現行URLは新デプロイ（AKfycbzkIbiNqY…/exec）。各デバイスのlocalStorageに設定
 
