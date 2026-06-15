@@ -1462,6 +1462,15 @@ async function syncFromCloud() {
         if (arMerged.some(e => !gasArKeySet.has(arKey(e)))) {
           pushToCloud('ao_records', arMerged);
         }
+      } else if (k.startsWith('chk_')) {
+        // chk_<日付>: 項目単位 OR マージ（true は消えない・断片が完全データに勝つバグ対策）
+        if (gasVal == null || typeof gasVal !== 'object' || Array.isArray(gasVal)) return;
+        const localVal = load(k, {});
+        const merged = { ...localVal };
+        for (const [id, val] of Object.entries(gasVal)) {
+          merged[id] = !!(localVal[id] || val);
+        }
+        localStorage.setItem(k, JSON.stringify(merged));
       } else if (gasTs > localTs || (gasTs === 0 && localTs === 0)) {
         // 安全ガード: GAS が空配列・null・undefined のときは上書きしない
         // (誤って空になった可能性が高く、ローカル保持を優先)
@@ -1586,6 +1595,7 @@ function save(key, val) {
   localStorage.setItem(key, JSON.stringify(val));
   const ts = Date.now();
   localStorage.setItem('_ts_' + key, ts);
+  if (key.startsWith('chk_') && typeof val === 'object' && val !== null && Object.keys(val).length === 0) return;
   pushToCloud(key, val);
   pushToCloud('_ts_' + key, ts);
 }
