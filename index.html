@@ -392,6 +392,10 @@ body {
   <div class="header-menu" onclick="showToast('CSV書き出しボタンでデータをバックアップできます')">···</div>
 </header>
 
+<div id="maintenance-banner" style="display:none;background:#FFA726;color:#3a2a00;font-weight:bold;text-align:center;padding:8px;font-size:14px">
+  ⚠️ メンテナンスモード中：起動時の自動同期を停止しています
+</div>
+
 <nav class="tabs">
   <div class="tab active" onclick="switchTab('today')">今日</div>
   <div class="tab"        onclick="switchTab('notes')">健康ノート</div>
@@ -979,6 +983,9 @@ body {
     <div id="gas-url-error" style="color:#c0392b;font-size:13px;margin-bottom:8px;display:none"></div>
     <button class="btn-primary" style="width:100%" onclick="saveGasUrlFromModal()">保存して同期を有効にする</button>
     <button class="btn-secondary" style="width:100%;margin-top:8px" onclick="closeGasUrlModal()">キャンセル</button>
+    <hr style="margin:16px 0;border:none;border-top:1px solid #eee">
+    <div class="modal-sub">作業中、起動時の自動同期（受信）だけを一時停止できます。手動の「全データGAS同期」は影響を受けません。</div>
+    <button id="maintenance-toggle-btn" class="btn-secondary" style="width:100%" onclick="toggleMaintenanceMode()">メンテナンスモード：OFF（タップでONにする）</button>
   </div>
 </div>
 
@@ -1184,6 +1191,25 @@ function getGasUrl() {
 }
 function setGasUrl(url) {
   localStorage.setItem('gas_url', url);
+}
+
+function isMaintenanceMode() {
+  return localStorage.getItem('maintenance_mode') === 'on';
+}
+function setMaintenanceMode(on) {
+  if (on) localStorage.setItem('maintenance_mode', 'on');
+  else localStorage.removeItem('maintenance_mode');
+  renderMaintenanceBanner();
+}
+function toggleMaintenanceMode() {
+  setMaintenanceMode(!isMaintenanceMode());
+}
+function renderMaintenanceBanner() {
+  const on = isMaintenanceMode();
+  const banner = document.getElementById('maintenance-banner');
+  if (banner) banner.style.display = on ? 'block' : 'none';
+  const btn = document.getElementById('maintenance-toggle-btn');
+  if (btn) btn.textContent = on ? 'メンテナンスモード：ON（タップでOFFにする）' : 'メンテナンスモード：OFF（タップでONにする）';
 }
 
 function _syncStatus(msg, type) {
@@ -5302,7 +5328,12 @@ initConsultationKeys();
 renderAll();
 document.getElementById('weight-date').value = todayKey();
 document.getElementById('cs-consult-date').value = todayKey();
-syncFromCloud();
+renderMaintenanceBanner();
+if (isMaintenanceMode()) {
+  console.warn('[メンテナンスモード] 起動時の自動同期をスキップしました');
+} else {
+  syncFromCloud();
+}
 if (!getGasUrl()) showGasUrlModal();
 
 // Mac音声入力対応：compositionイベントでIME進行中は変換しない
