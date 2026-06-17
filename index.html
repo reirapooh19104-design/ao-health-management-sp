@@ -1232,6 +1232,36 @@ async function pushToCloud(key, val) {
   } catch {}
 }
 
+// 離脱時（タブ閉じ・リロード・バックグラウンド化）にchk_デバウンスの保留分を取りこぼさず送る
+function flushChkPending() {
+  if (!getGasUrl()) return;
+  for (const key of Object.keys(_chkPushPending)) {
+    const pending = _chkPushPending[key];
+    clearTimeout(_chkPushTimers[key]);
+    delete _chkPushPending[key];
+    delete _chkPushTimers[key];
+    if (!pending) continue;
+    try {
+      fetch(getGasUrl(), {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain' },
+        body: JSON.stringify({ key, value: pending.val }),
+        keepalive: true
+      });
+      fetch(getGasUrl(), {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain' },
+        body: JSON.stringify({ key: '_ts_' + key, value: pending.ts }),
+        keepalive: true
+      });
+    } catch {}
+  }
+}
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden') flushChkPending();
+});
+window.addEventListener('pagehide', () => { flushChkPending(); });
+
 // ── tombstone helpers ──────────────────────────────
 function getDeletedIds() {
   try {
