@@ -1182,6 +1182,8 @@ let _aoRecordSearchQuery    = '';
 let _aoRecordSearchDebounce = null;
 let _healthNoteSearchQuery = '';
 let _noteSearchDebounce = null;
+let _chkPushTimers = {};   // key(chk_<日付>) -> setTimeoutのID
+let _chkPushPending = {};  // key(chk_<日付>) -> { val, ts }
 
 // ============================================================
 // CLOUD SYNC (Google Apps Script)
@@ -1622,6 +1624,19 @@ function save(key, val) {
   const ts = Date.now();
   localStorage.setItem('_ts_' + key, ts);
   if (key.startsWith('chk_') && typeof val === 'object' && val !== null && Object.keys(val).length === 0) return;
+  if (key.startsWith('chk_')) {
+    _chkPushPending[key] = { val, ts };
+    clearTimeout(_chkPushTimers[key]);
+    _chkPushTimers[key] = setTimeout(() => {
+      const pending = _chkPushPending[key];
+      delete _chkPushPending[key];
+      delete _chkPushTimers[key];
+      if (!pending) return;
+      pushToCloud(key, pending.val);
+      pushToCloud('_ts_' + key, pending.ts);
+    }, 1500);
+    return;
+  }
   pushToCloud(key, val);
   pushToCloud('_ts_' + key, ts);
 }
