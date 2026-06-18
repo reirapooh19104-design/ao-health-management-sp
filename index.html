@@ -5144,7 +5144,7 @@ function switchTab(name) {
 // ============================================================
 function exportData() {
   const payload = {
-    ver: 2,
+    ver: 3,
     exported: new Date().toISOString(),
     healthNotes: getNotes(),
     diary: getDiary(),
@@ -5155,6 +5155,9 @@ function exportData() {
     aoRecords: getAoRecords(),
     consultationSummary: getConsultationSummary(),
     consultationHistory: getConsultationHistory(),
+    medList: getMedList(),
+    customMealChecks: getMealChecks(),
+    customHealthChecks: getHealthChecks(),
     checks: {}
   };
   for (let i = 0; i < localStorage.length; i++) {
@@ -5195,6 +5198,9 @@ function importData(e) {
       if (d.aoRecords)           setAoRecords(d.aoRecords);
       if (d.consultationSummary) setConsultationSummary(d.consultationSummary);
       if (d.consultationHistory) setConsultationHistory(d.consultationHistory);
+      if (d.medList)             setMedList(d.medList);
+      if (d.customMealChecks)    setMealChecks(d.customMealChecks);
+      if (d.customHealthChecks)  setHealthChecks(d.customHealthChecks);
       if (d.checks) Object.keys(d.checks).forEach(k => save(k, d.checks[k]));
       renderAll();
       showToast('インポートしました');
