@@ -1229,7 +1229,7 @@ async function pushToCloud(key, val) {
       headers: { 'Content-Type': 'text/plain' },
       body: JSON.stringify({ key, value: val })
     });
-  } catch {}
+  } catch (e) { console.error('[push失敗] pushToCloud key=' + key, e); }
 }
 
 // 離脱時（タブ閉じ・リロード・バックグラウンド化）にchk_デバウンスの保留分を取りこぼさず送る
@@ -1254,7 +1254,7 @@ function flushChkPending() {
         body: JSON.stringify({ key: '_ts_' + key, value: pending.ts }),
         keepalive: true
       });
-    } catch {}
+    } catch (e) { console.error('[push失敗] flushChkPending', e); }
   }
 }
 document.addEventListener('visibilitychange', () => {
