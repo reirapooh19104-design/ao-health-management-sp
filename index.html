@@ -1302,7 +1302,12 @@ function filterByTombstone(keyName, arr) {
   if (ids.length === 0) return arr;
   // health_notes は id がないため date で比較、それ以外は id で比較
   return arr.filter(item => {
+    // id も date も持たない要素（文字列要素・id/date欠落オブジェクト）は
+    // 照合不能のため判定をスキップして常に保持する（"undefined"キーへの縮退を防ぐ）
+    if (item.id === undefined && item.date === undefined) return true;
     const key = item.id !== undefined ? String(item.id) : String(item.date);
+    // 万一 deleted_ids 側に "undefined" が混入していても、それを根拠に削除しない
+    if (key === 'undefined') return true;
     return !ids.includes(key);
   });
 }
