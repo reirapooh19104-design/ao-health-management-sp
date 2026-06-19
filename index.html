@@ -389,7 +389,7 @@ body {
     <p>トイプードル・雌・<span id="dog-age">—</span></p>
     <p id="sync-status" class="sync-status"></p>
   </div>
-  <div class="header-menu" onclick="showToast('CSV書き出しボタンでデータをバックアップできます')">···</div>
+  <div class="header-menu" onclick="showToast('バックアップ書き出しボタンでデータを保存できます（JSON形式・全データ）')">···</div>
 </header>
 
 <div id="maintenance-banner" style="display:none;background:#FFA726;color:#3a2a00;font-weight:bold;text-align:center;padding:8px;font-size:14px">
@@ -586,8 +586,8 @@ body {
   </div>
 
   <div class="export-row" style="flex-wrap:wrap;gap:6px">
-    <button class="btn-secondary" onclick="exportData()">CSV書き出し</button>
-    <button class="btn-secondary" onclick="document.getElementById('file-import').click()">CSV読み込み</button>
+    <button class="btn-secondary" onclick="exportData()">バックアップ書き出し</button>
+    <button class="btn-secondary" onclick="document.getElementById('file-import').click()">バックアップ読み込み</button>
     <input type="file" id="file-import" accept=".json" style="display:none" onchange="importData(event)">
     <button class="btn-secondary" onclick="showBackupModal()">履歴から復元</button>
     <button class="btn-secondary" onclick="pushAllToCloud()">全データGAS同期</button>
