@@ -1445,11 +1445,12 @@ async function syncFromCloud() {
           }
         });
         const nvMerged = Array.from(nvMap.values());
-        localStorage.setItem('next_visit', JSON.stringify(filterByTombstone('next_visit', nvMerged)));
+        const nvClean = filterByTombstone('next_visit', nvMerged);
+        localStorage.setItem('next_visit', JSON.stringify(nvClean));
         // ローカルにあってクラウドにない項目があればマージ結果をGASに書き戻す
         const gasNvKeySet = new Set((gasVal || []).map(ge => nvKey(ge)));
-        if (nvMerged.some(e => !gasNvKeySet.has(nvKey(e)))) {
-          pushToCloud('next_visit', nvMerged);
+        if (nvClean.some(e => !gasNvKeySet.has(nvKey(e)))) {
+          pushToCloud('next_visit', nvClean);
         }
       } else if (k === 'consultation_summary') {
         // consultation_summary: エントリ単位マージ + 安全ガード(cloud が空なら保持)
@@ -1470,11 +1471,12 @@ async function syncFromCloud() {
           }
         });
         const csMerged = Array.from(csMap.values());
-        localStorage.setItem('consultation_summary', JSON.stringify(filterByTombstone('consultation_summary', csMerged)));
+        const csClean = filterByTombstone('consultation_summary', csMerged);
+        localStorage.setItem('consultation_summary', JSON.stringify(csClean));
         // ローカルにあってクラウドにない項目があればマージ結果をGASに書き戻す
         const gasCsKeySet = new Set((gasVal || []).map(ge => csKey(ge)));
-        if (csMerged.some(e => !gasCsKeySet.has(csKey(e)))) {
-          pushToCloud('consultation_summary', csMerged);
+        if (csClean.some(e => !gasCsKeySet.has(csKey(e)))) {
+          pushToCloud('consultation_summary', csClean);
         }
       } else if (k === 'consultation_history') {
         // consultation_history: エントリ単位マージ + 安全ガード(cloud が空なら保持)
@@ -1494,10 +1496,11 @@ async function syncFromCloud() {
           }
         });
         const chMerged = Array.from(chMap.values());
-        localStorage.setItem('consultation_history', JSON.stringify(filterByTombstone('consultation_history', chMerged)));
+        const chClean = filterByTombstone('consultation_history', chMerged);
+        localStorage.setItem('consultation_history', JSON.stringify(chClean));
         const gasChKeySet = new Set((gasVal || []).map(ge => chKey(ge)));
-        if (chMerged.some(e => !gasChKeySet.has(chKey(e)))) {
-          pushToCloud('consultation_history', chMerged);
+        if (chClean.some(e => !gasChKeySet.has(chKey(e)))) {
+          pushToCloud('consultation_history', chClean);
         }
       } else if (k === 'ao_records') {
         // ao_records: エントリ単位マージ + 安全ガード(cloud が空なら保持)
@@ -1515,10 +1518,11 @@ async function syncFromCloud() {
           }
         });
         const arMerged = Array.from(arMap.values());
-        localStorage.setItem('ao_records', JSON.stringify(filterByTombstone('ao_records', arMerged)));
+        const arClean = filterByTombstone('ao_records', arMerged);
+        localStorage.setItem('ao_records', JSON.stringify(arClean));
         const gasArKeySet = new Set((gasVal || []).map(ge => arKey(ge)));
-        if (arMerged.some(e => !gasArKeySet.has(arKey(e)))) {
-          pushToCloud('ao_records', arMerged);
+        if (arClean.some(e => !gasArKeySet.has(arKey(e)))) {
+          pushToCloud('ao_records', arClean);
         }
       } else if (k.startsWith('chk_')) {
         // chk_<日付>: 項目単位 OR マージ（true は消えない・断片が完全データに勝つバグ対策）
