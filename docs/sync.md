@@ -35,9 +35,14 @@ GAS同期の特性と事故防止の鉄則。**同期をいじる前に必ず読
 - JSON.parse エラーキーはスキップ扱い（2026-05-21）
 
 ## 既知の落とし穴
-- `syncFromCloud()` はページロード直後に非同期実行し、完了時に `renderAll()` → `resetDiaryForm()` を呼ぶ
-  → フォーム編集中に sync が完了するとフォームが上書きされる（race condition）
-  → `loadFormForDate()` の diary entry 優先読みで緩和済みだが、初回保存前には注意
+- 〜2026-06-19まで：`syncFromCloud()` はページロード直後に非同期実行し、完了時に
+  `renderAll()` → `resetDiaryForm()`（today へ無条件リセット）を呼んでいたため、
+  過去日表示中に sync が完了すると表示日付が today に戻る race condition があった。
+  → **2026-06-19 commit 89aeb71 で修正済み**。`resetDiaryForm()` を `reloadDiaryForm()` に
+  改名し、`loadFormForDate(_currentFormDate)` で現在の表示日付を維持するよう変更。
+- push back を持つ4キー（次項参照）は、2026-06-19 commit 100f94b で push back送信にも
+  `filterByTombstone` が効くよう修正済み。修正前は localStorage保存にのみ適用され、
+  push back送信は未適用の生マージ結果を送っていたため、削除済みidがGASへ復活する経路があった。
 - カレンダー（`renderCalendar`）のドット表示は `getDiary()` を直接読む。day_memo は参照しない
 
 ### マイグレーション処理の注意点
@@ -104,9 +109,14 @@ GAS同期の特性と事故防止の鉄則。**同期をいじる前に必ず読
   LWW（Last-Write-Wins、同点はGAS優先）。GASが空ならローカル保持。
 - **`health_notes`**: 日付ごとに同上。tombstone フィルタあり。
 - **`supple`**: id（なければ name＝サプリ名）で LWW。GAS空なら保持。tombstone フィルタあり。
+  削除（`deleteSuppleById`）は tombstone（`deleted_ids.supple`）に記録する実装済みカテゴリの
+  お手本。なお薬管理（`med_list`）は削除自体がなく `status: 'ended'` の論理削除のみで配列から
+  要素を取り除かないため、tombstoneの前例にはあたらない（誤解しやすいので注記）。
 - **`next_visit` / `consultation_summary` / `consultation_history` / `ao_records`**:
   id で LWW。GAS空なら保持。tombstone フィルタあり。
-  ローカルにあってGASにない項目は `pushToCloud` で書き戻す。
+  ローカルにあってGASにない項目は `pushToCloud` で書き戻す（push back）。
+  2026-06-19 commit 100f94b 以降、この push back も `filterByTombstone` 適用後の配列を
+  送るように修正済み（保存・判定・送信の3箇所で同一の適用後配列を共通参照）。
 - **それ以外（単純キー）**: GASのタイムスタンプ > ローカルのタイムスタンプ（または両方ゼロ）の
   ときだけ上書き。GAS値が null / 空配列なら上書きしない（安全ガード）。
 

@@ -56,6 +56,23 @@
   doPost 側も setValues の一括書き込みに変更。
 - 結果：同期時間が約10分 → 約3秒に短縮（2026-05-30 v4デプロイ、PC実測3.2秒）。
 
+## 2026-06-19 push back tombstone修正・名称修正・検証・表示日付修正
+
+- push backのtombstone素通り修正（4キー）。`next_visit` / `consultation_summary` /
+  `consultation_history` / `ao_records` で、`filterByTombstone` が localStorage保存にのみ
+  適用され、push back送信（GASへの書き戻し）には未適用だった抜け穴を修正。
+  各キーで適用後配列（`nvClean`等）を1回作り、保存・push back発火判定・`pushToCloud`送信の
+  3箇所すべてで共通参照する形に統一（commit 100f94b）。
+- 「CSV書き出し/読み込み」→「バックアップ書き出し/読み込み」へ改名。実装（`exportData`/
+  `importData`）は最初からJSON完全版（ver:3）であり、ボタン名のみが実態と食い違っていた。
+  ヒントのトースト文言も実態（JSON形式・全データ）に合わせて更新（commit eef0728）。
+- P1-2（chk_<日付>の項目単位ORマージ、6/15 commit f136992）の挙動を調査・確認し、
+  「PCとスマホで別項目をチェック→sync後に両方反映される」仕様どおりに動くことを確定。
+  実装側の追加修正なし（調査のみで解決済みと判断）。
+- P3-1修正。`renderAll()`内で無条件に today へ表示日付を戻していた `resetDiaryForm()` を
+  `reloadDiaryForm()` に改名し、`loadFormForDate(_currentFormDate)` で現在の表示日付を
+  維持する形に変更。起動時は `_currentFormDate` が today 初期値のため挙動不変（commit 89aeb71）。
+
 ## GASコード（現在バージョン）
 - バージョン4（2026/05/30 11:05デプロイ）
 - 変更履歴：
