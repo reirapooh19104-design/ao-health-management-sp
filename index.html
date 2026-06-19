@@ -5302,7 +5302,7 @@ function loadFormForDate(date) {
     }
   }
 }
-function resetDiaryForm() { loadFormForDate(todayKey()); }
+function reloadDiaryForm() { loadFormForDate(_currentFormDate); }
 
 // ============================================================
 // BOOT
@@ -5367,7 +5367,7 @@ function renderAll() {
   renderRecipeHint();
   renderBodyWeights();
   renderWeightGraph();
-  resetDiaryForm();
+  reloadDiaryForm();
   initBloodForm();
 }
 
