@@ -453,6 +453,7 @@ body {
   }
   .print-table .print-indent {
     padding-left: 14pt;
+    vertical-align: middle;
   }
   .print-table .print-note {
     font-size: 8.5pt;
@@ -1157,7 +1158,7 @@ const PRINT_CONSTANTS = {
   spayed:  '済み',
   diet:    '手作り食で管理中',
   allergy: '大豆アレルギー（乾燥納豆で確認済み・大豆製品全般様子見中）',
-  history: '慢性の耳トラブル（マラセチア＋黄色ブドウ球菌の混合感染）',
+  history: '・慢性の耳トラブル（マラセチア＋黄色ブドウ球菌の混合感染）\n・肝機能障害（GPT高値：最高385→直近70（基準値17–78）・ウルソ休薬）',
 };
 
 // Blood test reference ranges
@@ -5550,7 +5551,7 @@ function buildAndPrint() {
       const statusPart = status ? ' 【' + status.trim() + '】' : '';
       vaccineRows += '<tr>'
         + '<td class="print-indent">' + escHtml(title.trim()) + '</td>'
-        + '<td style="white-space:pre-line">' + escHtml(detailText) + escHtml(statusPart) + '</td>'
+        + '<td style="white-space:pre-line;line-height:1.4">' + escHtml(detailText) + escHtml(statusPart) + '</td>'
         + '</tr>';
     });
   }
@@ -5564,7 +5565,7 @@ function buildAndPrint() {
     + '<tr><td>体重（最新）</td><td>' + escHtml(weightStr) + '</td></tr>'
     + '<tr><td>食事</td><td>' + escHtml(PC.diet) + '</td></tr>'
     + '<tr><td>アレルギー</td><td>' + escHtml(PC.allergy) + '</td></tr>'
-    + '<tr><td>既往</td><td>' + escHtml(PC.history) + '</td></tr>'
+    + '<tr><td>既往</td><td style="white-space:pre-line">' + escHtml(PC.history) + '</td></tr>'
     + vaccineRows
     + '</table>'
     + '</section>';
