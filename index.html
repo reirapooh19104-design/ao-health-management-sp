@@ -150,7 +150,7 @@ body {
 .note-item { padding: 10px 0; border-bottom: 1px solid var(--border); }
 .note-item:last-child { border-bottom: none; }
 .note-date { font-size: 12px; color: var(--text-light); margin-bottom: 3px; }
-.note-text { font-size: 14px; }
+.note-text { font-size: 14px; white-space: pre-wrap; }
 .note-hit { background: #F4C0D1; color: #993556; padding: 0 3px; border-radius: 2px; }
 .ao-hit   { background: #F4C0D1; color: #993556; padding: 0 3px; border-radius: 2px; }
 .vaccine-card { border: 1px solid var(--border); border-radius: 10px; padding: 14px; margin-bottom: 10px; }
@@ -214,7 +214,7 @@ body {
 .hist-dot.cat-life    { background: var(--cat-life); }
 .hist-dot.cat-other   { background: var(--cat-other); }
 .hist-body  { flex: 1; display: flex; flex-direction: column; }
-.hist-text { font-size: 14px; line-height: 1.5; }
+.hist-text { font-size: 14px; line-height: 1.5; white-space: pre-wrap; }
 .hist-actions { margin-top: 6px; }
 .ao-cat-btn { flex: 1; font-size: 11px; padding: 6px 4px; border: 0.5px solid var(--border); border-radius: 14px; background: #fff; color: var(--text-light); cursor: pointer; min-width: 0; font-family: inherit; }
 .ao-cat-btn.cat-medical.sel { background: #F0E5F2; color: #4A3666; border: 1px solid var(--cat-medical); }
@@ -263,7 +263,7 @@ body {
 .cs-item { display: flex; align-items: flex-start; gap: 8px; padding: 10px 0; border-bottom: 1px solid var(--border); }
 .cs-item:last-child { border-bottom: none; }
 .cs-item-body { flex: 1; min-width: 0; }
-.cs-item-text { font-size: 14px; line-height: 1.6; }
+.cs-item-text { font-size: 14px; line-height: 1.6; white-space: pre-wrap; }
 .cs-item-actions { display: flex; flex-direction: column; gap: 4px; flex-shrink: 0; }
 .cs-edit-btn { background: none; border: 1px solid var(--border); border-radius: 6px; font-size: 12px; color: var(--text-light); cursor: pointer; padding: 2px 8px; font-family: inherit; }
 .cs-edit-btn:hover { border-color: var(--green); color: var(--green); }
@@ -4301,7 +4301,7 @@ function renderGPT() {
       <div>
         <div style="font-size:11px;color:var(--text-light)">${yearStr}</div>
         <div style="font-size:18px;font-weight:700;line-height:1.2">${mdStr}</div>
-        <div style="font-size:13px;color:var(--text-light);margin-top:4px">${escHtml(r.doctorNote || '')}</div>
+        <div style="font-size:13px;color:var(--text-light);margin-top:4px;white-space:pre-wrap">${escHtml(r.doctorNote || '')}</div>
       </div>
       <div style="text-align:right;flex-shrink:0;padding-left:12px;padding-top:4px">
         ${gptDisp}${gotDisp}
