@@ -454,6 +454,7 @@ body {
   .print-table .print-indent {
     padding-left: 14pt;
     vertical-align: middle;
+    white-space: nowrap;
   }
   .print-table .print-note {
     font-size: 8.5pt;
@@ -5543,11 +5544,15 @@ function buildAndPrint() {
       const title  = (card.querySelector('.vaccine-title')  || {}).textContent || '';
       const detail = (card.querySelector('.vaccine-detail') || {}).innerHTML   || '';
       const status = (card.querySelector('.vaccine-status') || {}).textContent || '';
-      // brタグを改行に変換してテキスト化
+      // brタグを改行に変換し、各行の余白・空行を除去してテキスト化
+      // innerHTML取得時にbr前後の改行+インデントが混入するため split/trim/filter で圧縮
       const detailText = detail
         .replace(/<br\s*\/?>/gi, '\n')
         .replace(/<[^>]+>/g, '')
-        .trim();
+        .split('\n')
+        .map(function(l) { return l.trim(); })
+        .filter(function(l) { return l.length > 0; })
+        .join('\n');
       const statusPart = status ? ' 【' + status.trim() + '】' : '';
       vaccineRows += '<tr>'
         + '<td class="print-indent">' + escHtml(title.trim()) + '</td>'
