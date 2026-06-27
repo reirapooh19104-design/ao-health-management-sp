@@ -5663,7 +5663,7 @@ function buildAndPrint() {
     sectionDRows += '<tr>'
       + '<td style="white-space:nowrap">' + escHtml(t.date) + '</td>'
       + cells
-      + '<td>' + escHtml(t.doctorNote || '') + '</td>'
+      + '<td style="white-space:pre-wrap">' + escHtml(t.doctorNote || '') + '</td>'
       + '</tr>';
   });
 
