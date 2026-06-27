@@ -377,6 +377,94 @@ body {
 .btn-edit-icon { background:none; border:none; padding:4px 6px; cursor:pointer; font-size:15px; color:var(--text-light); line-height:1; }
 .btn-edit-icon.danger { color:#E05050; }
 .check-edit-row.drag-over { border-top:2px solid var(--green); }
+
+/* ======================================================
+   印刷用スタイル（@media print）
+   ====================================================== */
+@media print {
+  /* 通常のアプリUIをすべて非表示 */
+  body > *:not(#print-container) { display: none !important; }
+
+  body {
+    max-width: none;
+    margin: 0;
+    padding: 0;
+    background: #fff;
+  }
+
+  #print-container {
+    display: block !important;
+    font-family: 'Hiragino Sans', 'Yu Gothic UI', sans-serif;
+    color: #000;
+    background: #fff;
+    font-size: 10.5pt;
+    line-height: 1.55;
+    padding: 0;
+    margin: 0;
+  }
+
+  .print-doc-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    border-bottom: 2px solid #000;
+    padding-bottom: 7pt;
+    margin-bottom: 14pt;
+  }
+  .print-doc-title { font-size: 15pt; font-weight: 700; }
+  .print-doc-date  { font-size: 9.5pt; color: #333; }
+
+  .print-section {
+    margin-bottom: 14pt;
+    page-break-inside: avoid;
+  }
+  .print-section h2 {
+    font-size: 11pt;
+    font-weight: 700;
+    background: #eee;
+    padding: 3pt 7pt;
+    margin: 0 0 6pt;
+    border-left: 4px solid #333;
+    color: #000;
+  }
+
+  .print-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 9.5pt;
+  }
+  .print-table th,
+  .print-table td {
+    border: 1px solid #999;
+    padding: 3pt 5pt;
+    text-align: left;
+    vertical-align: top;
+  }
+  .print-table th {
+    background: #e8e8e8;
+    font-weight: 700;
+    white-space: nowrap;
+  }
+  .print-table .print-subheader {
+    background: #f3f3f3;
+    font-weight: 600;
+    font-size: 9pt;
+    color: #333;
+  }
+  .print-table .print-indent {
+    padding-left: 14pt;
+  }
+  .print-table .print-note {
+    font-size: 8.5pt;
+    color: #555;
+  }
+  /* 血液検査テーブルは列が多いのでフォントを小さく */
+  .print-bt-table { font-size: 8.5pt; }
+  .print-bt-table th,
+  .print-bt-table td { padding: 2pt 3pt; }
+  .print-flag-h { font-weight: 700; }
+  .print-flag-l { font-weight: 700; }
+}
 </style>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3/dist/tabler-icons.min.css">
@@ -594,6 +682,7 @@ body {
     <button class="btn-secondary" onclick="showBackupModal()">履歴から復元</button>
     <button class="btn-secondary" onclick="pushAllToCloud()">全データGAS同期</button>
     <button class="btn-secondary" onclick="showGasUrlModal()">GAS URL設定</button>
+    <button class="btn-secondary" onclick="buildAndPrint()">📄 病院用に印刷</button>
   </div>
 </div><!-- /today -->
 
@@ -1006,6 +1095,9 @@ body {
 
 </div><!-- /content -->
 
+<!-- 印刷専用コンテナ（通常時非表示・window.print()時のみ表示） -->
+<div id="print-container" style="display:none"></div>
+
 <div class="toast" id="toast"></div>
 
 <script>
@@ -1057,6 +1149,16 @@ function getAllCheckIds() {
   return [...mealIds, ...healthIds, ..._dynamicCheckIds];
 }
 const DENSITY      = { protein: 1.15, grain: 1.60, veg: 0.20 };
+
+// ── 印刷資料の固定情報（ここを編集すれば印刷内容に反映される） ──
+const PRINT_CONSTANTS = {
+  name:    '明桜（あお）',
+  breed:   'トイプードル',
+  spayed:  '済み',
+  diet:    '手作り食で管理中',
+  allergy: '大豆アレルギー（乾燥納豆で確認済み・大豆製品全般様子見中）',
+  history: '慢性の耳トラブル（マラセチア＋黄色ブドウ球菌の混合感染）',
+};
 
 // Blood test reference ranges
 const BT_REFS = {
@@ -5415,6 +5517,210 @@ if (!getGasUrl()) showGasUrlModal();
   const msUntilMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1) - now;
   setTimeout(function() { renderAll(); scheduleMidnightRefresh(); }, msUntilMidnight);
 })();
+
+// ============================================================
+// 印刷機能（buildAndPrint）
+// ============================================================
+function buildAndPrint() {
+  const PC = PRINT_CONSTANTS;
+  const now = new Date();
+  const dateStr = now.getFullYear() + '年' + (now.getMonth()+1) + '月' + now.getDate() + '日';
+
+  // ── A. 基本情報 ──────────────────────────────────────────
+  const weights = getBodyWeights();
+  const latestW = weights.length > 0
+    ? weights[weights.length - 1]
+    : null;
+  const weightStr = latestW ? latestW.weight + ' kg（' + latestW.date + '）' : '—';
+
+  // ワクチン欄：DOMから.vaccine-cardを読む
+  const vaccineCards = document.querySelectorAll('#pane-notes .vaccine-card');
+  let vaccineRows = '';
+  if (vaccineCards.length > 0) {
+    vaccineRows += '<tr><td colspan="2" class="print-subheader">ワクチン・予防接種</td></tr>';
+    vaccineCards.forEach(function(card) {
+      const title  = (card.querySelector('.vaccine-title')  || {}).textContent || '';
+      const detail = (card.querySelector('.vaccine-detail') || {}).innerHTML   || '';
+      const status = (card.querySelector('.vaccine-status') || {}).textContent || '';
+      // brタグを改行に変換してテキスト化
+      const detailText = detail
+        .replace(/<br\s*\/?>/gi, '\n')
+        .replace(/<[^>]+>/g, '')
+        .trim();
+      const statusPart = status ? ' 【' + status.trim() + '】' : '';
+      vaccineRows += '<tr>'
+        + '<td class="print-indent">' + escHtml(title.trim()) + '</td>'
+        + '<td style="white-space:pre-line">' + escHtml(detailText) + escHtml(statusPart) + '</td>'
+        + '</tr>';
+    });
+  }
+
+  const sectionA = '<section class="print-section">'
+    + '<h2>A. 基本情報・アレルギー</h2>'
+    + '<table class="print-table">'
+    + '<tr><td style="white-space:nowrap;width:9em">名前</td><td>' + escHtml(PC.name) + '</td></tr>'
+    + '<tr><td>犬種</td><td>' + escHtml(PC.breed) + '</td></tr>'
+    + '<tr><td>避妊</td><td>' + escHtml(PC.spayed) + '</td></tr>'
+    + '<tr><td>体重（最新）</td><td>' + escHtml(weightStr) + '</td></tr>'
+    + '<tr><td>食事</td><td>' + escHtml(PC.diet) + '</td></tr>'
+    + '<tr><td>アレルギー</td><td>' + escHtml(PC.allergy) + '</td></tr>'
+    + '<tr><td>既往</td><td>' + escHtml(PC.history) + '</td></tr>'
+    + vaccineRows
+    + '</table>'
+    + '</section>';
+
+  // ── B. サプリ・薬 ─────────────────────────────────────────
+  const medList   = getMedList().filter(function(m) { return m.status !== 'ended'; });
+  const suppleList = getSupple().filter(function(s) { return s.status !== 'stopped'; });
+
+  let sectionBRows = '';
+  medList.forEach(function(m) {
+    const freq = m.interval_days ? m.interval_days + '日に1回' : '';
+    const detail = [freq, m.memo].filter(Boolean).join('・');
+    sectionBRows += '<tr>'
+      + '<td>' + escHtml(m.name) + '</td>'
+      + '<td>' + escHtml(detail) + '</td>'
+      + '<td>' + escHtml(m.purpose || '') + '</td>'
+      + '</tr>';
+  });
+  suppleList.forEach(function(s) {
+    sectionBRows += '<tr>'
+      + '<td>' + escHtml(s.name) + '</td>'
+      + '<td>' + escHtml(s.detail || '') + '</td>'
+      + '<td>' + escHtml(s.goal || '') + '</td>'
+      + '</tr>';
+  });
+
+  const sectionB = '<section class="print-section">'
+    + '<h2>B. 服用中のサプリ・薬</h2>'
+    + '<table class="print-table">'
+    + '<thead><tr><th>品目</th><th>量・頻度</th><th>目的</th></tr></thead>'
+    + '<tbody>' + (sectionBRows || '<tr><td colspan="3">—</td></tr>') + '</tbody>'
+    + '</table>'
+    + '</section>';
+
+  // ── C. 食事（現在選択中レシピ） ──────────────────────────
+  const recipes = getRecipes();
+  const selId = _currentRecipeId || localStorage.getItem('selected_recipe_id');
+  const recipe = (selId && recipes.find(function(r) { return r.id === selId; })) || recipes[0] || null;
+
+  let sectionCRows = '';
+  const recipeName = recipe ? recipe.name : '—';
+  if (recipe) {
+    (recipe.sections || []).forEach(function(sec) {
+      (sec.items || []).forEach(function(item, idx) {
+        sectionCRows += '<tr>'
+          + '<td style="white-space:nowrap">' + (idx === 0 ? escHtml(sec.title) : '') + '</td>'
+          + '<td>' + escHtml(item.name || '') + '</td>'
+          + '<td style="white-space:nowrap">' + escHtml(item.amount || '') + '</td>'
+          + '</tr>';
+      });
+      if (sec.memo) {
+        sectionCRows += '<tr><td></td>'
+          + '<td colspan="2" class="print-note">' + escHtml(sec.memo) + '</td></tr>';
+      }
+    });
+    if (recipe.note) {
+      sectionCRows += '<tr><td colspan="3" class="print-note">'
+        + escHtml(recipe.note) + '</td></tr>';
+    }
+    if (recipe.summary) {
+      sectionCRows += '<tr><td colspan="3" class="print-note">'
+        + escHtml(recipe.summary) + '</td></tr>';
+    }
+  }
+
+  const sectionC = '<section class="print-section">'
+    + '<h2>C. 食事内容（レシピ：' + escHtml(recipeName) + '）</h2>'
+    + '<table class="print-table">'
+    + '<thead><tr><th style="width:8em">カテゴリ</th><th>材料</th><th style="width:7em">分量</th></tr></thead>'
+    + '<tbody>' + (sectionCRows || '<tr><td colspan="3">—</td></tr>') + '</tbody>'
+    + '</table>'
+    + '</section>';
+
+  // ── D. 血液検査 ───────────────────────────────────────────
+  const bloodTests = getBloodTests();
+  const btHeaderCells = BT_KEYS.map(function(k) {
+    return '<th>' + BT_REFS[k].label + '</th>';
+  }).join('');
+
+  let sectionDRows = '';
+  bloodTests.forEach(function(t) {
+    const cells = BT_KEYS.map(function(k) {
+      if (t[k] == null) return '<td style="color:#aaa">—</td>';
+      const ref = BT_REFS[k];
+      let flag = '', cls = '';
+      if (t[k] > ref.hi)              { flag = ' H'; cls = ' class="print-flag-h"'; }
+      else if (ref.lo > 0 && t[k] < ref.lo) { flag = ' L'; cls = ' class="print-flag-l"'; }
+      return '<td' + cls + '>' + t[k] + flag + '</td>';
+    }).join('');
+    sectionDRows += '<tr>'
+      + '<td style="white-space:nowrap">' + escHtml(t.date) + '</td>'
+      + cells
+      + '<td>' + escHtml(t.doctorNote || '') + '</td>'
+      + '</tr>';
+  });
+
+  const sectionD = '<section class="print-section">'
+    + '<h2>D. 血液検査</h2>'
+    + '<table class="print-table print-bt-table">'
+    + '<thead><tr><th>日付</th>' + btHeaderCells + '<th>備考</th></tr></thead>'
+    + '<tbody>' + (sectionDRows || '<tr><td colspan="11">—</td></tr>') + '</tbody>'
+    + '</table>'
+    + '</section>';
+
+  // ── E. 体重推移 ───────────────────────────────────────────
+  const bodyWeights = getBodyWeights().slice().reverse();
+  let sectionERows = '';
+  bodyWeights.forEach(function(w) {
+    sectionERows += '<tr>'
+      + '<td>' + escHtml(w.date) + '</td>'
+      + '<td>' + escHtml(String(w.weight)) + ' kg</td>'
+      + '</tr>';
+  });
+
+  const sectionE = '<section class="print-section">'
+    + '<h2>E. 体重推移</h2>'
+    + '<table class="print-table" style="max-width:260pt">'
+    + '<thead><tr><th>日付</th><th>体重</th></tr></thead>'
+    + '<tbody>' + (sectionERows || '<tr><td colspan="2">—</td></tr>') + '</tbody>'
+    + '</table>'
+    + '</section>';
+
+  // ── F. あおの記録（通院履歴）──────────────────────────────
+  const catLabels = { medical:'病院', anomaly:'体調', life:'生活', care:'ケア', food:'食事', other:'その他' };
+  const aoRecords = getAoRecords().slice().sort(function(a, b) {
+    return String(a.date || '') < String(b.date || '') ? -1 : 1;
+  });
+  let sectionFRows = '';
+  aoRecords.forEach(function(r) {
+    sectionFRows += '<tr>'
+      + '<td style="white-space:nowrap">' + escHtml(r.date || '') + '</td>'
+      + '<td style="white-space:nowrap">' + escHtml(catLabels[r.category] || r.category || '') + '</td>'
+      + '<td>' + escHtml(r.text || '') + '</td>'
+      + '</tr>';
+  });
+
+  const sectionF = '<section class="print-section">'
+    + '<h2>F. 通院履歴（あおの記録）</h2>'
+    + '<table class="print-table">'
+    + '<thead><tr><th style="width:8em">日付</th><th style="width:4em">カテゴリ</th><th>内容</th></tr></thead>'
+    + '<tbody>' + (sectionFRows || '<tr><td colspan="3">—</td></tr>') + '</tbody>'
+    + '</table>'
+    + '</section>';
+
+  // ── 組み立て & 印刷 ──────────────────────────────────────
+  const container = document.getElementById('print-container');
+  container.innerHTML =
+    '<div class="print-doc-header">'
+    +   '<div class="print-doc-title">あお 健康記録まとめ</div>'
+    +   '<div class="print-doc-date">出力日：' + dateStr + '</div>'
+    + '</div>'
+    + sectionA + sectionB + sectionC + sectionD + sectionE + sectionF;
+
+  window.print();
+}
+
 </script>
 </body>
 </html>
