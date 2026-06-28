@@ -1159,7 +1159,8 @@ const PRINT_CONSTANTS = {
   spayed:  '済み',
   diet:    '手作り食で管理中',
   allergy: '大豆アレルギー（乾燥納豆で確認済み・大豆製品全般様子見中）',
-  history: '・慢性の耳トラブル（マラセチア＋黄色ブドウ球菌の混合感染）\n・肝機能障害（GPT高値：最高385→直近70（基準値17–78）・ウルソ休薬）',
+  history:     '・慢性の耳トラブル（マラセチア＋黄色ブドウ球菌の混合感染）\n・肝機能障害（GPT高値：最高385→直近70（基準値17–78）・ウルソ休薬）',
+  homeopathy:  '2025年8月13日よりレメディー摂取開始、現在も継続中',
 };
 
 // Blood test reference ranges
@@ -5571,9 +5572,27 @@ function buildAndPrint() {
     + '<tr><td>食事</td><td>' + escHtml(PC.diet) + '</td></tr>'
     + '<tr><td>アレルギー</td><td>' + escHtml(PC.allergy) + '</td></tr>'
     + '<tr><td>既往</td><td style="white-space:pre-line">' + escHtml(PC.history) + '</td></tr>'
+    + '<tr><td>ホメオパシー</td><td>' + escHtml(PC.homeopathy) + '</td></tr>'
     + vaccineRows
     + '</table>'
     + '</section>';
+
+  // ── A'. 次回来院時に伝えること ───────────────────────────
+  const nvItems = getNextVisitItems();
+  let sectionNV = '';
+  if (nvItems.length > 0) {
+    let nvRows = '';
+    nvItems.forEach(function(item, idx) {
+      const text = typeof item === 'string' ? item : (item.text || '');
+      nvRows += '<li style="white-space:pre-wrap;margin-bottom:4pt">' + escHtml(text) + '</li>';
+    });
+    sectionNV = '<section class="print-section">'
+      + '<h2>ご相談したいこと（次回来院時に伝えること）</h2>'
+      + '<ol style="margin:0;padding-left:1.8em;font-size:9.5pt;line-height:1.6">'
+      + nvRows
+      + '</ol>'
+      + '</section>';
+  }
 
   // ── B. サプリ・薬 ─────────────────────────────────────────
   const medList   = getMedList().filter(function(m) { return m.status !== 'ended'; });
@@ -5676,7 +5695,7 @@ function buildAndPrint() {
     + '</section>';
 
   // ── E. 体重推移 ───────────────────────────────────────────
-  const bodyWeights = getBodyWeights().slice().reverse();
+  const bodyWeights = getBodyWeights().slice().reverse().slice(0, 10);
   let sectionERows = '';
   bodyWeights.forEach(function(w) {
     sectionERows += '<tr>'
@@ -5722,7 +5741,7 @@ function buildAndPrint() {
     +   '<div class="print-doc-title">あお 健康記録まとめ</div>'
     +   '<div class="print-doc-date">出力日：' + dateStr + '</div>'
     + '</div>'
-    + sectionA + sectionB + sectionC + sectionD + sectionE + sectionF;
+    + sectionA + sectionNV + sectionB + sectionC + sectionD + sectionE + sectionF;
 
   window.print();
 }
