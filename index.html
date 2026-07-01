@@ -1276,6 +1276,7 @@ let _healthEditItemId  = null;
 let _healthDragSrcIdx  = null;
 let _csEditOpenId        = null;
 let _csResultOpenId      = null;
+let _nvEditOpenIdx       = null;
 let _csAggPending        = null;
 let _consultHistoryOpen  = false;
 let _noteEditDate        = null;
@@ -3603,13 +3604,39 @@ function renderNextVisitItems() {
     list.innerHTML = '<div style="color:var(--text-light);font-size:14px;padding:8px 0">項目はありません</div>';
     return;
   }
-  list.innerHTML = items.map((item, idx) =>
-    `<div class="nv-item">
+  list.innerHTML = items.map((item, idx) => {
+    const text = typeof item === 'string' ? item : item.text;
+    if (_nvEditOpenIdx === idx) {
+      return `<div class="nv-item">
+        <div class="nv-num">${idx+1}.</div>
+        <div class="cs-item-body">
+          <textarea class="nv-input" id="nv-edit-input" style="min-height:52px"></textarea>
+          <div class="cs-edit-row">
+            <button class="nv-add-btn" style="flex:1;margin-top:0" onclick="saveNextVisitItemEdit(${idx})">保存</button>
+            <button class="nv-add-btn" style="flex:1;margin-top:0;background:#F0EDE8;color:#888780" onclick="cancelNextVisitItemEdit()">キャンセル</button>
+          </div>
+        </div>
+      </div>`;
+    }
+    return `<div class="nv-item">
       <div class="nv-num">${idx+1}.</div>
-      <div class="nv-text">${escHtml(typeof item === 'string' ? item : item.text)}</div>
-      <button class="nv-del" onclick="deleteNextVisitItem(${idx})">×</button>
-    </div>`
-  ).join('');
+      <div class="cs-item-body">
+        <div class="nv-text">${escHtml(text)}</div>
+      </div>
+      <div class="cs-item-actions">
+        <button class="cs-edit-btn" onclick="openNextVisitItemEdit(${idx})">編集</button>
+        <button class="cs-edit-btn" style="border-color:transparent;color:#888780" onclick="deleteNextVisitItem(${idx})">削除</button>
+      </div>
+    </div>`;
+  }).join('');
+  if (_nvEditOpenIdx !== null) {
+    const ta = document.getElementById('nv-edit-input');
+    const editItem = items[_nvEditOpenIdx];
+    if (ta && editItem !== undefined) {
+      ta.value = typeof editItem === 'string' ? editItem : (editItem.text || '');
+      ta.focus();
+    }
+  }
 }
 function addNextVisitItem() {
   const input = document.getElementById('nv-input');
@@ -3625,10 +3652,39 @@ function addNextVisitItem() {
 }
 function deleteNextVisitItem(idx) {
   const items = getNextVisitItems();
-  const id = items[idx]?.id;
+  const item = items[idx];
+  if (!item) return;
+  const text = typeof item === 'string' ? item : item.text;
+  if (!confirm('「' + text.slice(0, 20) + '」を削除しますか?')) return;
+  const id = typeof item === 'object' ? item.id : null;
   items.splice(idx, 1);
   if (id) addDeletedId('next_visit', id);
   setNextVisitItems(items);
+  _nvEditOpenIdx = null;
+  renderNextVisitItems();
+}
+function openNextVisitItemEdit(idx) {
+  _nvEditOpenIdx = idx;
+  renderNextVisitItems();
+}
+function saveNextVisitItemEdit(idx) {
+  const ta = document.getElementById('nv-edit-input');
+  const newText = ta ? ta.value.trim() : '';
+  if (!newText) { showToast('内容を入力してください'); return; }
+  const items = getNextVisitItems();
+  if (idx < 0 || idx >= items.length) return;
+  const old = items[idx];
+  const ts = Date.now();
+  items[idx] = typeof old === 'string'
+    ? { id: 'note_' + ts + '_' + Math.random().toString(36).slice(2,8), text: newText, source: 'manual', sourceKey: '', result: '', _ts: ts }
+    : { ...old, text: newText, _ts: ts };
+  setNextVisitItems(items);
+  _nvEditOpenIdx = null;
+  showToast('保存しました');
+  renderNextVisitItems();
+}
+function cancelNextVisitItemEdit() {
+  _nvEditOpenIdx = null;
   renderNextVisitItems();
 }
 
