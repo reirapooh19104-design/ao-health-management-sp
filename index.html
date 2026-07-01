@@ -1161,7 +1161,7 @@ const PRINT_CONSTANTS = {
   allergy: '大豆アレルギー（乾燥納豆で確認済み・大豆製品全般様子見中）',
   history:     '・慢性の耳トラブル（マラセチア＋黄色ブドウ球菌の混合感染）\n・肝機能障害（GPT高値：最高385→直近70（基準値17–78）・ウルソ休薬）',
   homeopathy:  '2025年8月13日よりレメディー摂取開始、現在も継続中',
-  reference:   '肛門腺分泌液の性状変化：2026年5月末頃、それまで水に溶けず油膜状に浮いていた分泌液が、サラサラした性状に変化した。\n環境歴：2022年12月末、先住犬のために裏面アクリル樹脂加工のカーペット（ワタナベ工業 吸着ぴたマットループ）を敷いたところ先住犬が体調不良に。2025年末の獣医師の助言で2026年1月1日に全撤去。撤去後は飼い主自身も呼吸が楽になった。明桜のGPT上昇との関連は不明。\n食事歴：明桜を迎えた当初、先住犬が食欲不振で嗜好性の高い食事を与えており、明桜も一緒に食べていた時期がある。',
+  reference:   '肛門腺分泌液の性状変化：2026年5月末頃、それまで水に溶けず油膜状に浮いていた分泌液が、サラサラした性状に変化した。\n環境歴：2022年12月末、先住犬のために裏面アクリル樹脂加工のカーペット（ワタナベ工業 吸着ぴたマットループ）を敷いたところ先住犬が体調不良に。2025年末の獣医師の助言で2026年1月1日に全撤去。撤去後は飼い主自身も呼吸が楽になった。明桜のGPT上昇との関連は不明。',
 };
 
 // Blood test reference ranges
@@ -5574,7 +5574,7 @@ function buildAndPrint() {
     + '<tr><td>アレルギー</td><td>' + escHtml(PC.allergy) + '</td></tr>'
     + '<tr><td>既往</td><td style="white-space:pre-line">' + escHtml(PC.history) + '</td></tr>'
     + '<tr><td>ホメオパシー</td><td>' + escHtml(PC.homeopathy) + '</td></tr>'
-    + '<tr><td>参考情報</td><td style="white-space:pre-wrap;line-height:1.5">' + escHtml(PC.reference) + '</td></tr>'
+    + '<tr><td>参考情報</td><td style="line-height:1.5">' + PC.reference.split('\n').map(function(s){ return '<div style="margin-bottom:6pt">' + escHtml(s) + '</div>'; }).join('') + '</td></tr>'
     + vaccineRows
     + '</table>'
     + '</section>';
