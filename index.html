@@ -248,10 +248,11 @@ body {
 .bt-action-row { display: flex; gap: 6px; flex-shrink: 0; margin-left: 8px; }
 
 /* ── 次回来院 ── */
-.nv-item { display: flex; align-items: flex-start; gap: 8px; padding: 10px 0; border-bottom: 1px solid var(--border); }
+.nv-item { display: flex; align-items: flex-start; gap: 8px; padding: 10px 0; border-bottom: 1px solid var(--border); cursor: pointer; }
 .nv-item:last-child { border-bottom: none; }
+.nv-item.expanded { background: rgba(212,83,126,0.04); border-radius: 6px; }
 .nv-num { font-size: 14px; font-weight: 700; color: var(--green); flex-shrink: 0; min-width: 22px; padding-top: 2px; }
-.nv-text { flex: 1; font-size: 14px; line-height: 1.6; }
+.nv-text { flex: 1; font-size: 14px; line-height: 1.6; white-space: pre-wrap; }
 .nv-del { flex-shrink: 0; background: none; border: none; font-size: 18px; color: #ccc; cursor: pointer; padding: 0 4px; line-height: 1; transition: color 0.15s; }
 .nv-del:hover { color: #E05050; }
 .nv-add-area { margin-top: 12px; }
@@ -1277,6 +1278,7 @@ let _healthDragSrcIdx  = null;
 let _csEditOpenId        = null;
 let _csResultOpenId      = null;
 let _nvEditOpenIdx       = null;
+let _nvExpandedIdx       = null;
 let _csAggPending        = null;
 let _consultHistoryOpen  = false;
 let _noteEditDate        = null;
@@ -3606,10 +3608,11 @@ function renderNextVisitItems() {
   }
   list.innerHTML = items.map((item, idx) => {
     const text = typeof item === 'string' ? item : item.text;
+    const isExp = _nvExpandedIdx === idx;
     if (_nvEditOpenIdx === idx) {
-      return `<div class="nv-item">
+      return `<div class="nv-item expanded">
         <div class="nv-num">${idx+1}.</div>
-        <div class="cs-item-body">
+        <div class="cs-item-body" onclick="event.stopPropagation()">
           <textarea class="nv-input" id="nv-edit-input" style="min-height:52px"></textarea>
           <div class="cs-edit-row">
             <button class="nv-add-btn" style="flex:1;margin-top:0" onclick="saveNextVisitItemEdit(${idx})">保存</button>
@@ -3618,14 +3621,14 @@ function renderNextVisitItems() {
         </div>
       </div>`;
     }
-    return `<div class="nv-item">
+    return `<div class="nv-item${isExp ? ' expanded' : ''}" onclick="toggleNvExpand(${idx})">
       <div class="nv-num">${idx+1}.</div>
       <div class="cs-item-body">
         <div class="nv-text">${escHtml(text)}</div>
-      </div>
-      <div class="cs-item-actions">
-        <button class="cs-edit-btn" onclick="openNextVisitItemEdit(${idx})">編集</button>
-        <button class="cs-edit-btn" style="border-color:transparent;color:#888780" onclick="deleteNextVisitItem(${idx})">削除</button>
+        ${isExp ? `<div style="display:flex;gap:6px;margin-top:6px" onclick="event.stopPropagation()">
+          <button class="cs-edit-btn" onclick="openNextVisitItemEdit(${idx})">編集</button>
+          <button class="cs-edit-btn" style="border-color:transparent;color:#888780" onclick="deleteNextVisitItem(${idx})">削除</button>
+        </div>` : ''}
       </div>
     </div>`;
   }).join('');
@@ -3660,10 +3663,17 @@ function deleteNextVisitItem(idx) {
   items.splice(idx, 1);
   if (id) addDeletedId('next_visit', id);
   setNextVisitItems(items);
+  _nvExpandedIdx = null;
   _nvEditOpenIdx = null;
   renderNextVisitItems();
 }
+function toggleNvExpand(idx) {
+  _nvExpandedIdx = (_nvExpandedIdx === idx) ? null : idx;
+  if (_nvExpandedIdx !== idx) _nvEditOpenIdx = null;
+  renderNextVisitItems();
+}
 function openNextVisitItemEdit(idx) {
+  _nvExpandedIdx = idx;
   _nvEditOpenIdx = idx;
   renderNextVisitItems();
 }
@@ -3679,11 +3689,13 @@ function saveNextVisitItemEdit(idx) {
     ? { id: 'note_' + ts + '_' + Math.random().toString(36).slice(2,8), text: newText, source: 'manual', sourceKey: '', result: '', _ts: ts }
     : { ...old, text: newText, _ts: ts };
   setNextVisitItems(items);
+  _nvExpandedIdx = null;
   _nvEditOpenIdx = null;
   showToast('保存しました');
   renderNextVisitItems();
 }
 function cancelNextVisitItemEdit() {
+  _nvExpandedIdx = null;
   _nvEditOpenIdx = null;
   renderNextVisitItems();
 }
