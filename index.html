@@ -261,8 +261,9 @@ body {
 .nv-add-btn { margin-top: 8px; padding: 10px 18px; background: var(--green-light); color: #993556; border: none; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; font-family: inherit; }
 
 /* ── 次回診察用まとめ ── */
-.cs-item { display: flex; align-items: flex-start; gap: 8px; padding: 10px 0; border-bottom: 1px solid var(--border); }
+.cs-item { display: flex; align-items: flex-start; gap: 8px; padding: 10px 0; border-bottom: 1px solid var(--border); cursor: pointer; }
 .cs-item:last-child { border-bottom: none; }
+.cs-item.expanded { background: rgba(212,83,126,0.04); border-radius: 6px; }
 .cs-item-body { flex: 1; min-width: 0; }
 .cs-item-text { font-size: 14px; line-height: 1.6; white-space: pre-wrap; }
 .cs-item-actions { display: flex; flex-direction: column; gap: 4px; flex-shrink: 0; }
@@ -1277,6 +1278,7 @@ let _healthEditItemId  = null;
 let _healthDragSrcIdx  = null;
 let _csEditOpenId        = null;
 let _csResultOpenId      = null;
+let _csExpandedId        = null;
 let _nvEditOpenIdx       = null;
 let _nvExpandedIdx       = null;
 let _csAggPending        = null;
@@ -3626,8 +3628,8 @@ function renderNextVisitItems() {
       <div class="cs-item-body">
         <div class="nv-text">${escHtml(text)}</div>
         ${isExp ? `<div style="display:flex;gap:6px;margin-top:6px" onclick="event.stopPropagation()">
-          <button class="cs-edit-btn" onclick="openNextVisitItemEdit(${idx})">編集</button>
-          <button class="cs-edit-btn" style="border-color:transparent;color:#888780" onclick="deleteNextVisitItem(${idx})">削除</button>
+          <button class="btn-supple" style="font-size:12px;padding:4px 12px" onclick="openNextVisitItemEdit(${idx})">編集</button>
+          <button class="btn-supple" style="font-size:12px;padding:4px 12px;background:#F0EDE8;color:#888780" onclick="deleteNextVisitItem(${idx})">削除</button>
         </div>` : ''}
       </div>
     </div>`;
@@ -3717,10 +3719,12 @@ function renderConsultationSummary() {
     const sid    = (id || '').replace(/'/g, "\\'");
     const isEditOpen   = _csEditOpenId   === id;
     const isResultOpen = _csResultOpenId === id;
+    const isExp        = _csExpandedId   === id;
+    const savedHtml    = result ? `<div class="cs-result-saved">【診察結果】${escHtml(result)}</div>` : '';
 
     // ケース1: 本文編集フォーム展開中
     if (isEditOpen) {
-      return `<div class="cs-item">
+      return `<div class="cs-item expanded">
         <div class="nv-num">${idx+1}.</div>
         <div class="cs-item-body">
           <textarea class="nv-input" id="cs-edit-input" style="min-height:52px"></textarea>
@@ -3734,9 +3738,7 @@ function renderConsultationSummary() {
 
     // ケース2: 診察結果記入フォーム展開中
     if (isResultOpen) {
-      const savedHtml = result
-        ? `<div class="cs-result-saved">【診察結果】${escHtml(result)}</div>` : '';
-      return `<div class="cs-item">
+      return `<div class="cs-item expanded">
         <div class="nv-num">${idx+1}.</div>
         <div class="cs-item-body">
           <div class="cs-item-text">${escHtml(text)}</div>
@@ -3746,28 +3748,37 @@ function renderConsultationSummary() {
             <button class="nv-add-btn" style="flex:1;margin-top:0" onclick="saveConsultationResult()">保存</button>
             <button class="nv-add-btn" style="flex:1;margin-top:0;background:#F0EDE8;color:#888780" onclick="cancelConsultationResult()">キャンセル</button>
           </div>
-        </div>
-        <div class="cs-item-actions">
-          <button class="cs-edit-btn" onclick="editConsultationSummaryItem('${sid}')">編集</button>
-          <button class="nv-del" onclick="deleteConsultationSummaryItem('${sid}')">×</button>
+          <div style="display:flex;gap:6px;margin-top:6px">
+            <button class="btn-supple" style="font-size:12px;padding:4px 12px" onclick="editConsultationSummaryItem('${sid}')">編集</button>
+            <button class="btn-supple" style="font-size:12px;padding:4px 12px;background:#F0EDE8;color:#888780" onclick="deleteConsultationSummaryItem('${sid}')">削除</button>
+          </div>
         </div>
       </div>`;
     }
 
-    // ケース3: 通常表示
-    const savedHtml = result
-      ? `<div class="cs-result-saved">【診察結果】${escHtml(result)}</div>` : '';
-    const resultLinkLabel = result ? '診察結果を編集 ▼' : '診察結果を記入 ▼';
-    return `<div class="cs-item">
+    // ケース3: 展開中（通常表示）
+    if (isExp) {
+      const resultLinkLabel = result ? '診察結果を編集 ▼' : '診察結果を記入 ▼';
+      return `<div class="cs-item expanded" onclick="toggleCsExpand('${sid}')">
+        <div class="nv-num">${idx+1}.</div>
+        <div class="cs-item-body">
+          <div class="cs-item-text">${escHtml(text)}</div>
+          ${savedHtml}
+          <button class="cs-result-link" onclick="event.stopPropagation();openConsultationResult('${sid}')">${resultLinkLabel}</button>
+          <div style="display:flex;gap:6px;margin-top:6px">
+            <button class="btn-supple" style="font-size:12px;padding:4px 12px" onclick="event.stopPropagation();editConsultationSummaryItem('${sid}')">編集</button>
+            <button class="btn-supple" style="font-size:12px;padding:4px 12px;background:#F0EDE8;color:#888780" onclick="event.stopPropagation();deleteConsultationSummaryItem('${sid}')">削除</button>
+          </div>
+        </div>
+      </div>`;
+    }
+
+    // ケース4: 閉じた状態
+    return `<div class="cs-item" onclick="toggleCsExpand('${sid}')">
       <div class="nv-num">${idx+1}.</div>
       <div class="cs-item-body">
         <div class="cs-item-text">${escHtml(text)}</div>
         ${savedHtml}
-        <button class="cs-result-link" onclick="openConsultationResult('${sid}')">${resultLinkLabel}</button>
-      </div>
-      <div class="cs-item-actions">
-        <button class="cs-edit-btn" onclick="editConsultationSummaryItem('${sid}')">編集</button>
-        <button class="nv-del" onclick="deleteConsultationSummaryItem('${sid}')">×</button>
       </div>
     </div>`;
   }).join('');
@@ -3801,9 +3812,15 @@ function addConsultationSummaryItem() {
   input.value = '';
   showToast('追加しました');
 }
+function toggleCsExpand(id) {
+  _csExpandedId = (_csExpandedId === id) ? null : id;
+  if (_csExpandedId !== id) { _csEditOpenId = null; _csResultOpenId = null; }
+  renderConsultationSummary();
+}
 function deleteConsultationSummaryItem(id) {
   _csEditOpenId = null;
   _csResultOpenId = null;
+  _csExpandedId = null;
   addDeletedId('consultation_summary', id);
   setConsultationSummary(getConsultationSummary().filter(e => typeof e === 'string' ? false : e.id !== id));
   renderConsultationSummary();
@@ -3811,10 +3828,12 @@ function deleteConsultationSummaryItem(id) {
 function editConsultationSummaryItem(id) {
   _csResultOpenId = null;
   _csEditOpenId = (_csEditOpenId === id) ? null : id;
+  if (_csEditOpenId) _csExpandedId = id;
   renderConsultationSummary();
 }
 function openConsultationResult(id) {
   _csEditOpenId = null;
+  _csExpandedId = id;
   _csResultOpenId = (_csResultOpenId === id) ? null : id;
   renderConsultationSummary();
 }
@@ -3918,11 +3937,13 @@ function saveConsultationSummaryEdit() {
   if (!item) return;
   item.text = text;
   item._ts = Date.now();
+  _csExpandedId = null;
   _csEditOpenId = null;
   setConsultationSummary(items);
   renderConsultationSummary();
 }
 function cancelConsultationSummaryEdit() {
+  _csExpandedId = null;
   _csEditOpenId = null;
   renderConsultationSummary();
 }
