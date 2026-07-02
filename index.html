@@ -1077,6 +1077,11 @@ body {
       placeholder="https://script.google.com/macros/s/..."
       style="width:100%;box-sizing:border-box;margin-bottom:12px">
     <div id="gas-url-error" style="color:#c0392b;font-size:13px;margin-bottom:8px;display:none"></div>
+    <div class="modal-sub">GAS側スクリプトプロパティに設定した合言葉（SYNC_TOKEN）を入力してください。GAS側が未対応（認証なし）のうちは空欄のままで構いません。</div>
+    <div style="display:flex;gap:6px;margin-bottom:12px">
+      <input id="sync-token-input" type="password" class="form-input" placeholder="合言葉" style="flex:1;box-sizing:border-box">
+      <button type="button" id="sync-token-toggle-btn" class="btn-secondary" style="flex-shrink:0;padding:0 12px" onclick="toggleSyncTokenVisibility()">表示</button>
+    </div>
     <button class="btn-primary" style="width:100%" onclick="saveGasUrlFromModal()">保存して同期を有効にする</button>
     <button class="btn-secondary" style="width:100%;margin-top:8px" onclick="closeGasUrlModal()">キャンセル</button>
     <hr style="margin:16px 0;border:none;border-top:1px solid #eee">
@@ -1308,6 +1313,12 @@ function getGasUrl() {
 function setGasUrl(url) {
   localStorage.setItem('gas_url', url);
 }
+function getSyncToken() {
+  return localStorage.getItem('sync_token') || '';
+}
+function setSyncToken(token) {
+  localStorage.setItem('sync_token', token);
+}
 
 function isMaintenanceMode() {
   return localStorage.getItem('maintenance_mode') === 'on';
@@ -1336,19 +1347,23 @@ function _syncStatus(msg, type) {
 }
 
 async function pushToCloud(key, val) {
-  if (!getGasUrl()) return;
+  if (!getGasUrl() || !getSyncToken()) return;
   try {
-    await fetch(getGasUrl(), {
+    const res = await fetch(getGasUrl(), {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain' },
-      body: JSON.stringify({ key, value: val })
+      body: JSON.stringify({ key, value: val, token: getSyncToken() })
     });
+    const resBody = await res.json().catch(() => null);
+    if (resBody && resBody.status === 'error') {
+      console.warn('[認証エラー] pushToCloud key=' + key + '：合言葉を確認してください');
+    }
   } catch (e) { console.error('[push失敗] pushToCloud key=' + key, e); }
 }
 
 // 離脱時（タブ閉じ・リロード・バックグラウンド化）にchk_デバウンスの保留分を取りこぼさず送る
 function flushChkPending() {
-  if (!getGasUrl()) return;
+  if (!getGasUrl() || !getSyncToken()) return;
   for (const key of Object.keys(_chkPushPending)) {
     const pending = _chkPushPending[key];
     clearTimeout(_chkPushTimers[key]);
@@ -1359,13 +1374,13 @@ function flushChkPending() {
       fetch(getGasUrl(), {
         method: 'POST',
         headers: { 'Content-Type': 'text/plain' },
-        body: JSON.stringify({ key, value: pending.val }),
+        body: JSON.stringify({ key, value: pending.val, token: getSyncToken() }),
         keepalive: true
       });
       fetch(getGasUrl(), {
         method: 'POST',
         headers: { 'Content-Type': 'text/plain' },
-        body: JSON.stringify({ key: '_ts_' + key, value: pending.ts }),
+        body: JSON.stringify({ key: '_ts_' + key, value: pending.ts, token: getSyncToken() }),
         keepalive: true
       });
     } catch (e) { console.error('[push失敗] flushChkPending', e); }
@@ -1428,11 +1443,21 @@ function filterByTombstone(keyName, arr) {
 // ──────────────────────────────────────────────────
 
 async function syncFromCloud() {
-  if (!getGasUrl()) return;
+  if (!getGasUrl() || !getSyncToken()) return;
   _syncStatus('同期中…', 'syncing');
   try {
-    const res = await fetch(getGasUrl() + '?action=getAll', { cache: 'no-store' });
+    const res = await fetch(getGasUrl() + '?action=getAll&token=' + encodeURIComponent(getSyncToken()), { cache: 'no-store' });
     const gasData = await res.json();
+
+    // 認証エラー時はデータとして扱わず即中断する（ローカルには一切触れない）。
+    // gas_code_v2.js は401を返せないため、正常応答（result）とは形の違う
+    // { status:'error', message:'unauthorized' } で失敗を表現している。
+    if (gasData && gasData.status === 'error') {
+      _syncStatus('合言葉を確認してください', 'error');
+      setTimeout(() => _syncStatus(''), 5000);
+      renderAll();
+      return;
+    }
 
     // tombstone: deleted_ids を先にマージしてから各キーを処理する
     if (gasData['deleted_ids']) {
@@ -1440,7 +1465,7 @@ async function syncFromCloud() {
     }
 
     Object.keys(gasData).forEach(k => {
-      if (k.startsWith('autobackup_') || k.startsWith('_ts_') || k === 'gas_url' || k.startsWith('filaria_') || (k.startsWith('custom_') && k !== 'custom_meal_checks' && k !== 'custom_health_checks')) return;
+      if (k.startsWith('autobackup_') || k.startsWith('_ts_') || k === 'gas_url' || k === 'sync_token' || k.startsWith('filaria_') || (k.startsWith('custom_') && k !== 'custom_meal_checks' && k !== 'custom_health_checks')) return;
 
       // tombstone: deleted_ids はマージして早期リターン
       if (k === 'deleted_ids') {
@@ -1677,12 +1702,13 @@ async function syncFromCloud() {
 // 全データを50ms間隔でGASへ手動同期
 async function pushAllToCloud() {
   if (!getGasUrl()) { showToast('GAS URLが設定されていません'); return; }
+  if (!getSyncToken()) { showToast('合言葉が設定されていません'); return; }
   _syncStatus('同期中…', 'syncing');
   // データキーのみ収集（autobackup_・_ts_ は除外）
   const dataKeys = [];
   for (let i = 0; i < localStorage.length; i++) {
     const k = localStorage.key(i);
-    if (k && !k.startsWith('autobackup_') && !k.startsWith('_ts_') && k !== 'gas_url' && !k.startsWith('filaria_') && (k === 'custom_meal_checks' || k === 'custom_health_checks' || !k.startsWith('custom_')) && k !== 'view_month_diary' && k !== 'view_month_notes' && k !== 'selected_recipe_id') dataKeys.push(k);
+    if (k && !k.startsWith('autobackup_') && !k.startsWith('_ts_') && k !== 'gas_url' && k !== 'sync_token' && !k.startsWith('filaria_') && (k === 'custom_meal_checks' || k === 'custom_health_checks' || !k.startsWith('custom_')) && k !== 'view_month_diary' && k !== 'view_month_notes' && k !== 'selected_recipe_id') dataKeys.push(k);
   }
   // 動的キー（chk_・day_memo_）で空値のものをスキップ（静的キーは必ず送る）
   const filteredDataKeys = dataKeys.filter(k => {
@@ -1725,6 +1751,7 @@ async function pushAllToCloud() {
   showToast('GASへ全データ同期中...');
 
   let success = false;
+  let authError = false;
   let lastAttempt = 0;
   const MAX_RETRY = 3;
   for (let attempt = 0; attempt <= MAX_RETRY && !success; attempt++) {
@@ -1737,13 +1764,26 @@ async function pushAllToCloud() {
       const res = await fetch(getGasUrl(), {
         method: 'POST',
         headers: { 'Content-Type': 'text/plain' },
-        body: JSON.stringify({ bulk: true, data: bulkData })
+        body: JSON.stringify({ bulk: true, data: bulkData, token: getSyncToken() })
       });
+      const resBody = await res.json().catch(() => null);
+      if (resBody && resBody.status === 'error') {
+        // 合言葉が違う場合はリトライしても無意味なので打ち切る
+        authError = true;
+        break;
+      }
       if (res.ok) success = true;
       else console.warn('[pushAllToCloud] HTTPエラー: ' + res.status);
     } catch (e) {
       console.warn('[pushAllToCloud] fetch失敗: ' + e.message);
     }
+  }
+  if (authError) {
+    console.warn('[pushAllToCloud] 認証エラー：合言葉が正しくない可能性があります');
+    _syncStatus('合言葉を確認してください', 'error');
+    setTimeout(() => _syncStatus(''), 5000);
+    showToast('同期に失敗しました。合言葉を確認してください');
+    return;
   }
   const retriedCount = success && lastAttempt > 0 ? sendCount : 0;
   const failedKeys = success ? [] : Object.keys(bulkData);
@@ -1851,6 +1891,7 @@ function restoreFromBackup(date) {
   if (!confirm(date + ' のバックアップで復元しますか？\n現在のデータは上書きされます。\n（復元後、GAS同期は手動で行ってください）')) return;
   const snap = JSON.parse(localStorage.getItem('autobackup_' + date) || '{}');
   const savedGasUrl = getGasUrl();
+  const savedSyncToken = getSyncToken();
   // autobackup_以外のキーをクリア
   const toRemove = [];
   for (let i = 0; i < localStorage.length; i++) {
@@ -1860,8 +1901,9 @@ function restoreFromBackup(date) {
   toRemove.forEach(k => localStorage.removeItem(k));
   // スナップショットを復元（GASへは同期しない）
   Object.keys(snap).forEach(k => localStorage.setItem(k, snap[k]));
-  // バックアップにgas_urlがない場合（旧バックアップ等）は現在のURLを引き継ぐ
+  // バックアップにgas_url/sync_tokenがない場合（旧バックアップ等）は現在の値を引き継ぐ
   if (!localStorage.getItem('gas_url') && savedGasUrl) localStorage.setItem('gas_url', savedGasUrl);
+  if (!localStorage.getItem('sync_token') && savedSyncToken) localStorage.setItem('sync_token', savedSyncToken);
   closeBackupModal();
   renderAll();
   showToast(date + ' から復元しました。「全データGAS同期」でクラウドに反映できます');
@@ -1870,6 +1912,10 @@ function restoreFromBackup(date) {
 function showGasUrlModal() {
   const input = document.getElementById('gas-url-input');
   input.value = getGasUrl();
+  const tokenInput = document.getElementById('sync-token-input');
+  if (tokenInput) { tokenInput.value = getSyncToken(); tokenInput.type = 'password'; }
+  const toggleBtn = document.getElementById('sync-token-toggle-btn');
+  if (toggleBtn) toggleBtn.textContent = '表示';
   document.getElementById('gas-url-error').style.display = 'none';
   document.getElementById('gas-url-modal').style.display = 'flex';
   setTimeout(() => input.focus(), 100);
@@ -1877,6 +1923,15 @@ function showGasUrlModal() {
 
 function closeGasUrlModal() {
   document.getElementById('gas-url-modal').style.display = 'none';
+}
+
+function toggleSyncTokenVisibility() {
+  const input = document.getElementById('sync-token-input');
+  const btn = document.getElementById('sync-token-toggle-btn');
+  if (!input) return;
+  const show = input.type === 'password';
+  input.type = show ? 'text' : 'password';
+  if (btn) btn.textContent = show ? '隠す' : '表示';
 }
 
 function saveGasUrlFromModal() {
@@ -1889,6 +1944,8 @@ function saveGasUrlFromModal() {
     return;
   }
   setGasUrl(url);
+  const tokenInput = document.getElementById('sync-token-input');
+  setSyncToken((tokenInput?.value || '').trim());
   closeGasUrlModal();
   showToast('GAS URLを保存しました');
   syncFromCloud();
