@@ -1972,7 +1972,7 @@ function migrateAoRecords() {
 }
 
 function escHtml(str) {
-  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 }
 
 // ============================================================
@@ -4298,13 +4298,13 @@ function renderDiary() {
               : e.urso === 'rest'  ? '<span class="urso-tag rest">休む日</span>' : '';
     return `<div class="diary-card">
       <div class="diary-card-hd"><div class="diary-card-date">${label}</div>${tag}</div>
-      ${e.protein ? `<div class="diary-row">タンパク質：<span>${e.protein}</span></div>` : ''}
-      ${e.grain   ? `<div class="diary-row">穀類・芋類：<span>${e.grain}</span></div>` : ''}
-      ${e.veg     ? `<div class="diary-row">野菜類：<span>${e.veg}</span></div>` : ''}
-      ${e.other   ? `<div class="diary-row">その他：<span>${e.other}</span></div>` : ''}
-      <div class="diary-row">合計：<span>${e.weight ? e.weight+'g' : '—'} / <span class="green">${e.kcal ? e.kcal+'kcal' : '—'}</span> 推定値</span></div>
-      <div class="diary-row">食べ残し：<span>${e.finish || '—'}</span></div>
-      ${e.memo ? `<div class="diary-row">メモ：<span>${e.memo}</span></div>` : ''}
+      ${e.protein ? `<div class="diary-row">タンパク質：<span>${escHtml(e.protein)}</span></div>` : ''}
+      ${e.grain   ? `<div class="diary-row">穀類・芋類：<span>${escHtml(e.grain)}</span></div>` : ''}
+      ${e.veg     ? `<div class="diary-row">野菜類：<span>${escHtml(e.veg)}</span></div>` : ''}
+      ${e.other   ? `<div class="diary-row">その他：<span>${escHtml(e.other)}</span></div>` : ''}
+      <div class="diary-row">合計：<span>${e.weight ? escHtml(e.weight)+'g' : '—'} / <span class="green">${e.kcal ? escHtml(e.kcal)+'kcal' : '—'}</span> 推定値</span></div>
+      <div class="diary-row">食べ残し：<span>${escHtml(e.finish || '—')}</span></div>
+      ${e.memo ? `<div class="diary-row">メモ：<span>${escHtml(e.memo)}</span></div>` : ''}
     </div>`;
   }).join('');
 }
