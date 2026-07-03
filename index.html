@@ -1356,7 +1356,7 @@ async function pushToCloud(key, val) {
     });
     const resBody = await res.json().catch(() => null);
     if (resBody && resBody.status === 'error') {
-      console.warn('[認証エラー] pushToCloud key=' + key + '：合言葉を確認してください');
+      console.warn('[認証エラー] pushToCloud key=' + key + ' tokenLength=' + getSyncToken().length + '：合言葉を確認してください');
     }
   } catch (e) { console.error('[push失敗] pushToCloud key=' + key, e); }
 }
@@ -1448,11 +1448,13 @@ async function syncFromCloud() {
   try {
     const res = await fetch(getGasUrl() + '?action=getAll&token=' + encodeURIComponent(getSyncToken()), { cache: 'no-store' });
     const gasData = await res.json();
+    console.warn('[同期観測] getAll応答: status=' + (gasData && gasData.status) + ' キー数=' + (gasData ? Object.keys(gasData).length : 0) + ' blood_testsあり=' + !!(gasData && gasData.blood_tests) + ' 時刻=' + new Date().toISOString());
 
     // 認証エラー時はデータとして扱わず即中断する（ローカルには一切触れない）。
     // gas_code_v2.js は401を返せないため、正常応答（result）とは形の違う
     // { status:'error', message:'unauthorized' } で失敗を表現している。
     if (gasData && gasData.status === 'error') {
+      console.warn('[unauthorized観測] syncFromCloud(getAll) tokenLength=' + getSyncToken().length + ' 時刻=' + new Date().toISOString());
       _syncStatus('合言葉を確認してください', 'error');
       setTimeout(() => _syncStatus(''), 5000);
       renderAll();
@@ -1692,7 +1694,8 @@ async function syncFromCloud() {
     migrateSupplements();
     migrateNextVisitItems();
     renderAll();
-  } catch {
+  } catch (e) {
+    console.warn('[同期観測] syncFromCloud失敗(JSONでない/通信エラー等): ' + (e && e.message) + ' 時刻=' + new Date().toISOString());
     _syncStatus('オフライン');
     setTimeout(() => _syncStatus(''), 5000);
     renderAll();
@@ -1779,6 +1782,7 @@ async function pushAllToCloud() {
     }
   }
   if (authError) {
+    console.warn('[unauthorized観測] pushAllToCloud(bulk) tokenLength=' + getSyncToken().length + ' attempt=' + lastAttempt + ' 時刻=' + new Date().toISOString());
     console.warn('[pushAllToCloud] 認証エラー：合言葉が正しくない可能性があります');
     _syncStatus('合言葉を確認してください', 'error');
     setTimeout(() => _syncStatus(''), 5000);
