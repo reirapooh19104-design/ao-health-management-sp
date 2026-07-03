@@ -1440,6 +1440,48 @@ function filterByTombstone(keyName, arr) {
     return !ids.includes(key);
   });
 }
+
+// ── 書き戻しpush（経路④）の整合チェック ──────────────────
+// 壊れた項目をpush対象から除外するだけで、localStorageの中身には触れない。
+// 受信マージ・tombstone・LWWの挙動も変えない（push直前のフィルタのみ）。
+// 骨格チェック（必須フィールドの有無と型）に限定し、値域は見ない。
+// 正当なデータを誤って弾かないよう、判定は「明らかに壊れた項目」に絞る。
+function _validNextVisitEntry(e) {
+  if (typeof e === 'string') return true;  // レガシー文字列は正当
+  if (!e || typeof e !== 'object' || Array.isArray(e)) return false;
+  return typeof e.id === 'string' && e.id !== ''
+      && typeof e.text === 'string' && e.text !== ''
+      && typeof e._ts === 'number';
+}
+function _validConsultationSummaryEntry(e) {
+  if (typeof e === 'string') return true;  // 読み側が文字列を許容しているため通す
+  if (!e || typeof e !== 'object' || Array.isArray(e)) return false;
+  return typeof e.id === 'string' && e.id !== ''
+      && typeof e.text === 'string' && e.text !== ''
+      && typeof e._ts === 'number';
+}
+function _validConsultationHistoryEntry(e) {
+  if (!e || typeof e !== 'object' || Array.isArray(e)) return false;
+  return typeof e.id === 'string' && e.id !== ''
+      && typeof e.date === 'string' && e.date !== ''
+      && Array.isArray(e.items)
+      && typeof e._ts === 'number';
+}
+function _validAoRecordEntry(e) {
+  if (!e || typeof e !== 'object' || Array.isArray(e)) return false;
+  return typeof e.id === 'string' && e.id !== ''
+      && typeof e.date === 'string' && e.date !== ''
+      && typeof e.text === 'string' && e.text !== ''
+      && typeof e._ts === 'number';
+}
+function _filterForPushBack(keyName, arr, validator) {
+  const ok = arr.filter(validator);
+  if (ok.length !== arr.length) {
+    console.warn('[書き戻し整合チェック] ' + keyName + ': ' + (arr.length - ok.length)
+      + ' 件をpush対象から除外（必須フィールド欠落または非オブジェクト要素。ローカルには残置）');
+  }
+  return ok;
+}
 // ──────────────────────────────────────────────────
 
 async function syncFromCloud() {
@@ -1596,9 +1638,11 @@ async function syncFromCloud() {
         const nvClean = filterByTombstone('next_visit', nvMerged);
         localStorage.setItem('next_visit', JSON.stringify(nvClean));
         // ローカルにあってクラウドにない項目があればマージ結果をGASに書き戻す
+        // （壊れた項目はpush対象から除外する。ローカルは削除しない）
+        const nvPushable = _filterForPushBack('next_visit', nvClean, _validNextVisitEntry);
         const gasNvKeySet = new Set((gasVal || []).map(ge => nvKey(ge)));
-        if (nvClean.some(e => !gasNvKeySet.has(nvKey(e)))) {
-          pushToCloud('next_visit', nvClean);
+        if (nvPushable.some(e => !gasNvKeySet.has(nvKey(e)))) {
+          pushToCloud('next_visit', nvPushable);
         }
       } else if (k === 'consultation_summary') {
         // consultation_summary: エントリ単位マージ + 安全ガード(cloud が空なら保持)
@@ -1622,9 +1666,11 @@ async function syncFromCloud() {
         const csClean = filterByTombstone('consultation_summary', csMerged);
         localStorage.setItem('consultation_summary', JSON.stringify(csClean));
         // ローカルにあってクラウドにない項目があればマージ結果をGASに書き戻す
+        // （壊れた項目はpush対象から除外する。ローカルは削除しない）
+        const csPushable = _filterForPushBack('consultation_summary', csClean, _validConsultationSummaryEntry);
         const gasCsKeySet = new Set((gasVal || []).map(ge => csKey(ge)));
-        if (csClean.some(e => !gasCsKeySet.has(csKey(e)))) {
-          pushToCloud('consultation_summary', csClean);
+        if (csPushable.some(e => !gasCsKeySet.has(csKey(e)))) {
+          pushToCloud('consultation_summary', csPushable);
         }
       } else if (k === 'consultation_history') {
         // consultation_history: エントリ単位マージ + 安全ガード(cloud が空なら保持)
@@ -1646,9 +1692,11 @@ async function syncFromCloud() {
         const chMerged = Array.from(chMap.values());
         const chClean = filterByTombstone('consultation_history', chMerged);
         localStorage.setItem('consultation_history', JSON.stringify(chClean));
+        // 壊れた項目はpush対象から除外する（ローカルは削除しない）
+        const chPushable = _filterForPushBack('consultation_history', chClean, _validConsultationHistoryEntry);
         const gasChKeySet = new Set((gasVal || []).map(ge => chKey(ge)));
-        if (chClean.some(e => !gasChKeySet.has(chKey(e)))) {
-          pushToCloud('consultation_history', chClean);
+        if (chPushable.some(e => !gasChKeySet.has(chKey(e)))) {
+          pushToCloud('consultation_history', chPushable);
         }
       } else if (k === 'ao_records') {
         // ao_records: エントリ単位マージ + 安全ガード(cloud が空なら保持)
@@ -1668,9 +1716,11 @@ async function syncFromCloud() {
         const arMerged = Array.from(arMap.values());
         const arClean = filterByTombstone('ao_records', arMerged);
         localStorage.setItem('ao_records', JSON.stringify(arClean));
+        // 壊れた項目はpush対象から除外する（ローカルは削除しない）
+        const arPushable = _filterForPushBack('ao_records', arClean, _validAoRecordEntry);
         const gasArKeySet = new Set((gasVal || []).map(ge => arKey(ge)));
-        if (arClean.some(e => !gasArKeySet.has(arKey(e)))) {
-          pushToCloud('ao_records', arClean);
+        if (arPushable.some(e => !gasArKeySet.has(arKey(e)))) {
+          pushToCloud('ao_records', arPushable);
         }
       } else if (k.startsWith('chk_')) {
         // chk_<日付>: 項目単位 OR マージ（true は消えない・断片が完全データに勝つバグ対策）
