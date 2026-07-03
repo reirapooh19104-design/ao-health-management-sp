@@ -5486,7 +5486,7 @@ function switchTab(name) {
 // ============================================================
 function exportData() {
   const payload = {
-    ver: 3,
+    ver: 4,
     exported: new Date().toISOString(),
     healthNotes: getNotes(),
     diary: getDiary(),
@@ -5500,6 +5500,11 @@ function exportData() {
     medList: getMedList(),
     customMealChecks: getMealChecks(),
     customHealthChecks: getHealthChecks(),
+    deletedIds: getDeletedIds(),
+    recipes: getRecipes(),
+    selectedRecipeId: localStorage.getItem('selected_recipe_id') || null,
+    filariaSettings: getFilariaSettings(),
+    filariaHistory: getFilariaHistory(),
     checks: {}
   };
   for (let i = 0; i < localStorage.length; i++) {
@@ -5537,12 +5542,23 @@ function importData(e) {
       if (d.supple)              setSupple(d.supple);
       if (d.nextVisit)           setNextVisitItems(d.nextVisit);
       if (d.bodyWeights)         setBodyWeights(d.bodyWeights);
-      if (d.aoRecords)           setAoRecords(d.aoRecords);
+      if (d.aoRecords) {
+        setAoRecords(d.aoRecords);
+        // フラグを立てないと次回リロードで migrateAoRecords が復元データを初期値で上書きする
+        localStorage.setItem('ao_records_migrated_v2', '1');
+      }
       if (d.consultationSummary) setConsultationSummary(d.consultationSummary);
       if (d.consultationHistory) setConsultationHistory(d.consultationHistory);
       if (d.medList)             setMedList(d.medList);
       if (d.customMealChecks)    setMealChecks(d.customMealChecks);
       if (d.customHealthChecks)  setHealthChecks(d.customHealthChecks);
+      // tombstoneは単純上書きせずローカルとマージする（上書きだと復元後の全データGAS同期で
+      // GASの削除履歴が巻き戻り、削除済み項目が復活する経路ができるため）
+      if (d.deletedIds)          mergeDeletedIds(d.deletedIds);
+      if (d.recipes)             save('recipes', d.recipes);
+      if (d.selectedRecipeId)    localStorage.setItem('selected_recipe_id', d.selectedRecipeId);
+      if (d.filariaSettings)     setFilariaSettings(d.filariaSettings);
+      if (d.filariaHistory)      setFilariaHistory(d.filariaHistory);
       if (d.checks) Object.keys(d.checks).forEach(k => save(k, d.checks[k]));
       renderAll();
       showToast('インポートしました');
