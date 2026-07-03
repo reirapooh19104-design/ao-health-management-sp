@@ -1303,6 +1303,7 @@ let _healthNoteSearchQuery = '';
 let _noteSearchDebounce = null;
 let _chkPushTimers = {};   // key(chk_<日付>) -> setTimeoutのID
 let _chkPushPending = {};  // key(chk_<日付>) -> { val, ts }
+let _filariaEditOpen = false;  // フィラリア初回日の編集フォーム表示中（設定は保存まで消さない）
 
 // ============================================================
 // CLOUD SYNC (Google Apps Script)
@@ -3624,15 +3625,19 @@ function renderFilaria() {
   const cfg = getFilariaSettings();
   const currentYear = new Date().getFullYear();
 
-  if (!cfg || cfg.year !== currentYear) {
+  if (!cfg || cfg.year !== currentYear || _filariaEditOpen) {
+    // 編集モード（今年の設定があるのに開いた場合）だけ、現在値プリセット＋キャンセルを出す。
+    // 初回未設定・年替わり時は従来どおり（キャンセルの戻り先が無いため出さない）。
+    const isEdit = _filariaEditOpen && cfg && cfg.year === currentYear;
     el.innerHTML =
       `<div style="font-size:13px;color:var(--text-light);margin-bottom:12px">${currentYear}年の初回投与日を設定してください。</div>
       <div class="form-group">
         <label class="form-label">初回投与日</label>
         <input type="date" class="form-input" id="filaria-first-date"
-               min="${currentYear}-06-01" max="${currentYear}-11-30">
+               min="${currentYear}-06-01" max="${currentYear}-11-30"${isEdit ? ` value="${cfg.firstDoseDate}"` : ''}>
       </div>
-      <button class="btn-primary" onclick="saveFilariaFirstDate()">保存する</button>`;
+      <button class="btn-primary" onclick="saveFilariaFirstDate()">保存する</button>${isEdit ? `
+      <button class="btn-secondary" style="margin-top:6px" onclick="cancelFilariaEdit()">キャンセル</button>` : ''}`;
     return;
   }
 
@@ -3693,7 +3698,7 @@ function renderFilaria() {
       <div style="font-size:12px;color:var(--text-light);margin-bottom:4px;font-weight:600">投与履歴</div>
       ${histHtml}
     </div>
-    <button class="btn-secondary" onclick="resetFilariaSettings()">初回日を変更</button>`;
+    <button class="btn-secondary" onclick="openFilariaEdit()">初回日を変更</button>`;
 }
 
 function saveFilariaFirstDate() {
@@ -3701,15 +3706,23 @@ function saveFilariaFirstDate() {
   if (!val) { showToast('日付を入力してください'); return; }
   const year = new Date(val + 'T00:00:00').getFullYear();
   setFilariaSettings({ firstDoseDate: val, year });
+  _filariaEditOpen = false;
   renderFilaria();
   renderCalendar();
   showToast('フィラリア設定を保存しました');
 }
 
-function resetFilariaSettings() {
-  localStorage.removeItem('filaria_settings');
+// 「初回日を変更」は編集フォームを開くだけ。設定の上書きは保存時（saveFilariaFirstDate）に
+// 一本化し、削除（removeItem）はしない（旧resetFilariaSettingsは押した瞬間に設定を消して
+// いたため、保存し切らずに離脱すると設定が失われる事故が起きた）。
+function openFilariaEdit() {
+  _filariaEditOpen = true;
   renderFilaria();
-  renderCalendar();
+}
+
+function cancelFilariaEdit() {
+  _filariaEditOpen = false;
+  renderFilaria();
 }
 
 function deleteSupple(idx) {
