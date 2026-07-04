@@ -1940,7 +1940,7 @@ function autoBackup() {
   // 7日より古いバックアップを削除
   const cutoff = new Date();
   cutoff.setDate(cutoff.getDate() - 7);
-  const cutoffStr = cutoff.toISOString().slice(0, 10);
+  const cutoffStr = cutoff.getFullYear() + '-' + String(cutoff.getMonth()+1).padStart(2,'0') + '-' + String(cutoff.getDate()).padStart(2,'0');
   for (let i = localStorage.length - 1; i >= 0; i--) {
     const k = localStorage.key(i);
     if (k && k.startsWith('autobackup_') && k.replace('autobackup_', '') < cutoffStr) {
@@ -5432,7 +5432,7 @@ function _filterWeightData(days) {
   if (days === 0 || all.length === 0) return all;
   var cutoff = new Date();
   cutoff.setDate(cutoff.getDate() - days);
-  var cutoffStr = cutoff.toISOString().slice(0, 10);
+  var cutoffStr = cutoff.getFullYear() + '-' + String(cutoff.getMonth()+1).padStart(2,'0') + '-' + String(cutoff.getDate()).padStart(2,'0');
   return all.filter(function(w) { return w.date >= cutoffStr; });
 }
 
