@@ -74,8 +74,9 @@ GAS同期の特性と事故防止の鉄則。**同期をいじる前に必ず読
 **`pushAllToCloud()` … 全データ一括送信（手動「全同期」ボタン用）**
 1. GAS URL 未設定なら「GAS URLが設定されていません」と表示して終了。
 2. 「同期中…」表示。
-3. localStorage の全キーを列挙（除外: `autobackup_` / `_ts_` / `gas_url` / `filaria_` /
+3. localStorage の全キーを列挙（除外: `autobackup_` / `_ts_` / `gas_url` /
    `custom_` / `view_month_*` / `selected_recipe_id`）。
+   ※ `filaria_` は 2026-07-04（コミット 6178376）に除外を解除し同期対象になった。
 4. `chk_` / `day_memo_` 系で空値（null・空配列・空オブジェクト）はスキップ。
 5. 対象キー全部に `Date.now()` を `_ts_*` として強制上書き（＝このデバイスを最新と宣言）。
 6. データキーと `_ts_` キーをセットにして bulkData を構築（null や JSON.parse エラーはスキップ）。
@@ -97,7 +98,8 @@ GAS同期の特性と事故防止の鉄則。**同期をいじる前に必ず読
 2. 「同期中…」表示。
 3. `?action=getAll` で GET → 全キーを JSON オブジェクトで受信。
 4. `deleted_ids`（tombstone）を最初に処理（他キーより前に削除情報を適用）。
-5. 各キーをループ（除外: `autobackup_` / `_ts_` / `gas_url` / `filaria_` / `custom_`）。
+5. 各キーをループ（除外: `autobackup_` / `_ts_` / `gas_url` / `custom_`。
+   `filaria_` は 2026-07-04 に除外解除済み）。
 6. 成功: 「同期済み」→ `migrateSupplements()` → `migrateNextVisitItems()` → `renderAll()`。
 7. 失敗（例外）: 「オフライン」→ `renderAll()`。
 
@@ -117,6 +119,11 @@ GAS同期の特性と事故防止の鉄則。**同期をいじる前に必ず読
   ローカルにあってGASにない項目は `pushToCloud` で書き戻す（push back）。
   2026-06-19 commit 100f94b 以降、この push back も `filterByTombstone` 適用後の配列を
   送るように修正済み（保存・判定・送信の3箇所で同一の適用後配列を共通参照）。
+- **`filaria_history`**: `scheduledDate` 単位の union（和集合）マージ。投与履歴は追記専用の
+  ため LWW 比較はせず、同日が両側にあればローカル優先。tombstone なし。GAS空なら保持。
+  （`filaria_settings` は単一オブジェクトのため下記「それ以外」の汎用LWW。両キーとも
+  2026-07-04／コミット 6178376 で同期対象化。経緯は CLAUDE.md
+  「フィラリアデータの同期対応」参照）
 - **それ以外（単純キー）**: GASのタイムスタンプ > ローカルのタイムスタンプ（または両方ゼロ）の
   ときだけ上書き。GAS値が null / 空配列なら上書きしない（安全ガード）。
 
