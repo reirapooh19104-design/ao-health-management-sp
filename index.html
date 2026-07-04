@@ -1532,7 +1532,7 @@ async function syncFromCloud() {
     }
 
     Object.keys(gasData).forEach(k => {
-      if (k.startsWith('autobackup_') || k.startsWith('_ts_') || k === 'gas_url' || k === 'sync_token' || k.startsWith('filaria_') || (k.startsWith('custom_') && k !== 'custom_meal_checks' && k !== 'custom_health_checks')) return;
+      if (k.startsWith('autobackup_') || k.startsWith('_ts_') || k === 'gas_url' || k === 'sync_token' || (k.startsWith('custom_') && k !== 'custom_meal_checks' && k !== 'custom_health_checks')) return;
 
       // tombstone: deleted_ids はマージして早期リターン
       if (k === 'deleted_ids') {
@@ -1747,6 +1747,19 @@ async function syncFromCloud() {
         if (arPushable.some(e => !gasArKeySet.has(arKey(e)))) {
           pushToCloud('ao_records', arPushable);
         }
+      } else if (k === 'filaria_history') {
+        // filaria_history: scheduledDate単位のunion（和集合）マージ + 安全ガード(cloud が空なら保持)
+        // 投与履歴は追記専用（チェックを外しても履歴は消さない・同日重複はalreadyガード済み）のため
+        // LWW比較はせず和集合にする。同じscheduledDateが両側にあればローカル優先（内容は実質等価）。
+        // 削除UIが無いためtombstone照合は不要。
+        const fhIsEmpty = gasVal == null || (Array.isArray(gasVal) && gasVal.length === 0);
+        if (fhIsEmpty) return;
+        const localFh = _saneEntries('filaria_history(ローカル)', load('filaria_history', []));
+        const gasFh = _saneEntries('filaria_history(GAS)', gasVal || []);
+        const fhMap = new Map();
+        gasFh.forEach(ge => fhMap.set(ge.scheduledDate, ge));
+        localFh.forEach(le => fhMap.set(le.scheduledDate, le));
+        localStorage.setItem('filaria_history', JSON.stringify(Array.from(fhMap.values())));
       } else if (k.startsWith('chk_')) {
         // chk_<日付>: 項目単位 OR マージ（true は消えない・断片が完全データに勝つバグ対策）
         if (gasVal == null || typeof gasVal !== 'object' || Array.isArray(gasVal)) return;
@@ -1787,7 +1800,7 @@ async function pushAllToCloud() {
   const dataKeys = [];
   for (let i = 0; i < localStorage.length; i++) {
     const k = localStorage.key(i);
-    if (k && !k.startsWith('autobackup_') && !k.startsWith('_ts_') && k !== 'gas_url' && k !== 'sync_token' && !k.startsWith('filaria_') && (k === 'custom_meal_checks' || k === 'custom_health_checks' || !k.startsWith('custom_')) && k !== 'view_month_diary' && k !== 'view_month_notes' && k !== 'selected_recipe_id') dataKeys.push(k);
+    if (k && !k.startsWith('autobackup_') && !k.startsWith('_ts_') && k !== 'gas_url' && k !== 'sync_token' && (k === 'custom_meal_checks' || k === 'custom_health_checks' || !k.startsWith('custom_')) && k !== 'view_month_diary' && k !== 'view_month_notes' && k !== 'selected_recipe_id') dataKeys.push(k);
   }
   // 動的キー（chk_・day_memo_）で空値のものをスキップ（静的キーは必ず送る）
   const filteredDataKeys = dataKeys.filter(k => {
@@ -2062,11 +2075,11 @@ function setAoRecords(arr) { save('ao_records', arr); }
 function getFilariaSettings() {
   try { return JSON.parse(localStorage.getItem('filaria_settings') || 'null'); } catch { return null; }
 }
-function setFilariaSettings(d) { localStorage.setItem('filaria_settings', JSON.stringify(d)); }
+function setFilariaSettings(d) { save('filaria_settings', d); }
 function getFilariaHistory() {
   try { return JSON.parse(localStorage.getItem('filaria_history') || '[]'); } catch { return []; }
 }
-function setFilariaHistory(d) { localStorage.setItem('filaria_history', JSON.stringify(d)); }
+function setFilariaHistory(d) { save('filaria_history', d); }
 function getFilariaScheduledDates(year) {
   const cfg = getFilariaSettings();
   if (!cfg || cfg.year !== year) return new Set();
