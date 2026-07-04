@@ -1961,12 +1961,14 @@ function showBackupModal() {
     list.innerHTML = '<div style="color:var(--text-light);padding:16px 0;font-size:14px">バックアップがありません</div>';
   } else {
     list.innerHTML = backups.map(date => {
-      const snap = JSON.parse(localStorage.getItem('autobackup_' + date) || '{}');
-      const cnt  = Object.keys(snap).length;
+      let snap = null;
+      try { snap = JSON.parse(localStorage.getItem('autobackup_' + date) || '{}'); }
+      catch (e) { console.error('[バックアップ読込失敗] autobackup_' + date, e); }
+      const info = snap ? Object.keys(snap).length + ' キー保存' : '読み込み失敗（破損の可能性）';
       return `<div class="backup-item">
         <div>
           <div class="backup-item-date">${date}</div>
-          <div class="backup-item-info">${cnt} キー保存</div>
+          <div class="backup-item-info">${info}</div>
         </div>
         <button class="btn-restore" onclick="restoreFromBackup('${date}')">復元</button>
       </div>`;
@@ -1981,7 +1983,14 @@ function closeBackupModal() {
 
 function restoreFromBackup(date) {
   if (!confirm(date + ' のバックアップで復元しますか？\n現在のデータは上書きされます。\n（復元後、GAS同期は手動で行ってください）')) return;
-  const snap = JSON.parse(localStorage.getItem('autobackup_' + date) || '{}');
+  // パース成功後にのみ削除処理へ進む（失敗時にデータが中途半端に消えるのを防ぐ）
+  let snap;
+  try { snap = JSON.parse(localStorage.getItem('autobackup_' + date) || '{}'); }
+  catch (e) {
+    console.error('[バックアップ読込失敗] autobackup_' + date, e);
+    showToast('バックアップの読み込みに失敗しました。復元を中止しました');
+    return;
+  }
   const savedGasUrl = getGasUrl();
   const savedSyncToken = getSyncToken();
   // autobackup_以外のキーをクリア
@@ -5533,17 +5542,19 @@ function exportData() {
     filariaHistory: getFilariaHistory(),
     checks: {}
   };
+  let skipped = 0;
   for (let i = 0; i < localStorage.length; i++) {
     const k = localStorage.key(i);
     if (k.startsWith('chk_') || k.startsWith('day_memo_')) {
-      payload.checks[k] = JSON.parse(localStorage.getItem(k));
+      try { payload.checks[k] = JSON.parse(localStorage.getItem(k)); }
+      catch (e) { skipped++; console.error('[エクスポート読込失敗] ' + k, e); }
     }
   }
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob([JSON.stringify(payload, null, 2)], {type:'application/json'}));
   a.download = 'ao-health-' + todayKey() + '.json';
   a.click();
-  showToast('エクスポートしました');
+  showToast(skipped ? 'エクスポートしました（' + skipped + '件のデータが破損のため除外）' : 'エクスポートしました');
 }
 
 function importData(e) {
