@@ -1599,9 +1599,8 @@ async function syncFromCloud() {
           .sort((a, b) => parseNoteDate(b.date) - parseNoteDate(a.date));
         localStorage.setItem('health_notes', JSON.stringify(filterByTombstone('health_notes', hnMerged)));
       } else if (k === 'supple') {
-        // supple: エントリ単位マージ + 安全ガード(cloud が空なら保持)
-        const isEmpty = gasVal == null || (Array.isArray(gasVal) && gasVal.length === 0);
-        if (isEmpty) return;
+        // supple: エントリ単位マージ。union構造(ローカル全件がMap初期値)が誤空からローカルを守り、
+        // 削除は filterByTombstone だけが行う（GASが空でも tombstone 適用まで必ず到達させる）
         const localSupple = _saneEntries('supple(ローカル)', load('supple', []));
         // id をキーに。id がない場合は 'name:サプリ名' でフォールバック
         const suppleMap = new Map(localSupple.map(e => [e.id || ('name:' + e.name), e]));
@@ -1620,9 +1619,8 @@ async function syncFromCloud() {
         });
         localStorage.setItem('supple', JSON.stringify(filterByTombstone('supple', Array.from(suppleMap.values()))));
       } else if (k === 'custom_meal_checks' || k === 'custom_health_checks') {
-        // チェック項目定義: id単位マージ + 安全ガード(cloud が空なら保持) + tombstone
-        const isEmpty = gasVal == null || (Array.isArray(gasVal) && gasVal.length === 0);
-        if (isEmpty) return;
+        // チェック項目定義: id単位マージ。union構造(ローカル全件がMap初期値)が誤空からローカルを守り、
+        // 削除は filterByTombstone だけが行う（GASが空でも tombstone 適用まで必ず到達させる）
         const localItems = _saneEntries(k + '(ローカル)', load(k, []));
         const itemMap = new Map(localItems.map(e => [e.id, e]));
         _saneEntries(k + '(GAS)', gasVal || []).forEach(ge => {
@@ -1638,9 +1636,8 @@ async function syncFromCloud() {
         });
         localStorage.setItem(k, JSON.stringify(filterByTombstone(k, Array.from(itemMap.values()))));
       } else if (k === 'next_visit') {
-        // next_visit: エントリ単位マージ + 安全ガード(cloud が空なら保持)
-        const nvIsEmpty = gasVal == null || (Array.isArray(gasVal) && gasVal.length === 0);
-        if (nvIsEmpty) return;
+        // next_visit: エントリ単位マージ。union構造(ローカル全件がMap初期値)が誤空からローカルを守り、
+        // 削除は filterByTombstone だけが行う（GASが空でも tombstone 適用まで必ず到達させる）
         const localNv = _saneEntries('next_visit(ローカル)', load('next_visit', []));
         const gasNv = _saneEntries('next_visit(GAS)', gasVal || []);
         const nvKey = e => typeof e === 'string' ? ('text:' + e) : (e.id || ('text:' + e.text));
@@ -1667,9 +1664,8 @@ async function syncFromCloud() {
           pushToCloud('next_visit', nvPushable);
         }
       } else if (k === 'consultation_summary') {
-        // consultation_summary: エントリ単位マージ + 安全ガード(cloud が空なら保持)
-        const csIsEmpty = gasVal == null || (Array.isArray(gasVal) && gasVal.length === 0);
-        if (csIsEmpty) return;
+        // consultation_summary: エントリ単位マージ。union構造(ローカル全件がMap初期値)が誤空からローカルを守り、
+        // 削除は filterByTombstone だけが行う（GASが空でも tombstone 適用まで必ず到達させる）
         const localCs = _saneEntries('consultation_summary(ローカル)', load('consultation_summary', []));
         const gasCs = _saneEntries('consultation_summary(GAS)', gasVal || []);
         const csKey = e => typeof e === 'string' ? ('text:' + e) : (e.id || ('text:' + e.text));
@@ -1696,9 +1692,8 @@ async function syncFromCloud() {
           pushToCloud('consultation_summary', csPushable);
         }
       } else if (k === 'consultation_history') {
-        // consultation_history: エントリ単位マージ + 安全ガード(cloud が空なら保持)
-        const chIsEmpty = gasVal == null || (Array.isArray(gasVal) && gasVal.length === 0);
-        if (chIsEmpty) return;
+        // consultation_history: エントリ単位マージ。union構造(ローカル全件がMap初期値)が誤空からローカルを守り、
+        // 削除は filterByTombstone だけが行う（GASが空でも tombstone 適用まで必ず到達させる）
         const localCh = _saneEntries('consultation_history(ローカル)', load('consultation_history', []));
         const gasCh = _saneEntries('consultation_history(GAS)', gasVal || []);
         const chKey = e => e.id || ('date:' + e.date);
