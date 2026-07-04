@@ -1723,9 +1723,8 @@ async function syncFromCloud() {
           pushToCloud('consultation_history', chPushable);
         }
       } else if (k === 'ao_records') {
-        // ao_records: エントリ単位マージ + 安全ガード(cloud が空なら保持)
-        const arIsEmpty = gasVal == null || (Array.isArray(gasVal) && gasVal.length === 0);
-        if (arIsEmpty) return;
+        // ao_records: エントリ単位マージ。union構造(ローカル全件がMap初期値)が誤空からローカルを守り、
+        // 削除は filterByTombstone だけが行う（GASが空でも tombstone 適用まで必ず到達させる）
         const localAr = _saneEntries('ao_records(ローカル)', getAoRecords());
         const gasAr = _saneEntries('ao_records(GAS)', gasVal || []);
         const arKey = e => e.id;
