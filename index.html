@@ -1357,7 +1357,12 @@ async function pushToCloud(key, val) {
     });
     const resBody = await res.json().catch(() => null);
     if (resBody && resBody.status === 'error') {
-      console.warn('[認証エラー] pushToCloud key=' + key + '：合言葉を確認してください');
+      if (resBody.message === 'busy') {
+        // GAS側LockServiceの待機タイムアウト（30秒）。リトライはしない（表示のみ）
+        console.warn('[混雑] pushToCloud key=' + key + '：GASが混み合っています。自動再送はされません');
+      } else {
+        console.warn('[認証エラー] pushToCloud key=' + key + '：合言葉を確認してください');
+      }
     }
   } catch (e) { console.error('[push失敗] pushToCloud key=' + key, e); }
 }
@@ -1521,6 +1526,18 @@ async function syncFromCloud() {
     // 「statusとmessageの2キーのみ」という unauthorized 応答固有の形まで確認する。
     if (gasData && gasData.status === 'error' && gasData.message === 'unauthorized' && Object.keys(gasData).length <= 2) {
       _syncStatus('合言葉を確認してください', 'error');
+      setTimeout(() => _syncStatus(''), 5000);
+      renderAll();
+      return;
+    }
+
+    // busy応答（GAS側LockServiceの待機タイムアウト）も同様にデータとして扱わず即中断する。
+    // unauthorized ガードと同型の三条件方式。ここで止めないと busy 応答の
+    // status/message がマージループに流入して localStorage→シートへ汚染される
+    // （落とし穴12と同一メカニズム）。
+    if (gasData && gasData.status === 'error' && gasData.message === 'busy' && Object.keys(gasData).length <= 2) {
+      console.warn('[混雑] syncFromCloud：GASが混み合っているため今回の受信同期をスキップしました');
+      _syncStatus('混み合っているため同期をスキップしました', 'error');
       setTimeout(() => _syncStatus(''), 5000);
       renderAll();
       return;
