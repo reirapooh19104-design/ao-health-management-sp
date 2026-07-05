@@ -5608,10 +5608,25 @@ function importData(e) {
       // tombstoneは単純上書きせずローカルとマージする（上書きだと復元後の全データGAS同期で
       // GASの削除履歴が巻き戻り、削除済み項目が復活する経路ができるため）
       if (d.deletedIds)          mergeDeletedIds(d.deletedIds);
-      if (d.recipes)             save('recipes', d.recipes);
+      // recipes: id単位のunionマージ（置き換えだと、インポート元に無い
+      // ローカル既存レシピが消える。端末間の取り込みで実際に消失事故が起きたため。
+      // 同idはインポート側優先＝「ファイルを取り込む」操作の直感に一致。
+      // レシピ要素に_tsが無いため要素単位LWWは不可。削除tombstoneも無いため
+      // 古いバックアップの取り込みで削除済みレシピが復活しうるが、消えるより安全）
+      if (d.recipes && Array.isArray(d.recipes)) {
+        const recMap = new Map(getRecipes().map(r => [r.id, r]));
+        d.recipes.forEach(r => { if (r && r.id) recMap.set(r.id, r); });
+        save('recipes', Array.from(recMap.values()));
+      }
       if (d.selectedRecipeId)    localStorage.setItem('selected_recipe_id', d.selectedRecipeId);
       if (d.filariaSettings)     setFilariaSettings(d.filariaSettings);
-      if (d.filariaHistory)      setFilariaHistory(d.filariaHistory);
+      // filaria_history: scheduledDate単位のunionマージ（受信同期と同じ和集合。
+      // 追記専用データなので置き換えでインポート元に無い投与履歴を消さない）
+      if (d.filariaHistory && Array.isArray(d.filariaHistory)) {
+        const fhMap = new Map(getFilariaHistory().map(h => [h.scheduledDate, h]));
+        d.filariaHistory.forEach(h => { if (h && h.scheduledDate) fhMap.set(h.scheduledDate, h); });
+        setFilariaHistory(Array.from(fhMap.values()));
+      }
       if (d.checks) Object.keys(d.checks).forEach(k => save(k, d.checks[k]));
       renderAll();
       showToast('インポートしました');
