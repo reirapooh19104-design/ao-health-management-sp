@@ -574,7 +574,7 @@ body {
 
     <div class="form-group">
       <label class="form-label">日付</label>
-      <input type="date" class="form-input" id="d-date" onchange="loadFormForDate(this.value)">
+      <input type="date" class="form-input" id="d-date" autocomplete="off" onchange="loadFormForDate(this.value)">
     </div>
 
     <div style="font-size:12px;color:var(--text-light);margin:-6px 0 12px;padding:8px 10px;background:#F5F4F0;border-radius:8px">
@@ -752,7 +752,7 @@ body {
     <div style="margin-top:16px;padding-top:12px;border-top:1px solid var(--border)">
       <div style="display:flex;gap:8px;align-items:center">
         <label style="font-size:12px;color:var(--text-light);flex-shrink:0">診察日</label>
-        <input type="date" id="cs-consult-date" class="form-input" style="flex:1">
+        <input type="date" id="cs-consult-date" class="form-input" autocomplete="off" style="flex:1">
       </div>
       <button class="nv-add-btn" onclick="saveConsultation()" style="width:100%;margin-top:8px">診察完了として保存</button>
     </div>
@@ -800,7 +800,7 @@ body {
 
     <div class="form-group">
       <label class="form-label">検査日</label>
-      <input type="date" class="form-input" id="bt-date" onchange="loadBloodTestForDate(this.value)">
+      <input type="date" class="form-input" id="bt-date" autocomplete="off" onchange="loadBloodTestForDate(this.value)">
     </div>
 
     <div class="bt-form-section">肝胆管機能</div>
@@ -1014,7 +1014,7 @@ body {
     <div class="section-title" style="margin-bottom:14px">今日の体重を記録</div>
     <div class="form-group">
       <label class="form-label">日付</label>
-      <input type="date" id="weight-date" class="form-input">
+      <input type="date" id="weight-date" class="form-input" autocomplete="off">
     </div>
     <div class="form-group">
       <label class="form-label">体重</label>
@@ -1073,15 +1073,20 @@ body {
     <button class="modal-close" onclick="closeGasUrlModal()">×</button>
     <div class="modal-title">GAS URL設定</div>
     <div class="modal-sub">GAS Web App の URL を入力してください。スプレッドシートとの同期に使用します。</div>
-    <input id="gas-url-input" type="url" class="form-input"
-      placeholder="https://script.google.com/macros/s/..."
-      style="width:100%;box-sizing:border-box;margin-bottom:12px">
-    <div id="gas-url-error" style="color:#c0392b;font-size:13px;margin-bottom:8px;display:none"></div>
-    <div class="modal-sub">GAS側スクリプトプロパティに設定した合言葉（SYNC_TOKEN）を入力してください。GAS側が未対応（認証なし）のうちは空欄のままで構いません。</div>
-    <div style="display:flex;gap:6px;margin-bottom:12px">
-      <input id="sync-token-input" type="password" class="form-input" placeholder="合言葉" style="flex:1;box-sizing:border-box">
-      <button type="button" id="sync-token-toggle-btn" class="btn-secondary" style="flex-shrink:0;padding:0 12px" onclick="toggleSyncTokenVisibility()">表示</button>
-    </div>
+    <!-- formで囲むのはChromeの「Password field is not contained in a form」警告と
+         フォーム誤認（他の入力欄への資格情報候補表示）への対処。送信挙動は持たせない
+         （submitボタン無し・onsubmitで封じ済み。保存はform外のボタン→saveGasUrlFromModal） -->
+    <form autocomplete="off" onsubmit="return false">
+      <input id="gas-url-input" type="url" class="form-input" autocomplete="off"
+        placeholder="https://script.google.com/macros/s/..."
+        style="width:100%;box-sizing:border-box;margin-bottom:12px">
+      <div id="gas-url-error" style="color:#c0392b;font-size:13px;margin-bottom:8px;display:none"></div>
+      <div class="modal-sub">GAS側スクリプトプロパティに設定した合言葉（SYNC_TOKEN）を入力してください。GAS側が未対応（認証なし）のうちは空欄のままで構いません。</div>
+      <div style="display:flex;gap:6px;margin-bottom:12px">
+        <input id="sync-token-input" type="password" class="form-input" autocomplete="new-password" placeholder="合言葉" style="flex:1;box-sizing:border-box">
+        <button type="button" id="sync-token-toggle-btn" class="btn-secondary" style="flex-shrink:0;padding:0 12px" onclick="toggleSyncTokenVisibility()">表示</button>
+      </div>
+    </form>
     <button class="btn-primary" style="width:100%" onclick="saveGasUrlFromModal()">保存して同期を有効にする</button>
     <button class="btn-secondary" style="width:100%;margin-top:8px" onclick="closeGasUrlModal()">キャンセル</button>
     <hr style="margin:16px 0;border:none;border-top:1px solid #eee">
