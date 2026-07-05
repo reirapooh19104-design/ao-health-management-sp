@@ -16,6 +16,7 @@
 // ============================================================
 
 const SHEET_NAME = 'data';
+const LOCK_WAIT_MS = 30000; // ロック待機の上限（ミリ秒）
 
 function getOrCreateSheet() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -40,27 +41,50 @@ function unauthorizedResponse() {
     .setMimeType(ContentService.MimeType.JSON);
 }
 
+// ── ロックヘルパー ────────────────────────────────────────
+// save() は本体と _ts_ の2POSTをほぼ同時に送る。ロック無しだと
+// 「全シート読み→全シート書き戻し」同士が並行実行され、後着が
+// 前着の変更を消す（半書き込みレース。2026-07-05 原因確定）。
+// ScriptLock でシートの読み書きを直列化する。
+// ロック取得は認証チェックの後に行う（不正リクエストに待たせない）。
+function busyResponse() {
+  return ContentService
+    .createTextOutput(JSON.stringify({ status: 'error', message: 'busy' }))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
 // 全データ取得（GET リクエスト）
 function doGet(e) {
   // ── 認証チェック（追加） ──
   const token = e.parameter && e.parameter.token;
   if (!isAuthorized(token)) return unauthorizedResponse();
-  // ── ここから既存ロジック（変更なし） ──
 
-  const sheet = getOrCreateSheet();
-  const result = {};
-  const lastRow = sheet.getLastRow();
-  if (lastRow > 0) {
-    const rows = sheet.getRange(1, 1, lastRow, 2).getValues();
-    rows.forEach(([key, value]) => {
-      if (key) {
-        try { result[key] = JSON.parse(value); } catch { result[key] = value; }
-      }
-    });
+  // ── ロック取得（bulk書き込みの clearContent→setValues の隙間を読まないため） ──
+  const lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(LOCK_WAIT_MS);
+  } catch (err) {
+    return busyResponse();
   }
-  return ContentService
-    .createTextOutput(JSON.stringify(result))
-    .setMimeType(ContentService.MimeType.JSON);
+  try {
+    // ── ここから既存ロジック（変更なし） ──
+    const sheet = getOrCreateSheet();
+    const result = {};
+    const lastRow = sheet.getLastRow();
+    if (lastRow > 0) {
+      const rows = sheet.getRange(1, 1, lastRow, 2).getValues();
+      rows.forEach(([key, value]) => {
+        if (key) {
+          try { result[key] = JSON.parse(value); } catch { result[key] = value; }
+        }
+      });
+    }
+    return ContentService
+      .createTextOutput(JSON.stringify(result))
+      .setMimeType(ContentService.MimeType.JSON);
+  } finally {
+    lock.releaseLock();
+  }
 }
 
 // データ保存（POST リクエスト）← 一括受信に対応
@@ -69,62 +93,73 @@ function doPost(e) {
 
   // ── 認証チェック（追加） ──
   if (!isAuthorized(body.token)) return unauthorizedResponse();
-  // ── ここから既存ロジック（変更なし） ──
 
-  const sheet = getOrCreateSheet();
+  // ── ロック取得（半書き込みレース対策の本丸。読み→書きを直列化） ──
+  const lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(LOCK_WAIT_MS);
+  } catch (err) {
+    return busyResponse();
+  }
+  try {
+    // ── ここから既存ロジック（変更なし） ──
+    const sheet = getOrCreateSheet();
 
-  // 一括送信（bulk）の場合
-  if (body.bulk && body.data) {
-    const lastRow = sheet.getLastRow();
-    const dataMap = {};
+    // 一括送信（bulk）の場合
+    if (body.bulk && body.data) {
+      const lastRow = sheet.getLastRow();
+      const dataMap = {};
 
-    // 既存データをメモリに読み込む
-    if (lastRow > 0) {
-      const existing = sheet.getRange(1, 1, lastRow, 2).getValues();
-      existing.forEach(([k, v]) => { if (k) dataMap[k] = v; });
+      // 既存データをメモリに読み込む
+      if (lastRow > 0) {
+        const existing = sheet.getRange(1, 1, lastRow, 2).getValues();
+        existing.forEach(([k, v]) => { if (k) dataMap[k] = v; });
+      }
+
+      // 新データで上書き
+      Object.entries(body.data).forEach(([k, v]) => {
+        dataMap[k] = JSON.stringify(v);
+      });
+
+      // 全データを一括書き込み
+      const rows = Object.entries(dataMap);
+      if (rows.length > 0) {
+        // 既存行をクリアして書き直し
+        if (lastRow > 0) sheet.getRange(1, 1, lastRow, 2).clearContent();
+        sheet.getRange(1, 1, rows.length, 2).setValues(rows);
+      }
+
+      return ContentService
+        .createTextOutput(JSON.stringify({ status: 'ok', count: rows.length }))
+        .setMimeType(ContentService.MimeType.JSON);
     }
 
-    // 新データで上書き
-    Object.entries(body.data).forEach(([k, v]) => {
-      dataMap[k] = JSON.stringify(v);
-    });
+    // 従来の1件ずつ送信（後方互換）
+    const { key, value } = body;
+    const lastRow = sheet.getLastRow();
+    const serialized = JSON.stringify(value);
 
-    // 全データを一括書き込み
-    const rows = Object.entries(dataMap);
-    if (rows.length > 0) {
-      // 既存行をクリアして書き直し
-      if (lastRow > 0) sheet.getRange(1, 1, lastRow, 2).clearContent();
-      sheet.getRange(1, 1, rows.length, 2).setValues(rows);
+    if (lastRow === 0) {
+      sheet.appendRow([key, serialized]);
+    } else {
+      const range = sheet.getRange(1, 1, lastRow, 2);
+      const allData = range.getValues();
+      let foundIndex = -1;
+      for (let i = 0; i < allData.length; i++) {
+        if (allData[i][0] === key) { foundIndex = i; break; }
+      }
+      if (foundIndex >= 0) {
+        allData[foundIndex][1] = serialized;
+        range.setValues(allData);
+      } else {
+        sheet.appendRow([key, serialized]);
+      }
     }
 
     return ContentService
-      .createTextOutput(JSON.stringify({ status: 'ok', count: rows.length }))
+      .createTextOutput(JSON.stringify({ status: 'ok' }))
       .setMimeType(ContentService.MimeType.JSON);
+  } finally {
+    lock.releaseLock();
   }
-
-  // 従来の1件ずつ送信（後方互換）
-  const { key, value } = body;
-  const lastRow = sheet.getLastRow();
-  const serialized = JSON.stringify(value);
-
-  if (lastRow === 0) {
-    sheet.appendRow([key, serialized]);
-  } else {
-    const range = sheet.getRange(1, 1, lastRow, 2);
-    const allData = range.getValues();
-    let foundIndex = -1;
-    for (let i = 0; i < allData.length; i++) {
-      if (allData[i][0] === key) { foundIndex = i; break; }
-    }
-    if (foundIndex >= 0) {
-      allData[foundIndex][1] = serialized;
-      range.setValues(allData);
-    } else {
-      sheet.appendRow([key, serialized]);
-    }
-  }
-
-  return ContentService
-    .createTextOutput(JSON.stringify({ status: 'ok' }))
-    .setMimeType(ContentService.MimeType.JSON);
 }
