@@ -470,6 +470,67 @@ body {
   .print-flag-h { font-weight: 700; }
   .print-flag-l { font-weight: 700; }
 }
+
+/* ── 学びメモタブ (lm-) ── */
+.lm-banner { background:#FBEAF0; border-radius:10px; padding:10px 13px; font-size:12px; color:var(--pink); margin-bottom:14px; display:flex; gap:7px; align-items:flex-start; }
+.lm-summary { background:var(--card); border-radius:12px; box-shadow:0 1px 4px rgba(0,0,0,0.06); padding:12px 15px; margin-bottom:16px; }
+.lm-summary .lm-stitle { font-size:12px; color:var(--pink); font-weight:700; margin-bottom:8px; }
+.lm-summary .lm-srow { display:flex; flex-wrap:wrap; gap:8px; }
+.lm-spill { font-size:12px; padding:4px 11px; border-radius:14px; color:var(--text); font-weight:600; display:inline-flex; align-items:center; gap:5px; }
+.lm-spill b { font-weight:800; }
+.lm-sempty { font-size:12px; color:var(--text-light); }
+.lm-new-trigger { width:100%; background:var(--pink); color:#fff; border:none; border-radius:12px; padding:13px; font-size:14px; font-weight:700; cursor:pointer; font-family:inherit; margin-bottom:16px; box-shadow:0 1px 4px rgba(0,0,0,0.08); }
+.lm-add-card { background:var(--card); border-radius:14px; box-shadow:0 1px 4px rgba(0,0,0,0.06); padding:16px; margin-bottom:20px; }
+.lm-add-card h2 { font-size:14px; color:var(--pink); margin-bottom:14px; }
+.lm-field { margin-bottom:12px; }
+.lm-field label { display:block; font-size:12px; color:var(--text-light); margin-bottom:4px; font-weight:600; }
+.lm-field input[type="text"], .lm-field input[type="date"], .lm-field input[type="url"], .lm-field textarea { width:100%; box-sizing:border-box; border:1px solid var(--border); border-radius:8px; padding:8px 10px; font-size:13px; font-family:inherit; color:var(--text); background:#FDFCFB; }
+.lm-field textarea { resize:vertical; min-height:54px; }
+.lm-cat-picker { display:flex; flex-wrap:wrap; gap:6px; align-items:center; }
+.lm-cat-chip { border:1.5px solid var(--border); background:#fff; border-radius:20px; padding:5px 12px; font-size:12px; cursor:pointer; color:var(--text-light); font-family:inherit; }
+.lm-cat-chip.selected { color:var(--text); border-color:transparent; font-weight:700; }
+.lm-cat-chip.lm-add-cat { border-style:dashed; color:var(--pink); border-color:var(--green-light); }
+.lm-seg, .lm-mastery-row { display:flex; gap:6px; }
+.lm-seg button, .lm-mastery-row button { flex:1; border:1.5px solid var(--border); background:#fff; border-radius:8px; padding:7px 4px; font-size:12px; cursor:pointer; color:var(--text-light); font-family:inherit; }
+.lm-seg button.on, .lm-mastery-row button.on { background:#FBEAF0; border-color:var(--green-light); color:var(--pink); font-weight:700; }
+.lm-save-btn { width:100%; background:var(--pink); color:#fff; border:none; border-radius:10px; padding:12px; font-size:14px; font-weight:700; cursor:pointer; font-family:inherit; margin-top:4px; }
+.lm-cancel-btn { width:100%; background:none; color:var(--text-light); border:none; padding:8px; font-size:12px; cursor:pointer; font-family:inherit; margin-top:4px; }
+.lm-filter-bar { display:flex; gap:6px; margin-bottom:16px; flex-wrap:wrap; align-items:center; }
+.lm-filter-bar .lm-flabel { font-size:11px; color:var(--text-light); }
+.lm-filter-chip { border:1px solid var(--border); background:#fff; border-radius:16px; padding:4px 11px; font-size:11.5px; cursor:pointer; color:var(--text-light); font-family:inherit; }
+.lm-filter-chip.on { background:var(--pink); color:#fff; border-color:transparent; font-weight:700; }
+.lm-month-group { margin-bottom:12px; }
+.lm-month-head { display:flex; align-items:center; gap:8px; width:100%; background:#fff; border:1px solid var(--border); border-radius:12px; padding:11px 14px; cursor:pointer; font-family:inherit; font-size:14px; color:var(--text); font-weight:700; box-shadow:0 1px 4px rgba(0,0,0,0.05); }
+.lm-month-head .lm-arrow { transition:transform .2s; color:var(--pink); font-size:12px; }
+.lm-month-head.open .lm-arrow { transform:rotate(90deg); }
+.lm-month-head .lm-count { margin-left:auto; font-size:11px; color:var(--text-light); font-weight:400; }
+.lm-month-body { display:none; padding-top:10px; }
+.lm-month-body.open { display:block; }
+.lm-memo { background:var(--card); border-radius:14px; box-shadow:0 1px 4px rgba(0,0,0,0.06); padding:14px 15px; margin-bottom:11px; border-left:4px solid var(--lm-solid, var(--green-light)); position:relative; }
+.lm-memo-top { display:flex; align-items:center; gap:8px; margin-bottom:8px; flex-wrap:wrap; padding-right:26px; }
+.lm-memo-cat { font-size:11px; font-weight:700; color:var(--text); padding:2px 9px; border-radius:12px; background:var(--lm-fill, #F0EDE8); }
+.lm-memo-date { font-size:12px; color:var(--text-light); }
+.lm-memo-mastery { margin-left:auto; font-size:10.5px; padding:2px 9px; border-radius:10px; font-weight:700; background:var(--lm-fill, #F0EDE8); color:var(--text); display:inline-flex; align-items:center; gap:5px; }
+.lm-dots { display:inline-flex; gap:2px; }
+.lm-dots i { width:5px; height:5px; border-radius:50%; background:var(--lm-solid, var(--text-light)); opacity:.28; display:block; }
+.lm-dots i.on { opacity:1; }
+.lm-memo-title { font-size:15px; font-weight:700; margin-bottom:3px; }
+.lm-memo-teacher { font-size:12px; color:var(--text-light); margin-bottom:9px; }
+.lm-memo-teacher .lm-fmt { display:inline-block; margin-left:8px; padding:1px 7px; background:#FBEAF0; border-radius:8px; color:var(--pink); font-size:10.5px; }
+.lm-memo-block { margin-bottom:8px; }
+.lm-memo-block .lm-blabel { font-size:11px; color:var(--lm-solid, var(--pink)); font-weight:700; margin-bottom:1px; }
+.lm-memo-block .lm-btext { font-size:13px; color:var(--text); white-space:pre-wrap; word-break:break-word; }
+.lm-memo-block .lm-btext.lm-ao { background:var(--lm-fill, #F0EDE8); border-radius:8px; padding:6px 9px; }
+.lm-memo-block.lm-next .lm-blabel::before { content:"🔖 "; }
+.lm-memo-block.lm-next .lm-btext { background:#fffdf5; border:1px dashed var(--lm-solid, var(--text-light)); border-radius:8px; padding:6px 9px; }
+.lm-memo-link a { font-size:12px; color:var(--pink); text-decoration:none; word-break:break-all; }
+.lm-kebab { position:absolute; top:12px; right:12px; background:none; border:none; cursor:pointer; font-size:18px; color:var(--text-light); line-height:1; padding:2px 6px; border-radius:6px; }
+.lm-kebab:hover { background:#FBEAF0; }
+.lm-memo-menu { display:none; position:absolute; top:36px; right:12px; background:#fff; border:1px solid var(--border); border-radius:10px; box-shadow:0 4px 16px rgba(0,0,0,.12); overflow:hidden; z-index:5; }
+.lm-memo-menu.open { display:block; }
+.lm-memo-menu button { display:block; width:100%; text-align:left; background:none; border:none; padding:9px 18px 9px 14px; font-size:13px; color:var(--text); cursor:pointer; font-family:inherit; }
+.lm-memo-menu button:hover { background:var(--bg); }
+.lm-memo-menu button.lm-del { color:#d05c5c; }
 </style>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3/dist/tabler-icons.min.css">
@@ -496,6 +557,7 @@ body {
   <div class="tab"        onclick="switchTab('notes')">健康ノート</div>
   <div class="tab"        onclick="switchTab('weight')">体重グラフ</div>
   <div class="tab"        onclick="switchTab('hospital')">あおの記録</div>
+  <div class="tab"        onclick="switchTab('learning')">学びメモ</div>
   <div class="tab"        onclick="switchTab('diary')">食事日誌</div>
   <div class="tab"        onclick="switchTab('recipe')">レシピ</div>
   <div class="tab"        onclick="switchTab('supple')">サプリ・薬</div>
@@ -1007,6 +1069,19 @@ body {
   </div>
 </div><!-- /hospital -->
 
+<!-- ===== 学びメモタブ ===== -->
+<div id="pane-learning" class="tab-pane">
+  <div class="lm-banner">
+    <span>📖</span>
+    <span>筋トレ・マッサージ・プレイズタッチなど、あおのために学んだことを記録します。あおの反応と一緒に残しておくと、後から振り返りやすくなります。</span>
+  </div>
+  <div id="lm-summary"></div>
+  <button class="lm-new-trigger" onclick="toggleLmForm()">＋ 新しい学びメモを書く</button>
+  <div id="lm-form-container"></div>
+  <div id="lm-filter-bar"></div>
+  <div id="lm-list"></div>
+</div><!-- /learning -->
+
 <!-- ===== 体重グラフタブ ===== -->
 <div id="pane-weight" class="tab-pane">
   <div class="card">
@@ -1484,6 +1559,12 @@ function _validAoRecordEntry(e) {
       && typeof e.text === 'string' && e.text !== ''
       && typeof e._ts === 'number';
 }
+function _validLearningMemoEntry(e) {
+  if (!e || typeof e !== 'object' || Array.isArray(e)) return false;
+  return typeof e.id === 'string' && e.id !== ''
+      && typeof e.date === 'string' && e.date !== ''
+      && typeof e._ts === 'number';
+}
 function _filterForPushBack(keyName, arr, validator) {
   const ok = arr.filter(validator);
   if (ok.length !== arr.length) {
@@ -1762,6 +1843,47 @@ async function syncFromCloud() {
         if (arPushable.some(e => !gasArKeySet.has(arKey(e)))) {
           pushToCloud('ao_records', arPushable);
         }
+      } else if (k === 'learning_memos') {
+        // learning_memos: エントリ単位マージ（ao_records同型）。union構造(ローカル全件がMap初期値)が
+        // 誤空からローカルを守り、削除は filterByTombstone だけが行う（GASが空でも tombstone 適用まで必ず到達させる）
+        const localLm = _saneEntries('learning_memos(ローカル)', load('learning_memos', []));
+        const gasLm = _saneEntries('learning_memos(GAS)', gasVal || []);
+        const lmKey = e => e.id;
+        const lmMap = new Map(localLm.map(e => [lmKey(e), e]));
+        gasLm.forEach(ge => {
+          const key = lmKey(ge);
+          const le = lmMap.get(key);
+          if (!le) { lmMap.set(key, ge); }
+          else {
+            if (Number(ge._ts || 0) >= Number(le._ts || 0)) lmMap.set(key, ge);
+          }
+        });
+        const lmMerged = Array.from(lmMap.values());
+        const lmClean = filterByTombstone('learning_memos', lmMerged);
+        localStorage.setItem('learning_memos', JSON.stringify(lmClean));
+        // 壊れた項目はpush対象から除外する（ローカルは削除しない）
+        const lmPushable = _filterForPushBack('learning_memos', lmClean, _validLearningMemoEntry);
+        const gasLmKeySet = new Set(gasLm.map(ge => lmKey(ge)));
+        if (lmPushable.some(e => !gasLmKeySet.has(lmKey(e)))) {
+          pushToCloud('learning_memos', lmPushable);
+        }
+      } else if (k === 'learning_categories') {
+        // learning_categories: id単位マージ（custom_meal_checks同型・push-backなし）。
+        // union構造が誤空からローカルを守り、削除は filterByTombstone だけが行う
+        const localLc = _saneEntries('learning_categories(ローカル)', load('learning_categories', []));
+        const lcMap = new Map(localLc.map(e => [e.id, e]));
+        _saneEntries('learning_categories(GAS)', gasVal || []).forEach(ge => {
+          if (!ge.id) return;
+          const le = lcMap.get(ge.id);
+          if (!le) {
+            lcMap.set(ge.id, ge);
+          } else {
+            const geTs = Number(ge._ts || 0);
+            const leTs = Number(le._ts || 0);
+            if (geTs >= leTs) lcMap.set(ge.id, ge);
+          }
+        });
+        localStorage.setItem('learning_categories', JSON.stringify(filterByTombstone('learning_categories', Array.from(lcMap.values()))));
       } else if (k === 'filaria_history') {
         // filaria_history: scheduledDate単位のunion（和集合）マージ + 安全ガード(cloud が空なら保持)
         // 投与履歴は追記専用（チェックを外しても履歴は消さない・同日重複はalreadyガード済み）のため
@@ -4960,6 +5082,360 @@ function cancelAoRecordAdd() {
 }
 
 // ============================================================
+// LEARNING MEMO（学びメモ）
+// ============================================================
+
+// カテゴリ自動割当用パレット（淡い塗り＋濃色のペア。先頭3つは初期カテゴリ固定色）
+const LM_PALETTE = [
+  { fill: 'rgba(120,205,190,0.28)', solid: '#6cbfae' },  // 緑（筋トレ）
+  { fill: 'rgba(240,180,100,0.28)', solid: '#dda558' },  // 橙（マッサージ）
+  { fill: 'rgba(180,140,220,0.26)', solid: '#a986cf' },  // 紫（プレイズタッチ）
+  { fill: 'rgba(150,180,220,0.28)', solid: '#7d9fd3' },  // 青
+  { fill: 'rgba(240,150,170,0.26)', solid: '#e08ba3' },  // ピンク
+  { fill: 'rgba(120,200,220,0.26)', solid: '#67b7c9' },  // 水色
+  { fill: 'rgba(200,200,120,0.30)', solid: '#a8a45c' },  // 黄緑
+  { fill: 'rgba(220,160,120,0.28)', solid: '#c98f66' },  // ブラウン
+];
+const LM_MASTERY_LABELS = ['習いたて', '練習中', 'できた', '定着した'];  // mastery 1〜4
+const LM_FORMATS = ['Zoom', '対面', '動画', 'その他'];
+
+let _lmFormOpen = false;
+let _lmFormCat = null;       // 追加フォームの選択カテゴリid
+let _lmFormFormat = 'Zoom';
+let _lmFormMastery = 1;
+let _lmEditId = null;        // インライン編集中のメモid
+let _lmEditCat = null;
+let _lmEditFormat = 'Zoom';
+let _lmEditMastery = 1;
+let _lmMenuOpenId = null;    // ⋯メニューを開いているメモid
+let _lmFilterCat = null;     // 絞り込み中カテゴリid（null=すべて）
+let _lmMonthOpen = {};       // 'YYYY-MM' → bool（ユーザーが開閉した月の上書き。既定は最新月のみ開く）
+
+function getLearningMemos() { return load('learning_memos', []); }
+function setLearningMemos(arr) { save('learning_memos', arr); }
+function getLearningCategories() { return load('learning_categories', []); }
+function setLearningCategories(arr) { save('learning_categories', arr); }
+
+// 初期カテゴリのシード（キー不存在の初回のみ。initConsultationKeys と同型）
+// idを固定にすることで、複数端末が独立にシードしても同期で重複しない
+function seedLearningCategories() {
+  if (localStorage.getItem('learning_categories') !== null) return;
+  const ts = Date.now();
+  setLearningCategories([
+    { id: 'lcat_kintore', label: '筋トレ',       fill: LM_PALETTE[0].fill, solid: LM_PALETTE[0].solid, _ts: ts, order: 1 },
+    { id: 'lcat_massage', label: 'マッサージ',   fill: LM_PALETTE[1].fill, solid: LM_PALETTE[1].solid, _ts: ts, order: 2 },
+    { id: 'lcat_praise',  label: 'プレイズタッチ', fill: LM_PALETTE[2].fill, solid: LM_PALETTE[2].solid, _ts: ts, order: 3 },
+  ]);
+}
+
+function _lmSortedCategories() {
+  return getLearningCategories().slice().sort((a, b) => (a.order || 0) - (b.order || 0));
+}
+function _lmCatById(id) {
+  return getLearningCategories().find(c => c.id === id) || null;
+}
+function _lmMonthLabel(ym) {  // 'YYYY-MM' → '2026年7月'
+  const [y, m] = ym.split('-');
+  return y + '年' + Number(m) + '月';
+}
+function _lmDateLabel(dateStr) {  // 'YYYY-MM-DD' → '7月3日'
+  const p = String(dateStr).split('-');
+  if (p.length !== 3) return escHtml(dateStr);
+  return Number(p[1]) + '月' + Number(p[2]) + '日';
+}
+
+function renderLearning() {
+  const listEl = document.getElementById('lm-list');
+  if (!listEl) return;
+  const cats = _lmSortedCategories();
+  const memos = getLearningMemos().filter(m => m && m.id);
+
+  // ── 今月の学び（集計） ──
+  const curYm = todayKey().slice(0, 7);
+  const counts = {};
+  memos.forEach(m => {
+    if (String(m.date || '').slice(0, 7) === curYm) counts[m.category] = (counts[m.category] || 0) + 1;
+  });
+  const pills = cats.filter(c => counts[c.id]).map(c =>
+    `<span class="lm-spill" style="background:${escHtml(c.fill)}">${escHtml(c.label)} <b>${counts[c.id]}</b>回</span>`
+  ).join('');
+  document.getElementById('lm-summary').innerHTML = `<div class="lm-summary">
+    <div class="lm-stitle">今月の学び（${_lmMonthLabel(curYm)}）</div>
+    <div class="lm-srow">${pills || '<span class="lm-sempty">今月はまだ記録がありません</span>'}</div>
+  </div>`;
+
+  // ── 入力フォーム ──
+  document.getElementById('lm-form-container').innerHTML = _lmFormOpen
+    ? `<div class="lm-add-card"><h2>新しい学びメモ</h2>${_lmFormFieldsHtml('lma', null)}
+        <button class="lm-save-btn" onclick="lmSaveMemo('lma')">この学びメモを保存</button>
+        <button class="lm-cancel-btn" onclick="toggleLmForm()">閉じる</button></div>`
+    : '';
+
+  // ── 絞り込みチップ ──
+  document.getElementById('lm-filter-bar').innerHTML = `<div class="lm-filter-bar">
+    <span class="lm-flabel">絞り込み：</span>
+    <button class="lm-filter-chip${_lmFilterCat === null ? ' on' : ''}" onclick="lmSetFilter(null)">すべて</button>
+    ${cats.map(c => `<button class="lm-filter-chip${_lmFilterCat === c.id ? ' on' : ''}" onclick="lmSetFilter('${escHtml(c.id)}')">${escHtml(c.label)}</button>`).join('')}
+  </div>`;
+
+  // ── メモ一覧（月ごとの折りたたみ・最新月のみ既定で開く） ──
+  const shown = _lmFilterCat === null ? memos : memos.filter(m => m.category === _lmFilterCat);
+  const byMonth = {};
+  shown.forEach(m => {
+    const ym = String(m.date || '').slice(0, 7);
+    (byMonth[ym] = byMonth[ym] || []).push(m);
+  });
+  const months = Object.keys(byMonth).sort().reverse();
+  const latestYm = months[0];
+  listEl.innerHTML = months.map(ym => {
+    const isOpen = _lmMonthOpen[ym] !== undefined ? _lmMonthOpen[ym] : (ym === latestYm);
+    const items = byMonth[ym].slice().sort((a, b) => {
+      if (String(a.date) !== String(b.date)) return String(a.date) < String(b.date) ? 1 : -1;
+      return (b._ts || 0) - (a._ts || 0);
+    });
+    return `<div class="lm-month-group">
+      <button class="lm-month-head${isOpen ? ' open' : ''}" onclick="lmToggleMonth('${escHtml(ym)}')"><span class="lm-arrow">▶</span>${_lmMonthLabel(ym)}<span class="lm-count">${items.length}件</span></button>
+      <div class="lm-month-body${isOpen ? ' open' : ''}">${items.map(_lmMemoCardHtml).join('')}</div>
+    </div>`;
+  }).join('') || '<div style="text-align:center;color:var(--text-light);font-size:13px;padding:20px 0">まだ学びメモがありません</div>';
+}
+
+function _lmMemoCardHtml(m) {
+  const cat = _lmCatById(m.category);
+  const fill = cat ? cat.fill : '#F0EDE8';
+  const solid = cat ? cat.solid : '#B4B2A9';
+  const catLabel = cat ? cat.label : 'その他';
+  const style = `--lm-fill:${escHtml(fill)};--lm-solid:${escHtml(solid)}`;
+
+  // 編集中はカード内をフォームに差し替え
+  if (_lmEditId === m.id) {
+    return `<div class="lm-memo" style="${style}"><div class="lm-add-card" style="box-shadow:none;padding:0;margin:0">
+      <h2>学びメモを編集</h2>${_lmFormFieldsHtml('lme', m)}
+      <button class="lm-save-btn" onclick="lmSaveMemo('lme')">保存</button>
+      <button class="lm-cancel-btn" onclick="lmCancelEdit()">キャンセル</button></div></div>`;
+  }
+
+  const mastery = Math.min(4, Math.max(1, Number(m.mastery) || 1));
+  const dots = [1,2,3,4].map(i => `<i${i <= mastery ? ' class="on"' : ''}></i>`).join('');
+  const menuOpen = _lmMenuOpenId === m.id;
+
+  // 未入力の項目はラベルごと非表示
+  let body = '';
+  if (m.title) body += `<div class="lm-memo-title">${escHtml(m.title)}</div>`;
+  if (m.course || m.format) {
+    body += `<div class="lm-memo-teacher">${escHtml(m.course || '')}${m.format ? `<span class="lm-fmt">${escHtml(m.format)}</span>` : ''}</div>`;
+  }
+  if (m.content) body += `<div class="lm-memo-block"><div class="lm-blabel">学んだ内容・ポイント</div><div class="lm-btext">${escHtml(m.content)}</div></div>`;
+  if (m.reaction) body += `<div class="lm-memo-block"><div class="lm-blabel">あおの反応・様子</div><div class="lm-btext lm-ao">${escHtml(m.reaction)}</div></div>`;
+  if (m.next) body += `<div class="lm-memo-block lm-next"><div class="lm-blabel">次回試したいこと</div><div class="lm-btext">${escHtml(m.next)}</div></div>`;
+  if (m.link) {
+    const isUrl = /^https?:\/\//i.test(String(m.link));
+    body += `<div class="lm-memo-block lm-memo-link"><div class="lm-blabel">参考リンク・資料</div>${
+      isUrl ? `<a href="${escHtml(m.link)}" target="_blank" rel="noopener">${escHtml(m.link)}</a>` : `<div class="lm-btext">${escHtml(m.link)}</div>`
+    }</div>`;
+  }
+
+  return `<div class="lm-memo" style="${style}">
+    <button class="lm-kebab" onclick="lmToggleMenu(event, '${escHtml(m.id)}')">⋯</button>
+    <div class="lm-memo-menu${menuOpen ? ' open' : ''}">
+      <button onclick="lmOpenEdit('${escHtml(m.id)}')">✏️ 編集</button>
+      <button class="lm-del" onclick="lmDelete('${escHtml(m.id)}')">🗑 削除</button>
+    </div>
+    <div class="lm-memo-top">
+      <span class="lm-memo-cat">${escHtml(catLabel)}</span>
+      <span class="lm-memo-date">${_lmDateLabel(m.date)}</span>
+      <span class="lm-memo-mastery">${LM_MASTERY_LABELS[mastery - 1]} <span class="lm-dots">${dots}</span></span>
+    </div>${body}</div>`;
+}
+
+// フォーム項目のHTML（p='lma'=追加 / 'lme'=編集。追加時 m=null）
+function _lmFormFieldsHtml(p, m) {
+  const cats = _lmSortedCategories();
+  const selCat = p === 'lma' ? _lmFormCat : _lmEditCat;
+  const selFmt = p === 'lma' ? _lmFormFormat : _lmEditFormat;
+  const selMas = p === 'lma' ? _lmFormMastery : _lmEditMastery;
+  return `
+    <div class="lm-field"><label>日付</label><input type="date" id="${p}-date" value="${escHtml(m ? m.date : todayKey())}"></div>
+    <div class="lm-field"><label>カテゴリ</label><div class="lm-cat-picker">
+      ${cats.map(c => `<button type="button" class="lm-cat-chip${selCat === c.id ? ' selected' : ''}"${selCat === c.id ? ` style="background:${escHtml(c.fill)}"` : ''} onclick="lmPickCat('${p}','${escHtml(c.id)}')">${escHtml(c.label)}</button>`).join('')}
+      <button type="button" class="lm-cat-chip lm-add-cat" onclick="lmAddCategory('${p}')">＋ カテゴリ追加</button>
+    </div></div>
+    <div class="lm-field"><label>タイトル</label><input type="text" id="${p}-title" value="${escHtml(m ? (m.title || '') : '')}" placeholder="例：後ろ足の負重トレーニング"></div>
+    <div class="lm-field"><label>講座名・先生の名前</label><input type="text" id="${p}-course" value="${escHtml(m ? (m.course || '') : '')}" placeholder="例：IAALP 筋トレ講座／山田りこ先生"></div>
+    <div class="lm-field"><label>学んだ場所・形式</label><div class="lm-seg">
+      ${LM_FORMATS.map(f => `<button type="button"${selFmt === f ? ' class="on"' : ''} onclick="lmPickFormat('${p}','${f}')">${f}</button>`).join('')}
+    </div></div>
+    <div class="lm-field"><label>学んだ内容・ポイント</label><textarea id="${p}-content" placeholder="習ったこと、覚えておきたいポイントなど">${escHtml(m ? (m.content || '') : '')}</textarea></div>
+    <div class="lm-field"><label>あおの反応・様子</label><textarea id="${p}-reaction" placeholder="あおがどんな様子だったか など">${escHtml(m ? (m.reaction || '') : '')}</textarea></div>
+    <div class="lm-field"><label>次回試したいこと</label><textarea id="${p}-next" placeholder="次にやってみたいこと、宿題など">${escHtml(m ? (m.next || '') : '')}</textarea></div>
+    <div class="lm-field"><label>参考リンク・資料</label><input type="url" id="${p}-link" value="${escHtml(m ? (m.link || '') : '')}" placeholder="テキスト・動画・DVDのURLなど"></div>
+    <div class="lm-field"><label>習得度・継続メモ</label><div class="lm-mastery-row">
+      ${LM_MASTERY_LABELS.map((lb, i) => `<button type="button"${selMas === i + 1 ? ' class="on"' : ''} onclick="lmPickMastery('${p}',${i + 1})">${lb}</button>`).join('')}
+    </div></div>`;
+}
+
+function toggleLmForm() {
+  _lmFormOpen = !_lmFormOpen;
+  if (_lmFormOpen) {
+    const cats = _lmSortedCategories();
+    _lmFormCat = cats.length ? cats[0].id : null;
+    _lmFormFormat = 'Zoom';
+    _lmFormMastery = 1;
+    _lmEditId = null;
+  }
+  _lmMenuOpenId = null;
+  renderLearning();
+}
+
+// フォームの選択系は入力値を保持したまま状態だけ差し替える（renderすると入力中テキストが消えるため）
+function lmPickCat(p, id) {
+  if (p === 'lma') _lmFormCat = id; else _lmEditCat = id;
+  _lmRefreshFormKeepInputs(p);
+}
+function lmPickFormat(p, f) {
+  if (p === 'lma') _lmFormFormat = f; else _lmEditFormat = f;
+  _lmRefreshFormKeepInputs(p);
+}
+function lmPickMastery(p, n) {
+  if (p === 'lma') _lmFormMastery = n; else _lmEditMastery = n;
+  _lmRefreshFormKeepInputs(p);
+}
+function _lmReadFormInputs(p) {
+  return {
+    date: document.getElementById(p + '-date')?.value || '',
+    title: document.getElementById(p + '-title')?.value || '',
+    course: document.getElementById(p + '-course')?.value || '',
+    content: document.getElementById(p + '-content')?.value || '',
+    reaction: document.getElementById(p + '-reaction')?.value || '',
+    next: document.getElementById(p + '-next')?.value || '',
+    link: document.getElementById(p + '-link')?.value || '',
+  };
+}
+function _lmRefreshFormKeepInputs(p) {
+  const vals = _lmReadFormInputs(p);
+  renderLearning();
+  Object.entries(vals).forEach(([k, v]) => {
+    const el = document.getElementById(p + '-' + k);
+    if (el) el.value = v;
+  });
+}
+
+function lmAddCategory(p) {
+  const name = prompt('新しいカテゴリ名を入力してください（例：ハイドロセラピー）');
+  if (!name || !name.trim()) return;
+  const label = name.trim();
+  const vals = _lmReadFormInputs(p);
+  const cats = getLearningCategories();
+  const existing = cats.find(c => c.label === label);
+  let catId;
+  if (existing) {
+    catId = existing.id;  // 同名カテゴリがあれば新設せず選択のみ
+  } else {
+    // 未使用の色をパレットから自動割当（尽きたら循環）
+    const used = new Set(cats.map(c => c.solid));
+    const color = LM_PALETTE.find(c => !used.has(c.solid)) || LM_PALETTE[cats.length % LM_PALETTE.length];
+    const maxOrder = cats.reduce((mx, c) => Math.max(mx, c.order || 0), 0);
+    catId = 'lcat_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
+    cats.push({ id: catId, label, fill: color.fill, solid: color.solid, _ts: Date.now(), order: maxOrder + 1 });
+    setLearningCategories(cats);
+  }
+  if (p === 'lma') _lmFormCat = catId; else _lmEditCat = catId;
+  renderLearning();
+  Object.entries(vals).forEach(([k, v]) => {
+    const el = document.getElementById(p + '-' + k);
+    if (el) el.value = v;
+  });
+}
+
+function lmSaveMemo(p) {
+  const vals = _lmReadFormInputs(p);
+  if (!vals.date) { showToast('日付を入力してください'); return; }
+  const cat = p === 'lma' ? _lmFormCat : _lmEditCat;
+  if (!cat) { showToast('カテゴリを選択してください'); return; }
+  const fmt = p === 'lma' ? _lmFormFormat : _lmEditFormat;
+  const mas = p === 'lma' ? _lmFormMastery : _lmEditMastery;
+  const fields = {
+    date: vals.date, category: cat, title: vals.title.trim(), course: vals.course.trim(),
+    format: fmt, content: vals.content.trim(), reaction: vals.reaction.trim(),
+    next: vals.next.trim(), link: vals.link.trim(), mastery: mas, _ts: Date.now(),
+  };
+  const memos = getLearningMemos();
+  if (p === 'lma') {
+    memos.push({ id: 'lm_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8), ...fields });
+    setLearningMemos(memos);
+    _lmFormOpen = false;
+    showToast('学びメモを追加しました');
+  } else {
+    const editId = _lmEditId;
+    if (!memos.some(m => m.id === editId)) return;
+    setLearningMemos(memos.map(m => m.id === editId ? { ...m, ...fields } : m));
+    _lmEditId = null;
+    showToast('保存しました');
+  }
+  // 保存したメモの月が閉じていて見えないと混乱するため、その月を開く
+  _lmMonthOpen[String(vals.date).slice(0, 7)] = true;
+  renderLearning();
+}
+
+function lmOpenEdit(id) {
+  const m = getLearningMemos().find(e => e.id === id);
+  if (!m) return;
+  _lmEditId = id;
+  _lmEditCat = m.category;
+  _lmEditFormat = m.format || 'Zoom';
+  _lmEditMastery = Math.min(4, Math.max(1, Number(m.mastery) || 1));
+  _lmFormOpen = false;
+  _lmMenuOpenId = null;
+  renderLearning();
+}
+
+function lmCancelEdit() {
+  _lmEditId = null;
+  renderLearning();
+}
+
+function lmDelete(id) {
+  const m = getLearningMemos().find(e => e.id === id);
+  if (!m) return;
+  const name = m.title || m.content || m.course || _lmDateLabel(m.date) + 'のメモ';
+  if (!confirm('「' + String(name).slice(0, 20) + '」を削除しますか?')) return;
+  addDeletedId('learning_memos', id);
+  setLearningMemos(getLearningMemos().filter(e => e.id !== id));
+  _lmMenuOpenId = null;
+  showToast('削除しました');
+  renderLearning();
+}
+
+function lmToggleMenu(event, id) {
+  event.stopPropagation();
+  _lmMenuOpenId = (_lmMenuOpenId === id) ? null : id;
+  renderLearning();
+}
+
+function lmToggleMonth(ym) {
+  const memos = _lmFilterCat === null ? getLearningMemos() : getLearningMemos().filter(m => m.category === _lmFilterCat);
+  const months = [...new Set(memos.map(m => String(m.date || '').slice(0, 7)))].sort().reverse();
+  const latestYm = months[0];
+  const cur = _lmMonthOpen[ym] !== undefined ? _lmMonthOpen[ym] : (ym === latestYm);
+  _lmMonthOpen[ym] = !cur;
+  renderLearning();
+}
+
+function lmSetFilter(id) {
+  _lmFilterCat = id;
+  _lmMenuOpenId = null;
+  renderLearning();
+}
+
+// ⋯メニューの外側タップで閉じる
+document.addEventListener('click', e => {
+  if (_lmMenuOpenId !== null && !e.target.closest('.lm-kebab') && !e.target.closest('.lm-memo-menu')) {
+    _lmMenuOpenId = null;
+    renderLearning();
+  }
+});
+
+// ============================================================
 // RECIPE MANAGEMENT
 // ============================================================
 
@@ -5522,7 +5998,7 @@ function renderWeightGraph() {
 // ============================================================
 // TAB SWITCHING
 // ============================================================
-const TAB_NAMES = ['today','notes','weight','hospital','diary','recipe','supple','blood','gpt'];
+const TAB_NAMES = ['today','notes','weight','hospital','learning','diary','recipe','supple','blood','gpt'];
 function switchTab(name) {
   document.querySelectorAll('.tab').forEach((t,i) => t.classList.toggle('active', TAB_NAMES[i] === name));
   document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
@@ -5536,7 +6012,7 @@ function switchTab(name) {
 // ============================================================
 function exportData() {
   const payload = {
-    ver: 4,
+    ver: 5,
     exported: new Date().toISOString(),
     healthNotes: getNotes(),
     diary: getDiary(),
@@ -5555,6 +6031,8 @@ function exportData() {
     selectedRecipeId: localStorage.getItem('selected_recipe_id') || null,
     filariaSettings: getFilariaSettings(),
     filariaHistory: getFilariaHistory(),
+    learningMemos: getLearningMemos(),
+    learningCategories: getLearningCategories(),
     checks: {}
   };
   let skipped = 0;
@@ -5625,6 +6103,27 @@ function importData(e) {
         const fhMap = new Map(getFilariaHistory().map(h => [h.scheduledDate, h]));
         d.filariaHistory.forEach(h => { if (h && h.scheduledDate) fhMap.set(h.scheduledDate, h); });
         setFilariaHistory(Array.from(fhMap.values()));
+      }
+      // learning_memos / learning_categories: id単位のunionマージ（ver 5〜）。
+      // recipes と同じ「インポート元に無いローカル既存項目を消さない」方針。
+      // 各エントリが _ts を持つため、同idは _ts の新しい方を採用（LWW）
+      if (d.learningMemos && Array.isArray(d.learningMemos)) {
+        const lmMap = new Map(getLearningMemos().map(m => [m.id, m]));
+        d.learningMemos.forEach(m => {
+          if (!m || !m.id) return;
+          const cur = lmMap.get(m.id);
+          if (!cur || Number(m._ts || 0) >= Number(cur._ts || 0)) lmMap.set(m.id, m);
+        });
+        setLearningMemos(Array.from(lmMap.values()));
+      }
+      if (d.learningCategories && Array.isArray(d.learningCategories)) {
+        const lcMap = new Map(getLearningCategories().map(c => [c.id, c]));
+        d.learningCategories.forEach(c => {
+          if (!c || !c.id) return;
+          const cur = lcMap.get(c.id);
+          if (!cur || Number(c._ts || 0) >= Number(cur._ts || 0)) lcMap.set(c.id, c);
+        });
+        setLearningCategories(Array.from(lcMap.values()));
       }
       if (d.checks) Object.keys(d.checks).forEach(k => save(k, d.checks[k]));
       renderAll();
@@ -5783,6 +6282,7 @@ function renderAll() {
   renderBloodTestHistory();
   renderGPT();
   renderHospital();
+  renderLearning();
   initRecipes();
   renderRecipe();
   renderRecipeHint();
@@ -5801,6 +6301,7 @@ migrateUrsoSetting();
 migrateMedList();
 localStorage.removeItem('last_backup_date');
 initConsultationKeys();
+seedLearningCategories();
 renderAll();
 document.getElementById('weight-date').value = todayKey();
 document.getElementById('cs-consult-date').value = todayKey();

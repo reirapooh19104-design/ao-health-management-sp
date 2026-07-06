@@ -73,6 +73,23 @@
   `reloadDiaryForm()` に改名し、`loadFormForDate(_currentFormDate)` で現在の表示日付を
   維持する形に変更。起動時は `_currentFormDate` が today 初期値のため挙動不変（commit 89aeb71）。
 
+## 2026-07-06 学びメモ機能の新規追加
+- 新タブ「学びメモ」を「あおの記録」と「食事日誌」の間に追加。
+  筋トレ・マッサージ・プレイズタッチ等の学習記録（10項目：日付/カテゴリ/タイトル/
+  講座名・先生/場所・形式/学んだ内容/あおの反応/次回試したいこと/参考リンク/習得度1〜4）。
+- 新localStorageキー：`learning_memos`（ao_records同型同期：エントリ単位LWW＋tombstone＋
+  push-back）・`learning_categories`（custom_meal_checks同型：id単位LWW＋tombstone）。
+  詳細は data-model.md「学びメモ」参照。
+- UI：説明バナー・今月の集計ピル・開閉式入力フォーム・カテゴリ絞り込みチップ・
+  月別折りたたみ一覧（最新月のみ既定で開く）・カテゴリ色カード・習得度ドット・
+  🔖次回試したいこと強調・⋯メニューから編集/削除。カテゴリはユーザー追加可
+  （未使用色をパレットから自動割当）。
+- エクスポート ver 4→5（learningMemos/learningCategories追加。インポートはid単位union）。
+- GAS側変更なし（key-value汎用構造のため新キーは自動で行追加。再デプロイ不要）。
+- 既存コードへの変更はタブ挿入・TAB_NAMES・syncFromCloudマージブロック2つ・
+  バリデータ1つ・export/import・renderAll 1行・起動時シード1行のみ。
+- nodeスタブ16ケースで同期マージ（B1方針・LWW・push-back・nullガード・tombstone）検証済み。
+
 ## GASコード（現在バージョン）
 - バージョン4（2026/05/30 11:05デプロイ）
 - 変更履歴：
