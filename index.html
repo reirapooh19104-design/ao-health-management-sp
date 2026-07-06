@@ -778,8 +778,7 @@ body {
     <div class="vaccine-card">
       <div class="vaccine-title">狂犬病ワクチン</div>
       <div class="vaccine-detail">
-        肝障害治療中のため免除（2025年12月・診断書発行済み）<br>
-        → 肝機能回復後に接種可否を相談
+        肝障害治療中のため免除（2025年12月・診断書発行済み）
       </div>
       <div class="vaccine-status vs-exempt">免除中</div>
     </div>
@@ -6026,7 +6025,7 @@ function buildAndPrint() {
   // ── F. あおの記録（通院履歴）──────────────────────────────
   const catLabels = { medical:'病院', anomaly:'体調', life:'生活', care:'ケア', food:'食事', other:'その他' };
   const aoRecords = getAoRecords().slice().sort(function(a, b) {
-    return String(a.date || '') < String(b.date || '') ? -1 : 1;
+    return String(a.date || '') > String(b.date || '') ? -1 : 1;
   });
   let sectionFRows = '';
   aoRecords.forEach(function(r) {
@@ -6038,7 +6037,7 @@ function buildAndPrint() {
   });
 
   const sectionF = '<section class="print-section">'
-    + '<h2>F. 通院履歴（あおの記録）</h2>'
+    + '<h2>F. あおの記録</h2>'
     + '<table class="print-table">'
     + '<thead><tr><th style="width:8em">日付</th><th style="width:4em">カテゴリ</th><th>内容</th></tr></thead>'
     + '<tbody>' + (sectionFRows || '<tr><td colspan="3">—</td></tr>') + '</tbody>'
