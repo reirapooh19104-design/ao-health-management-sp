@@ -1446,30 +1446,54 @@ async function pushToCloud(key, val) {
   } catch (e) { console.error('[push失敗] pushToCloud key=' + key, e); }
 }
 
+// 本体と _ts_ を2キーbulkの1POSTで送る（GAS v7のdoPost bulk分岐を利用・GAS側変更なし）。
+// 独立2フェッチだと片方だけのネットワーク失敗で「_ts_だけ着地・本体は旧値」の
+// 不整合が起きるため（2026-07-05 recipes本体不達の実例）、1POSTに統合した。
+// _ts_ のlocalStorage刻印は呼び出し元（save()）が行い、ここでは再刻印しない
+// （URL未設定時の早期returnで刻印が抜ける退行と二重刻印を防ぐ）。
+async function pushPairToCloud(key, val, ts) {
+  if (!getGasUrl() || !getSyncToken()) return;
+  try {
+    const res = await fetch(getGasUrl(), {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify({ bulk: true, data: { [key]: val, ['_ts_' + key]: ts }, token: getSyncToken() })
+    });
+    const resBody = await res.json().catch(() => null);
+    if (resBody && resBody.status === 'error') {
+      if (resBody.message === 'busy') {
+        // GAS側LockServiceの待機タイムアウト（30秒）。リトライはしない（表示のみ）
+        console.warn('[混雑] pushPairToCloud key=' + key + '：GASが混み合っています。自動再送はされません');
+      } else {
+        console.warn('[認証エラー] pushPairToCloud key=' + key + '：合言葉を確認してください');
+      }
+    }
+  } catch (e) { console.error('[push失敗] pushPairToCloud key=' + key, e); }
+}
+
 // 離脱時（タブ閉じ・リロード・バックグラウンド化）にchk_デバウンスの保留分を取りこぼさず送る
+// 保留中の全キー＋各_ts_を1つのbulk dataにまとめて1POSTで送る（本体+_ts_の不整合防止）
 function flushChkPending() {
   if (!getGasUrl() || !getSyncToken()) return;
+  const data = {};
   for (const key of Object.keys(_chkPushPending)) {
     const pending = _chkPushPending[key];
     clearTimeout(_chkPushTimers[key]);
     delete _chkPushPending[key];
     delete _chkPushTimers[key];
     if (!pending) continue;
-    try {
-      fetch(getGasUrl(), {
-        method: 'POST',
-        headers: { 'Content-Type': 'text/plain' },
-        body: JSON.stringify({ key, value: pending.val, token: getSyncToken() }),
-        keepalive: true
-      });
-      fetch(getGasUrl(), {
-        method: 'POST',
-        headers: { 'Content-Type': 'text/plain' },
-        body: JSON.stringify({ key: '_ts_' + key, value: pending.ts, token: getSyncToken() }),
-        keepalive: true
-      });
-    } catch (e) { console.error('[push失敗] flushChkPending', e); }
+    data[key] = pending.val;
+    data['_ts_' + key] = pending.ts;
   }
+  if (Object.keys(data).length === 0) return;
+  try {
+    fetch(getGasUrl(), {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify({ bulk: true, data: data, token: getSyncToken() }),
+      keepalive: true
+    });
+  } catch (e) { console.error('[push失敗] flushChkPending', e); }
 }
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'hidden') flushChkPending();
@@ -2054,13 +2078,11 @@ function save(key, val) {
       delete _chkPushPending[key];
       delete _chkPushTimers[key];
       if (!pending) return;
-      pushToCloud(key, pending.val);
-      pushToCloud('_ts_' + key, pending.ts);
+      pushPairToCloud(key, pending.val, pending.ts);
     }, 1500);
     return;
   }
-  pushToCloud(key, val);
-  pushToCloud('_ts_' + key, ts);
+  pushPairToCloud(key, val, ts);
 }
 
 // ============================================================
