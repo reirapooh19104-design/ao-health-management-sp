@@ -1382,6 +1382,7 @@ let _healthNoteSearchQuery = '';
 let _noteSearchDebounce = null;
 let _chkPushTimers = {};   // key(chk_<日付>) -> setTimeoutのID
 let _chkPushPending = {};  // key(chk_<日付>) -> { val, ts }
+let _importing = false;    // インポート中は個別pushを抑止し、完了後にpushAll 1回へ集約（落とし穴16対策）
 let _filariaEditOpen = false;  // フィラリア初回日の編集フォーム表示中（設定は保存まで消さない）
 
 // ============================================================
@@ -1427,6 +1428,7 @@ function _syncStatus(msg, type) {
 }
 
 async function pushToCloud(key, val) {
+  if (_importing) return; // インポート中は個別push抑止（完了後のpushAllに集約）
   if (!getGasUrl() || !getSyncToken()) return;
   try {
     const res = await fetch(getGasUrl(), {
@@ -1452,6 +1454,7 @@ async function pushToCloud(key, val) {
 // _ts_ のlocalStorage刻印は呼び出し元（save()）が行い、ここでは再刻印しない
 // （URL未設定時の早期returnで刻印が抜ける退行と二重刻印を防ぐ）。
 async function pushPairToCloud(key, val, ts) {
+  if (_importing) return; // インポート中は個別push抑止（完了後のpushAllに集約）
   if (!getGasUrl() || !getSyncToken()) return;
   try {
     const res = await fetch(getGasUrl(), {
@@ -2071,6 +2074,9 @@ function save(key, val) {
   localStorage.setItem('_ts_' + key, ts);
   if (key.startsWith('chk_') && typeof val === 'object' && val !== null && Object.keys(val).length === 0) return;
   if (key.startsWith('chk_')) {
+    // インポート中はpending登録・タイマーもスキップ（フラグ解除後にタイマーから発射される漏れを塞ぐ。
+    // localStorage保存と_ts_刻印は上で済んでおり、送信はpushAllが担う）
+    if (_importing) return;
     _chkPushPending[key] = { val, ts };
     clearTimeout(_chkPushTimers[key]);
     _chkPushTimers[key] = setTimeout(() => {
@@ -6075,9 +6081,12 @@ function exportData() {
 function importData(e) {
   const f = e.target.files[0]; if (!f) return;
   const r = new FileReader();
-  r.onload = ev => {
+  r.onload = async ev => {
     try {
       const d = JSON.parse(ev.target.result);
+      // インポート中は個別pushを抑止（キー数×2の一斉発射でbusy多発＝落とし穴16対策）。
+      // localStorage保存と_ts_刻印は従来どおり行われ、送信だけを最後のpushAll 1回に集約する
+      _importing = true;
       if (d.healthNotes && d.healthNotes.length > 0) {
         const stamped = d.healthNotes.map(e => e._ts ? e : { ...e, _ts: Date.now() });
         setNotes(stamped);
@@ -6148,9 +6157,15 @@ function importData(e) {
         setLearningCategories(Array.from(lcMap.values()));
       }
       if (d.checks) Object.keys(d.checks).forEach(k => save(k, d.checks[k]));
+      _importing = false; // 集約pushの前に解除
       renderAll();
       showToast('インポートしました');
+      // 個別pushの代わりに1回だけ集約送信（deleted_idsも収集対象に含まれるため削除伝播もこの1回で送られる）。
+      // GAS URL未設定時はスキップ（落とし穴17の復旧手順＝URL未設定インポートでは送信ゼロを維持）
+      if (getGasUrl() && getSyncToken()) await pushAllToCloud();
     } catch { showToast('読み込みに失敗しました'); }
+    // フラグ立ちっぱなしだと以後の全pushが無音で消えるため、例外時も必ず戻す
+    finally { _importing = false; }
   };
   r.readAsText(f);
   e.target.value = '';
