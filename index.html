@@ -95,10 +95,10 @@ body {
 .cal-d:active { opacity: 0.6; transform: scale(0.88); }
 .cal-d.drink       { background: var(--green-light); }
 .cal-d.rest        { background: var(--gray-rest); color: #777; }
-.cal-d.today-drink { background: var(--green); color: white; }
-.cal-d.today-rest  { background: #555; color: white; }
-.cal-d.special-note { background: #FFE8E8 !important; border: 1.5px solid #E53935; color: inherit; }
-.cal-d.today-drink.special-note, .cal-d.today-rest.special-note { border: 2px solid #B71C1C; }
+.cal-d.special-note { background: #FFE8E8; border: 1.5px solid #E53935; color: inherit; }
+/* 背景=ウルソ / 枠=特記事項 / 数字の丸=今日 と、1つの意味に1つの見せ方を割り当てている */
+.cal-d-num { display: inline-flex; align-items: center; justify-content: center; }
+.cal-d.today .cal-d-num { width: 21px; height: 21px; border-radius: 50%; background: var(--green); color: white; font-weight: 700; }
 .cal-dots { position: absolute; bottom: 3px; left: 50%; transform: translateX(-50%); display: flex; gap: 3px; }
 .cal-dot  { width: 5px; height: 5px; border-radius: 50%; flex-shrink: 0; }
 .cal-dot.red    { background: #E53935; }
@@ -2459,7 +2459,8 @@ function renderCalendar() {
     const isToday = isCurrentMonth && d === today.getDate();
     const isPast = date <= today;
     let cls = 'cal-d';
-    if (st) cls += isToday ? ' today-' + st : ' ' + st;
+    if (st) cls += ' ' + st;
+    if (isToday) cls += ' today';
     let dotsHtml = '';
     if (isPast) {
       const e = diaryMap.get(dateStr);
@@ -2475,7 +2476,7 @@ function renderCalendar() {
     const heartHtml = filariaDates.has(dateStr)
       ? `<span class="cal-filaria-mark">${_flariaHeartSvg(14)}</span>`
       : '';
-    html += `<div class="${cls}" onclick="goToDate('${dateStr}')">${d}${heartHtml}${dotsHtml}</div>`;
+    html += `<div class="${cls}" onclick="goToDate('${dateStr}')"><span class="cal-d-num">${d}</span>${heartHtml}${dotsHtml}</div>`;
   }
   document.getElementById('cal-grid').innerHTML = html;
 }
