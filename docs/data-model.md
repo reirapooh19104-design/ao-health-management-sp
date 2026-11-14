@@ -7,7 +7,9 @@ ao-health-management-sp のデータ構造・キー名・保存先・同期方�
 - `diary` エントリの日付: ISO形式 `YYYY-MM-DD`
 - `health_notes` エントリの日付: `YYYY/M/D` または `YYYY/M/D夜` 形式
 - `diary` / `day_memo` は日付ベースでupsert（空値でも上書き）
-- `health_notes` は健康メモに内容があればupsert、全空保存時は該当日エントリを削除（2026-05-18 修正）
+- `health_notes` は健康メモに内容があればupsert、全空保存時は該当日エントリを「削除の印」
+  `{ date, text:'', deleted:true, _ts }` に置き換える（2026-11-14〜。配列からは取り除かない）。
+  表示・集計は `getVisibleNotes()`、保存し直す処理は `getNotes()`（印を含む全件）を使う
 - `diary` エントリには health memo fields（walk, coughN, coughL, energyLv, specialNote, memoOther）も含まれる
   ※ day_memo との二重保存。読み込みは diary entry 優先
 - `bodyWeights` は配列：`[{date: "YYYY-MM-DD", weight: 数値kg}, ...]`
@@ -34,6 +36,8 @@ ao-health-management-sp のデータ構造・キー名・保存先・同期方�
 ## 同期方式の確立済み一覧
 - 配列丸ごと置換方式: `health_notes` / `bodyWeights` / `supple` / `next_visit` / `consultation_summary` / `consultation_history` / `ao_records`
 - LWW（Last-Write-Wins）方式: 上記以外の単純なキー
+- ※ `health_notes` の削除は 2026-11-14 から「削除の印」方式に変更し、`deleted_ids.health_notes` は
+  参照しなくなった（下の一覧には歴史的経緯として残している）。
 - 削除の同期は tombstone（`deleted_ids`）で10カテゴリ実装済み：
   `custom_meal_checks` / `custom_health_checks` / `health_notes` / `supple` /
   `next_visit` / `consultation_summary` / `consultation_history` / `ao_records` /

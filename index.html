@@ -1519,10 +1519,23 @@ function getDeletedIds() {
 }
 
 function addDeletedId(keyName, id) {
+  addDeletedIds(keyName, [id]);
+}
+
+// 複数IDをまとめて削除記録に入れる（保存・送信は1回）。
+// 空・未定義のIDは入れない（""や"undefined"が混入すると別の項目まで巻き込むため）。
+function addDeletedIds(keyName, idList) {
   const d = getDeletedIds();
   if (!d[keyName]) d[keyName] = [];
-  if (!d[keyName].includes(String(id))) {
-    d[keyName].push(String(id));
+  let changed = false;
+  (idList || []).forEach(id => {
+    if (id === undefined || id === null || id === '') return;
+    const sid = String(id);
+    if (sid === 'undefined' || d[keyName].includes(sid)) return;
+    d[keyName].push(sid);
+    changed = true;
+  });
+  if (changed) {
     localStorage.setItem('deleted_ids', JSON.stringify(d));
     pushToCloud('deleted_ids', d);
   }
@@ -1607,6 +1620,25 @@ function _filterForPushBack(keyName, arr, validator) {
   return ok;
 }
 
+// マージ結果の中に「GASに無い、またはGASと内容が違う（＝ローカル側が採用された）」項目が
+// あるかを返す。あれば、そのマージ結果をGASへ書き戻す必要がある。
+// （GASの項目が採用された場合は同じオブジェクトなので文字列比較で必ず一致する）
+function _needsPushBack(merged, gasArr, keyFn) {
+  const gasMap = new Map(gasArr.map(e => [keyFn(e), JSON.stringify(e)]));
+  return merged.some(e => gasMap.get(keyFn(e)) !== JSON.stringify(e));
+}
+// 書き戻し用の最低限の骨格チェック（日付またはIDを持つオブジェクトであること）
+function _validDatedEntry(e) {
+  return !!e && typeof e === 'object' && !Array.isArray(e) && typeof e.date === 'string' && e.date !== '';
+}
+function _validSuppleEntry(e) {
+  return !!e && typeof e === 'object' && !Array.isArray(e)
+      && ((typeof e.id === 'string' && e.id !== '') || (typeof e.name === 'string' && e.name !== ''));
+}
+function _validCheckItemEntry(e) {
+  return !!e && typeof e === 'object' && !Array.isArray(e) && typeof e.id === 'string' && e.id !== '';
+}
+
 // ── 受信マージのnullガード ──────────────────
 // ローカル/GASの配列に null 等が混入すると、マージのキー関数（nvKey等の e.id 参照）で
 // TypeError → 外側catchに落ちて syncFromCloud 全体が「オフライン」表示で中断する。その防止。
@@ -1676,6 +1708,17 @@ async function syncFromCloud() {
     if (gasData['deleted_ids']) {
       mergeDeletedIds(gasData['deleted_ids']);
     }
+    // 削除記録の書き戻し：この端末にあってGASに無い削除記録があれば送り直す。
+    // 削除時の送信は送りっぱなし（到達確認なし）のため、届いていなかった分をここで拾う
+    // （GAS v8 は deleted_ids を合算するので、送っても他端末の記録は消えない）。
+    {
+      const gasDel = (gasData['deleted_ids'] && typeof gasData['deleted_ids'] === 'object') ? gasData['deleted_ids'] : {};
+      const localDel = getDeletedIds();
+      const missing = Object.keys(localDel).some(cat =>
+        Array.isArray(localDel[cat]) && localDel[cat].some(id =>
+          !(Array.isArray(gasDel[cat]) && gasDel[cat].map(String).includes(String(id)))));
+      if (missing) pushToCloud('deleted_ids', localDel);
+    }
 
     Object.keys(gasData).forEach(k => {
       if (k.startsWith('autobackup_') || k.startsWith('_ts_') || k === 'gas_url' || k === 'sync_token' || (k.startsWith('custom_') && k !== 'custom_meal_checks' && k !== 'custom_health_checks')) return;
@@ -1691,14 +1734,20 @@ async function syncFromCloud() {
       const localTs = Number(localStorage.getItem('_ts_' + k) || 0);
 
       if (k === 'diary') {
-        // diary: エントリ単位でマージ＋空エントリ安全ガード
+        // diary: エントリ単位でマージ。
+        // 両方に保存時刻(_ts)があれば時刻で決める（意図して空にした変更も伝わるように）。
+        // どちらかに時刻が無い古いデータだけ、従来の「空より中身あり優先」ガードを使う。
         const local = _saneEntries('diary(ローカル)', load('diary', []));
+        const gasDiary = _saneEntries('diary(GAS)', gasVal || []);
         const localMap = new Map(local.map(e => [e.date, e]));
-        _saneEntries('diary(GAS)', gasVal || []).forEach(ge => {
+        gasDiary.forEach(ge => {
           const le = localMap.get(ge.date);
           if (!le) {
             // ローカルにないエントリ → GASから追加
             localMap.set(ge.date, ge);
+          } else if (Number(ge._ts || 0) > 0 && Number(le._ts || 0) > 0) {
+            // 両方に時刻あり → 新しい方。同点はGAS優先
+            if (Number(ge._ts) >= Number(le._ts)) localMap.set(ge.date, ge);
           } else {
             const gasEmpty  = !ge.protein && !ge.grain && !ge.veg;
             const localEmpty = !le.protein && !le.grain && !le.veg;
@@ -1717,15 +1766,30 @@ async function syncFromCloud() {
         });
         const merged = Array.from(localMap.values()).sort((a,b) => b.date < a.date ? -1 : 1);
         localStorage.setItem('diary', JSON.stringify(merged));
+        // 書き戻し：ローカル側が採用された日があればマージ結果をGASへ送る。
+        // （他端末が古い一覧で上書きしてGASから日付が欠けたとき、ここで戻る。
+        //   2026-10 に4日分がGASから欠けたまま残った件への対策）
+        const diaryPushable = _filterForPushBack('diary', merged, _validDatedEntry);
+        if (_needsPushBack(diaryPushable, gasDiary.filter(_validDatedEntry), e => e.date)) {
+          pushToCloud('diary', diaryPushable);
+        }
       } else if (k === 'health_notes') {
         // healthNotes: エントリ単位マージ + 削除ガード(text 空エントリはローカルに内容があれば保持)
+        // 削除は「削除の印」エントリ { date, text:'', deleted:true, _ts } で伝える（2026-11〜）。
+        // 印が絡むときは必ず時刻で決める＝削除より後に書き直したノートは残り、
+        // 書いた後の削除は消える。deleted_ids.health_notes（日付単位・時刻なし）は
+        // 「同じ日に書き直すと次の同期で消える」原因だったため、もう参照しない。
         const local = _saneEntries('health_notes(ローカル)', load('health_notes', []));
+        const gasNotes = _saneEntries('health_notes(GAS)', gasVal || []);
         const localMap = new Map(local.map(e => [e.date, e]));
-        _saneEntries('health_notes(GAS)', gasVal || []).forEach(ge => {
+        gasNotes.forEach(ge => {
           const le = localMap.get(ge.date);
           if (!le) {
             // ローカルにないエントリ → GASから追加
             localMap.set(ge.date, ge);
+          } else if (ge.deleted || le.deleted) {
+            // どちらかが削除の印 → 時刻の新しい方。同点・なしはGAS優先
+            if (Number(ge._ts || 0) >= Number(le._ts || 0)) localMap.set(ge.date, ge);
           } else {
             const gasEmpty   = !ge.text;
             const localEmpty = !le.text;
@@ -1743,14 +1807,20 @@ async function syncFromCloud() {
         });
         const hnMerged = Array.from(localMap.values())
           .sort((a, b) => parseNoteDate(b.date) - parseNoteDate(a.date));
-        localStorage.setItem('health_notes', JSON.stringify(filterByTombstone('health_notes', hnMerged)));
+        localStorage.setItem('health_notes', JSON.stringify(hnMerged));
+        // 書き戻し：ローカル側が採用された項目（削除の印を含む）があればGASへ送る
+        const hnPushable = _filterForPushBack('health_notes', hnMerged, _validDatedEntry);
+        if (_needsPushBack(hnPushable, gasNotes.filter(_validDatedEntry), e => e.date)) {
+          pushToCloud('health_notes', hnPushable);
+        }
       } else if (k === 'supple') {
         // supple: エントリ単位マージ。union構造(ローカル全件がMap初期値)が誤空からローカルを守り、
         // 削除は filterByTombstone だけが行う（GASが空でも tombstone 適用まで必ず到達させる）
         const localSupple = _saneEntries('supple(ローカル)', load('supple', []));
         // id をキーに。id がない場合は 'name:サプリ名' でフォールバック
         const suppleMap = new Map(localSupple.map(e => [e.id || ('name:' + e.name), e]));
-        _saneEntries('supple(GAS)', gasVal || []).forEach(ge => {
+        const gasSupple = _saneEntries('supple(GAS)', gasVal || []);
+        gasSupple.forEach(ge => {
           const key = ge.id || ('name:' + ge.name);
           const le = suppleMap.get(key);
           if (!le) {
@@ -1763,13 +1833,20 @@ async function syncFromCloud() {
             if (geTs >= leTs) suppleMap.set(key, ge);
           }
         });
-        localStorage.setItem('supple', JSON.stringify(filterByTombstone('supple', Array.from(suppleMap.values()))));
+        const suppleClean = filterByTombstone('supple', Array.from(suppleMap.values()));
+        localStorage.setItem('supple', JSON.stringify(suppleClean));
+        // 書き戻し：ローカル側が採用された項目があればGASへ送る（削除記録を適用した後の一覧）
+        const supplePushable = _filterForPushBack('supple', suppleClean, _validSuppleEntry);
+        if (_needsPushBack(supplePushable, gasSupple.filter(_validSuppleEntry), e => e.id || ('name:' + e.name))) {
+          pushToCloud('supple', supplePushable);
+        }
       } else if (k === 'custom_meal_checks' || k === 'custom_health_checks') {
         // チェック項目定義: id単位マージ。union構造(ローカル全件がMap初期値)が誤空からローカルを守り、
         // 削除は filterByTombstone だけが行う（GASが空でも tombstone 適用まで必ず到達させる）
         const localItems = _saneEntries(k + '(ローカル)', load(k, []));
         const itemMap = new Map(localItems.map(e => [e.id, e]));
-        _saneEntries(k + '(GAS)', gasVal || []).forEach(ge => {
+        const gasItems = _saneEntries(k + '(GAS)', gasVal || []);
+        gasItems.forEach(ge => {
           if (!ge.id) return;
           const le = itemMap.get(ge.id);
           if (!le) {
@@ -1780,7 +1857,13 @@ async function syncFromCloud() {
             if (geTs >= leTs) itemMap.set(ge.id, ge);
           }
         });
-        localStorage.setItem(k, JSON.stringify(filterByTombstone(k, Array.from(itemMap.values()))));
+        const itemsClean = filterByTombstone(k, Array.from(itemMap.values()));
+        localStorage.setItem(k, JSON.stringify(itemsClean));
+        // 書き戻し：ローカル側が採用された項目があればGASへ送る（削除記録を適用した後の一覧）
+        const itemsPushable = _filterForPushBack(k, itemsClean, _validCheckItemEntry);
+        if (_needsPushBack(itemsPushable, gasItems.filter(_validCheckItemEntry), e => e.id)) {
+          pushToCloud(k, itemsPushable);
+        }
       } else if (k === 'next_visit') {
         // next_visit: エントリ単位マージ。union構造(ローカル全件がMap初期値)が誤空からローカルを守り、
         // 削除は filterByTombstone だけが行う（GASが空でも tombstone 適用まで必ず到達させる）
@@ -2261,6 +2344,9 @@ function getChecks()    { return load('chk_' + _currentFormDate, {}); }
 function setChecks(c)   { save('chk_' + _currentFormDate, c); }
 function getNotes()     { return load('health_notes', DEFAULT_HEALTH_NOTES); }
 function setNotes(n)    { save('health_notes', n); }
+// 表示・集計用：削除の印（deleted:true）を除いた健康ノート。
+// 保存し直す処理は必ず getNotes()（印を含む全件）を使うこと（印を落とすと削除が他端末で復活する）。
+function getVisibleNotes() { return getNotes().filter(n => n && !n.deleted); }
 function getDiary()     { return load('diary', DEFAULT_DIARY); }
 function setDiary(d)    { save('diary', d); }
 function getDayMemo(date)    { return load('day_memo_' + date, {}); }
@@ -2907,7 +2993,13 @@ function saveTodayAll() {
     const dateStr = d.getFullYear() + '/' + (d.getMonth()+1) + '/' + d.getDate();
     const notes = getNotes();
     const ni = notes.findIndex(n => n.date === dateStr);
-    if (ni >= 0) { notes.splice(ni, 1); setNotes(notes); renderNotes(); }
+    // 体調メモが全部空 → その日のノートを消す。配列から取り除くと他端末に残った分が
+    // 復活するため、削除の印に置き換える（すでに印なら何もしない）
+    if (ni >= 0 && !notes[ni].deleted) {
+      notes[ni] = { date: dateStr, text: '', deleted: true, _ts: Date.now() };
+      setNotes(notes);
+      renderNotes();
+    }
   }
   const badge = document.getElementById('form-saved-badge');
   if (badge) badge.style.display = 'block';
@@ -3012,7 +3104,7 @@ function renderNotes() {
   const inner = document.getElementById('notes-search-inner');
   if (inner) inner.style.border = hasQ ? '1.5px solid #D4537E' : '1.5px solid transparent';
 
-  let notes = [...getNotes()].sort((a, b) => parseNoteDate(b.date) - parseNoteDate(a.date));
+  let notes = getVisibleNotes().sort((a, b) => parseNoteDate(b.date) - parseNoteDate(a.date));
   if (currentNotesMonth) {
     notes = notes.filter(n => {
       const clean = String(n.date).replace('夜', '').trim();
@@ -3116,19 +3208,15 @@ function notesSearchClear() {
   if (inp) inp.value = '';
   renderNotes();
 }
-function clearNotes() {
-  if (!confirm('体調記録をすべて削除しますか？')) return;
-  setNotes([]);
-  renderNotes();
-}
 function deleteHealthNote(dateStr) {
   if (!confirm('「' + dateStr + '」の記録を削除しますか？')) return;
   _noteEditDate = null;
   const notes = getNotes();
   const idx = notes.findIndex(n => n.date === dateStr);
   if (idx < 0) return;
-  notes.splice(idx, 1);
-  addDeletedId('health_notes', dateStr);
+  // 配列から取り除かず「削除の印」に置き換える（時刻つきなので、後から同じ日に
+  // 書き直したノートは残り、他端末にもこの削除が伝わる）
+  notes[idx] = { date: dateStr, text: '', deleted: true, _ts: Date.now() };
   setNotes(notes);
   // 夜エントリは diary と独立して存在するため diary/day_memo はクリアしない。
   // 通常エントリのみ diary の health memo fields と day_memo をクリアして整合を取る。
@@ -3173,7 +3261,6 @@ function cancelNoteEdit() {
 // SUPPLEMENTS
 // ============================================================
 function migrateCheckItems() {
-  const now = Date.now();
   [
     { key: 'custom_meal_checks',   defaults: DEFAULT_MEAL_CHECKS },
     { key: 'custom_health_checks', defaults: DEFAULT_HEALTH_CHECKS },
@@ -3193,7 +3280,9 @@ function migrateCheckItems() {
       if (!needsTs && !needsOrder) return item;
       changed = true;
       const entry = { ...item };
-      if (needsTs)    entry._ts   = now;
+      // 時刻が無い項目（＝内蔵の初期項目）は 0 を入れる。現在時刻を入れると、
+      // まっさらな端末で作られた初期項目が「最新」としてGASの本物に勝ってしまう
+      if (needsTs)    entry._ts   = 0;
       if (needsOrder) entry.order = idx;
       return entry;
     });
@@ -3221,7 +3310,8 @@ function migrateSupplements() {
       addedFields.add('status'); addedFields.add('stoppedAt'); addedFields.add('memos');
     }
     if (needsId)  { entry.id  = 'supple_legacy_' + s.name; addedFields.add('id'); }
-    if (needsTs)  { entry._ts = Date.now();                 addedFields.add('_ts'); }
+    // 時刻が無い項目（＝内蔵の初期サプリ）は 0 を入れる（理由は migrateCheckItems と同じ）
+    if (needsTs)  { entry._ts = 0;                          addedFields.add('_ts'); }
     count++;
     return entry;
   });
@@ -3953,16 +4043,6 @@ function cancelFilariaEdit() {
   renderFilaria();
 }
 
-function deleteSupple(idx) {
-  const list = getSupple();
-  const name = list[idx]?.name || '';
-  if (!confirm(`「${name}」を削除しますか？`)) return;
-  list.splice(idx, 1);
-  setSupple(list);
-  renderSupple();
-  showToast('削除しました');
-}
-
 function deleteSuppleById(id) {
   const list = getSupple();
   const s = list.find(e => e.id === id);
@@ -4246,6 +4326,10 @@ function saveConsultation() {
     items: JSON.parse(JSON.stringify(items)),
     _ts: ts
   });
+  // 全クリアする項目のIDを削除記録に入れてから消す（入れないと、他端末に残った分が
+  // 書き戻しで復活する＝落とし穴19）
+  addDeletedIds('consultation_summary', items.map(e => (e && typeof e === 'object') ? e.id : null));
+  addDeletedIds('next_visit', getNextVisitItems().map(e => (e && typeof e === 'object') ? e.id : null));
   setConsultationSummary([]);
   setNextVisitItems([]);
   setConsultationHistory(history);
@@ -4348,7 +4432,7 @@ function collectAbnormalRecords(periodKey) {
   const ts = Date.now();
 
   // ソース①: health_notes（期間内・元気度低下 or 特記事項あり）
-  const notes = getNotes();
+  const notes = getVisibleNotes();
   notes.forEach(function(n) {
     if (!n.text || !n.text.trim()) return;
     const text = n.text.trim();
@@ -4486,6 +4570,10 @@ function confirmCsAgg(mode) {
   const existing = getConsultationSummary();
   if (mode === 'clear') {
     const manualOnly = existing.filter(function(x) { return typeof x === 'object' && x.source === 'manual'; });
+    // やり直しで消す自動集計分のIDを削除記録に入れる（他端末からの復活防止）
+    addDeletedIds('consultation_summary', existing
+      .filter(function(x) { return !(typeof x === 'object' && x.source === 'manual'); })
+      .map(function(x) { return (x && typeof x === 'object') ? x.id : null; }));
     setConsultationSummary(manualOnly.concat(_csAggPending));
   } else {
     setConsultationSummary(existing.concat(_csAggPending));

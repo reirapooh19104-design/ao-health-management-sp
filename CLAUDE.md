@@ -99,7 +99,8 @@ GitHub Pagesで公開、GASでデータ同期。Last-Write-Wins方式の双方�
 
 ## 触るときに特に注意するロジック
 - `pushToCloud()` / `syncFromCloud()` / `pushAllToCloud()`: GAS同期の根幹
-- `saveTodayAll()`: 食事日誌・健康ノートのupsert。健康メモが全空のとき health_notes の該当日エントリを削除する
+- `saveTodayAll()`: 食事日誌・健康ノートのupsert。健康メモが全空のとき health_notes の該当日エントリを
+  「削除の印」に置き換える（配列から取り除かない。2026-11-14〜・下記「削除の伝え方」参照）
 - `autoBackup()`: 7日分の自動バックアップ
 - `_ts_` プレフィックスのキー: LWW用タイムスタンプ
 - `loadFormForDate()`: 過去日読み込みの既存機能
@@ -388,6 +389,8 @@ GitHub Pagesで公開、GASでデータ同期。Last-Write-Wins方式の双方�
   - 経路④：syncFromCloud の書き戻しpush（下記。定常運用でも条件が成立しうる）
 - 経路④の対象5キー：next_visit / consultation_summary / consultation_history / ao_records /
   learning_memos（2026-07-06 学びメモ機能追加時に同型で追加）。
+  ※ 2026-11-14 に diary / health_notes / supple / custom_meal_checks / custom_health_checks と
+  deleted_ids の送り直しを追加（条件は「削除の伝え方と書き戻しの拡張」参照）。
   マージ後「ローカルにあってGASに無い項目」が1つでもあれば、その配列を pushToCloud する。
 - 全キーを無差別に押し上げる起動時pushは存在しない。pushAllToCloud（ボタン/コンソールのみ）・
   flushChkPending（visibilitychange/pagehideのみ）は起動時には走らない。
@@ -628,10 +631,60 @@ GitHub Pagesで公開、GASでデータ同期。Last-Write-Wins方式の双方�
   GASを次に変えるときも「シートをコピー→コピー側に新デプロイ→テスト用URLへ直接リクエスト」
   の手順が有効（本物のアプリはテスト用URLにつながない）。
 
+## 削除の伝え方と書き戻しの拡張（2026-11-14 対応済み・レビュー第2弾）
+- **健康ノートの削除は「削除の印」方式**：配列から取り除かず
+  `{ date, text:'', deleted:true, _ts }` に置き換える（`deleteHealthNote` と、
+  `saveTodayAll` の体調メモ全空保存）。受信マージは、印が絡むとき必ず `_ts` の新しい方を採用。
+  - 理由：従来の `deleted_ids.health_notes` は**日付単位・時刻なし**で、削除した日に
+    ノートを書き直すと次の同期で黙って消えた。GAS v8 は削除記録を合算する（減らせない）ため、
+    「書き直したら削除記録を外す」方式も取れない。
+  - **`deleted_ids.health_notes` はもう参照しない**（syncFromCloud の health_notes は
+    filterByTombstone を通さない）。新たに書き込みもしない。
+  - 表示・集計は `getVisibleNotes()`（印を除く）を使う。**保存し直す処理は必ず `getNotes()`
+    （印を含む全件）を使う**こと。印を落として保存すると、削除が他端末で復活する。
+  - 印はエクスポートJSONにも入る（そのまま復元できる）。印の掃除（古い印の削除）はしていない。
+  - 古いキャッシュ版アプリには、印が「本文が空のノート」として見える（実害なし・更新で解消）。
+- **削除記録（tombstone）の穴埋め**（落とし穴19の③）：
+  - `saveConsultation()` の全クリアと `confirmCsAgg('clear')`（自動集計のやり直し）は、
+    消す項目のIDを `addDeletedIds()` でまとめて削除記録に入れてから消す。
+  - `addDeletedIds(キー, ID配列)` を新設（保存・送信は1回）。`addDeletedId` はこれを呼ぶだけ。
+    空・未定義のIDは入れない。
+  - **削除記録の送り直し**：syncFromCloud の冒頭で、この端末にあってGASに無い削除記録が
+    あれば `deleted_ids` を送り直す（削除時の送信は送りっぱなしのため、不達分をここで拾う）。
+- **書き戻し（経路④）の対象を拡大**：diary / health_notes / supple /
+  custom_meal_checks / custom_health_checks にも書き戻しを追加（従来の5キーと合わせて10キー）。
+  - 新しい5キーの条件は `_needsPushBack()`：マージ結果に「GASに無い」**または
+    「GASと内容が違う（＝ローカル側が採用された）」**項目があれば、マージ結果を丸ごと送る。
+    従来の5キーは「GASに無い項目があれば」のまま（変更していない）。
+  - 送るのは削除記録を適用した後の一覧。日付またはIDを持たない壊れた項目は送らない。
+  - learning_categories と filaria_history には書き戻しが**無いまま**（初期データの時刻の
+    問題＝レビュー高-6 を直してから検討）。
+- **食事日誌のマージは時刻優先**：両方のエントリに `_ts` があれば新しい方（同点はGAS）。
+  どちらかに `_ts` が無い古いデータだけ、従来の「空より中身あり優先」ガードを使う。
+- **初期項目の時刻は 0**：`migrateCheckItems` / `migrateSupplements` が `_ts` の無い項目
+  （＝内蔵の初期チェック項目・初期サプリ）に入れる時刻を、現在時刻から 0 に変更。
+  まっさらな端末の初期データが「最新」としてGASの本物に勝ち、書き戻しで広がるのを防ぐ
+  （落とし穴17の地雷の一部を解消。blood_tests・recipes・ao_records の初期データは未対応）。
+- 未使用だった `deleteSupple(idx)` と `clearNotes()` は削除（どちらも削除記録なしで消す処理だった）。
+
+### 2026-10 に食事日誌4日分がGASから欠けた件（原因の調査結果）
+- 事象：9/30・10/1・10/2・10/5 の食事日誌と健康ノートが、PCにはあるのにGASとスマホに無かった
+  （2026-11-14、GAS v8 の確認中に発見。データ損失なし。全データGAS同期で復旧）。
+- 確かめられたこと：GASには同じ4日の `day_memo_<日付>` の行が、PCの日誌保存と同じ時刻
+  （10/2 22:35〜22:58、10/5 19:17）で残っていた。**PCの保存はGASに届いていた**。
+  日誌の一覧（`diary`）だけが、その後、4日分を持たない一覧で上書きされた。
+- 推定（端末の特定まではできていない）：PCの保存を受信していない端末（開いたままで
+  再読み込みしていないアプリ）が、古い一覧のまま日誌を保存して上書きした。
+  同期の受信が起動時の1回だけであること（レビュー高-2・未対応）が根にある。
+- 当時は diary / health_notes に書き戻しが無かったため、PCが次に日誌を保存するまで
+  GASに戻らず、1か月以上そのままになった。**書き戻しの追加で、欠けた分は次の起動時同期で
+  自動的に戻るようになった**（上書きそのものを防ぐのは高-2の対応）。
+
 ## 次セッション候補（2026-07-07 更新）
 
 ### 実害あり・優先度高め（実際に事象を観測した対策）
-- **③ tombstone欠落経路の穴埋め**（落とし穴19）：`saveConsultation()` の全クリア時と
+- **③ tombstone欠落経路の穴埋め**（落とし穴19）：【対応済み 2026-11-14・上記
+  「削除の伝え方と書き戻しの拡張」参照。以下は当時の記述】`saveConsultation()` の全クリア時と
   レガシー項目（idなし）削除時に tombstone を打つ。あわせて tombstone push
   （addDeletedId 内の単キー型 pushToCloud・fire-and-forget）の到達性向上（bulk化/到達確認）も
   検討する。**本物のあお記録でも同種の復活が起こり得るため優先度高め**。
