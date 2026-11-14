@@ -1656,6 +1656,111 @@ function _validCheckItemEntry(e) {
 // こなくなり、受信後修復（migrateNextVisitItems等）とも衝突するため）。
 // 弾いた要素はマージ結果に載らず localStorage からも消える。これはpush側
 // 「ローカルから削除しない」原則の意図的な例外（nullはJSON上の「無」でデータではない）。
+// ── 項目単位マージの4キー（体重・血液検査・薬・レシピ）──────────────────
+// 以前は「一覧を丸ごと後勝ち」だったため、他端末の追加を知らない端末が保存すると、
+// その追加が全端末から消えた。項目ごとに保存時刻(_ts)を持たせ、削除は
+// 「削除の印」{ date または id, deleted:true, _ts } を一覧に残して伝える（健康ノートと同じ考え方）。
+// ・読み出し（getBodyWeights 等）は印を除いた一覧を返す＝画面側のコードは印を意識しなくてよい
+// ・保存（setBodyWeights 等）は _saveEntryList が、変わった項目への時刻の刻印と、
+//   一覧から消えた項目の「削除の印」への置き換えを自動で行う
+// ★ このため setter には必ず「全件の一覧」を渡すこと。一部だけ渡すと、残りが削除扱いになる。
+const ENTRY_MERGE_KEYS = {
+  bodyWeights: e => e.date,
+  blood_tests: e => e.date,
+  med_list:    e => e.id,
+  recipes:     e => e.id,
+};
+function _entryKeyOk(key, e) {
+  if (!e || typeof e !== 'object' || Array.isArray(e)) return false;
+  const k = ENTRY_MERGE_KEYS[key](e);
+  return (typeof k === 'string' && k !== '') || typeof k === 'number';
+}
+function _loadRawList(key, def) {
+  try {
+    const raw = localStorage.getItem(key);
+    if (raw === null) return def;
+    const v = JSON.parse(raw);
+    return Array.isArray(v) ? v : def;
+  } catch { return def; }
+}
+function _visibleList(arr) {
+  return (Array.isArray(arr) ? arr : []).filter(e => e && typeof e === 'object' && !e.deleted);
+}
+function _entryContent(e) { const c = { ...e }; delete c._ts; return JSON.stringify(c); }
+function _entryMarker(key, k, ts) {
+  return (key === 'bodyWeights' || key === 'blood_tests')
+    ? { date: k, deleted: true, _ts: ts }
+    : { id: k, deleted: true, _ts: ts };
+}
+function _sortEntryList(key, arr) {
+  if (key === 'bodyWeights') arr.sort((a, b) => a.date < b.date ? -1 : (a.date > b.date ? 1 : 0));
+  if (key === 'blood_tests') arr.sort((a, b) => b.date < a.date ? -1 : (b.date > a.date ? 1 : 0));
+  return arr;
+}
+// 保存：newVisible（画面側が持っている全件・印なし）を、時刻と削除の印つきの一覧にして保存する
+function _saveEntryList(key, newVisible) {
+  const keyFn = ENTRY_MERGE_KEYS[key];
+  const raw = _loadRawList(key, []);
+  const prevKeyTs = Number(localStorage.getItem('_ts_' + key) || 0);
+  const now = Date.now();
+  const oldMap = new Map(raw.filter(e => _entryKeyOk(key, e)).map(e => [keyFn(e), e]));
+  const seen = new Set();
+  const out = (Array.isArray(newVisible) ? newVisible : []).map(e => {
+    if (!_entryKeyOk(key, e)) return e; // キーの無い項目はそのまま通す
+    const k = keyFn(e);
+    seen.add(k);
+    const old = oldMap.get(k);
+    if (old && !old.deleted && _entryContent(old) === _entryContent(e)) {
+      // 中身が変わっていない → 時刻は据え置き（時刻の無い古い項目には、保存前の一覧の時刻を入れる）
+      return { ...e, _ts: (typeof old._ts === 'number') ? old._ts : prevKeyTs };
+    }
+    return { ...e, _ts: now }; // 新規・変更
+  });
+  oldMap.forEach((old, k) => {
+    if (seen.has(k)) return;
+    out.push(old.deleted ? old : _entryMarker(key, k, now)); // 消えた項目は削除の印に（既存の印は残す）
+  });
+  save(key, out);
+}
+// 受信：GASの一覧と項目単位でマージする
+function _mergeEntryListFromCloud(key, gasVal, gasTs, localTs) {
+  if (!Array.isArray(gasVal)) return; // 一覧でない値が来たら触らない
+  const keyFn = ENTRY_MERGE_KEYS[key];
+  const gasArr = _saneEntries(key + '(GAS)', gasVal).filter(e => _entryKeyOk(key, e));
+  const localAll = _saneEntries(key + '(ローカル)', _loadRawList(key, []));
+  let localArr = localAll.filter(e => _entryKeyOk(key, e));
+  const localOther = localAll.filter(e => !_entryKeyOk(key, e)); // キーの無い項目はマージせず残す
+  let localBaseTs = localTs;
+
+  // 切り替え時の1回だけ：旧方式（一覧丸ごと後勝ち）で決着をつけてから項目単位に移る。
+  // 旧版の端末が行った削除は印を残していないため、これをしないと消した項目が復活する。
+  // まっさらな端末（初期データ＝時刻0）も、ここでGASの一覧に丸ごと置き換わる。
+  const ready = load('entry_merge_ready', {});
+  if (!ready[key]) {
+    if ((gasTs > localTs || (gasTs === 0 && localTs === 0)) && gasArr.length > 0) {
+      localArr = gasArr.map(e => ({ ...e }));
+      localBaseTs = gasTs;
+    }
+    ready[key] = true;
+    localStorage.setItem('entry_merge_ready', JSON.stringify(ready));
+  }
+
+  // 時刻の無い古い項目には、その一覧全体の時刻を入れる（旧方式の新旧関係をそのまま引き継ぐ）
+  const withTs = (e, baseTs) => (typeof e._ts === 'number') ? e : { ...e, _ts: baseTs };
+  const map = new Map(localArr.map(e => [keyFn(e), withTs(e, localBaseTs)]));
+  gasArr.forEach(ge0 => {
+    const ge = withTs(ge0, gasTs);
+    const le = map.get(keyFn(ge));
+    if (!le || ge._ts >= le._ts) map.set(keyFn(ge), ge); // 新しい方。同点はGAS優先
+  });
+  const merged = _sortEntryList(key, Array.from(map.values()));
+  localStorage.setItem(key, JSON.stringify(merged.concat(localOther)));
+  const newKeyTs = Math.max(gasTs, localTs);
+  if (newKeyTs > 0) localStorage.setItem('_ts_' + key, newKeyTs);
+  // 書き戻し：ローカル側が採用された項目（削除の印・時刻を入れ直した項目を含む）があればGASへ送る
+  if (_needsPushBack(merged, gasArr, keyFn)) pushToCloud(key, merged);
+}
+
 function _isSaneEntry(e) {
   return typeof e === 'string' || (typeof e === 'object' && e !== null && !Array.isArray(e));
 }
@@ -1811,7 +1916,7 @@ async function _syncFromCloudInner() {
     }
 
     Object.keys(gasData).forEach(k => {
-      if (k.startsWith('autobackup_') || k.startsWith('_ts_') || k === 'gas_url' || k === 'sync_token' || (k.startsWith('custom_') && k !== 'custom_meal_checks' && k !== 'custom_health_checks')) return;
+      if (k.startsWith('autobackup_') || k.startsWith('_ts_') || k === 'gas_url' || k === 'sync_token' || k === 'entry_merge_ready' || (k.startsWith('custom_') && k !== 'custom_meal_checks' && k !== 'custom_health_checks')) return;
 
       // tombstone: deleted_ids はマージして早期リターン
       if (k === 'deleted_ids') {
@@ -2114,6 +2219,9 @@ async function _syncFromCloudInner() {
         gasFh.forEach(ge => fhMap.set(ge.scheduledDate, ge));
         localFh.forEach(le => fhMap.set(le.scheduledDate, le));
         localStorage.setItem('filaria_history', JSON.stringify(Array.from(fhMap.values())));
+      } else if (ENTRY_MERGE_KEYS[k]) {
+        // 体重・血液検査・薬・レシピ：項目単位マージ（削除は「削除の印」で伝わる）
+        _mergeEntryListFromCloud(k, gasVal, gasTs, localTs);
       } else if (k.startsWith('chk_')) {
         // chk_<日付>: 項目単位 OR マージ（true は消えない・断片が完全データに勝つバグ対策）
         if (gasVal == null || typeof gasVal !== 'object' || Array.isArray(gasVal)) return;
@@ -2167,7 +2275,7 @@ async function _pushAllToCloudInner() {
   const dataKeys = [];
   for (let i = 0; i < localStorage.length; i++) {
     const k = localStorage.key(i);
-    if (k && !k.startsWith('autobackup_') && !k.startsWith('_ts_') && k !== 'gas_url' && k !== 'sync_token' && (k === 'custom_meal_checks' || k === 'custom_health_checks' || !k.startsWith('custom_')) && k !== 'view_month_diary' && k !== 'view_month_notes' && k !== 'selected_recipe_id') dataKeys.push(k);
+    if (k && !k.startsWith('autobackup_') && !k.startsWith('_ts_') && k !== 'gas_url' && k !== 'sync_token' && k !== 'entry_merge_ready' && (k === 'custom_meal_checks' || k === 'custom_health_checks' || !k.startsWith('custom_')) && k !== 'view_month_diary' && k !== 'view_month_notes' && k !== 'selected_recipe_id') dataKeys.push(k);
   }
   // 動的キー（chk_・day_memo_）で空値のものをスキップ（静的キーは必ず送る）
   const filteredDataKeys = dataKeys.filter(k => {
@@ -2455,16 +2563,16 @@ function getDiary()     { return load('diary', DEFAULT_DIARY); }
 function setDiary(d)    { save('diary', d); }
 function getDayMemo(date)    { return load('day_memo_' + date, {}); }
 function setDayMemo(date, v) { save('day_memo_' + date, v); }
-function getBloodTests()     { return load('blood_tests', DEFAULT_BLOOD_TESTS); }
-function setBloodTests(d)    { save('blood_tests', d); }
+function getBloodTests()     { return _visibleList(_loadRawList('blood_tests', DEFAULT_BLOOD_TESTS)); }
+function setBloodTests(d)    { _saveEntryList('blood_tests', d); }
 function getSupple()       { return load('supple', DEFAULT_SUPPLE); }
 function setSupple(d)      { save('supple', d); }
-function getMedList()      { try { return JSON.parse(localStorage.getItem('med_list') || '[]'); } catch { return []; } }
-function setMedList(d)     { save('med_list', d); }
+function getMedList()      { return _visibleList(_loadRawList('med_list', [])); }
+function setMedList(d)     { _saveEntryList('med_list', d); }
 function getNextVisitItems() { return load('next_visit', DEFAULT_NEXT_VISIT); }
 function setNextVisitItems(items) { save('next_visit', items); }
-function getBodyWeights()  { return load('bodyWeights', []); }
-function setBodyWeights(d) { save('bodyWeights', d); }
+function getBodyWeights()  { return _visibleList(_loadRawList('bodyWeights', [])); }
+function setBodyWeights(d) { _saveEntryList('bodyWeights', d); }
 function getConsultationSummary()       { return load('consultation_summary', []); }
 function setConsultationSummary(items)  { save('consultation_summary', items); }
 function getConsultationHistory()       { return load('consultation_history', []); }
@@ -5768,11 +5876,16 @@ function _esc(str) {
 
 function initRecipes() {
   if (localStorage.getItem('recipes')) return;
-  save('recipes', DEFAULT_RECIPE_DATA);
+  // 初期レシピは時刻0・一覧の時刻なしで直接保存する（save() を使うと現在時刻が付き、
+  // まっさらな端末の初期レシピが「最新」としてGASの本物に勝ってしまう＝落とし穴17）
+  localStorage.setItem('recipes', JSON.stringify(DEFAULT_RECIPE_DATA.map(r => ({ ...r, _ts: 0 }))));
 }
 
 function getRecipes() {
-  return load('recipes', DEFAULT_RECIPE_DATA);
+  return _visibleList(_loadRawList('recipes', DEFAULT_RECIPE_DATA));
+}
+function setRecipes(arr) {
+  _saveEntryList('recipes', arr);
 }
 
 function calcRecipeStats(recipe) {
@@ -5878,7 +5991,7 @@ function addRecipe() {
     summary: ''
   };
   recipes.push(newRecipe);
-  save('recipes', recipes);
+  setRecipes(recipes);
   _currentRecipeId = newRecipe.id;
   localStorage.setItem('selected_recipe_id', newRecipe.id);
   startEditRecipe(newRecipe.id);
@@ -5892,7 +6005,7 @@ function duplicateRecipe(id) {
   copy.id = 'rec_' + Date.now();
   copy.name = orig.name + '（コピー）';
   recipes.push(copy);
-  save('recipes', recipes);
+  setRecipes(recipes);
   _currentRecipeId = copy.id;
   localStorage.setItem('selected_recipe_id', copy.id);
   renderRecipe();
@@ -5907,7 +6020,7 @@ function deleteRecipe(id) {
   if (!recipe) return;
   if (!confirm(`「${recipe.name}」を削除しますか？`)) return;
   const newList = recipes.filter(r => r.id !== id);
-  save('recipes', newList);
+  setRecipes(newList);
   _currentRecipeId = newList[0]?.id || null;
   if (_currentRecipeId) localStorage.setItem('selected_recipe_id', _currentRecipeId);
   renderRecipe();
@@ -6060,7 +6173,7 @@ function saveRecipeEdit() {
   const idx = recipes.findIndex(r => r.id === window._editRecipeId);
   if (idx === -1) return;
   recipes[idx] = window._editData;
-  save('recipes', recipes);
+  setRecipes(recipes);
   _currentRecipeId = window._editRecipeId;
   localStorage.setItem('selected_recipe_id', _currentRecipeId);
   window._editData     = null;
@@ -6369,7 +6482,7 @@ function importData(e) {
       if (d.recipes && Array.isArray(d.recipes)) {
         const recMap = new Map(getRecipes().map(r => [r.id, r]));
         d.recipes.forEach(r => { if (r && r.id) recMap.set(r.id, r); });
-        save('recipes', Array.from(recMap.values()));
+        setRecipes(Array.from(recMap.values()));
       }
       if (d.selectedRecipeId)    localStorage.setItem('selected_recipe_id', d.selectedRecipeId);
       if (d.filariaSettings)     setFilariaSettings(d.filariaSettings);
@@ -6547,8 +6660,10 @@ function renderAll() {
   });
 
   // blood tests 初期化
-  const _btStored = load('blood_tests', null);
-  if (!_btStored) setBloodTests(DEFAULT_BLOOD_TESTS);
+  // 初期データは時刻0・一覧の時刻なしで直接保存する（理由は initRecipes と同じ）
+  if (localStorage.getItem('blood_tests') === null) {
+    localStorage.setItem('blood_tests', JSON.stringify(DEFAULT_BLOOD_TESTS.map(t => ({ ...t, _ts: 0 }))));
+  }
 
   // localStorage に health_notes キーがそもそも存在しない初回起動時のみ DEFAULT を書く
   // (空配列はユーザーが意図的に全削除した結果の可能性があるので、復活させない)

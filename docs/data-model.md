@@ -12,9 +12,11 @@ ao-health-management-sp のデータ構造・キー名・保存先・同期方�
   表示・集計は `getVisibleNotes()`、保存し直す処理は `getNotes()`（印を含む全件）を使う
 - `diary` エントリには health memo fields（walk, coughN, coughL, energyLv, specialNote, memoOther）も含まれる
   ※ day_memo との二重保存。読み込みは diary entry 優先
-- `bodyWeights` は配列：`[{date: "YYYY-MM-DD", weight: 数値kg}, ...]`
+- `bodyWeights` は配列：`[{date: "YYYY-MM-DD", weight: 数値kg, _ts}, ...]`
   - 日付昇順でソート保持、同一日付は upsert（既存上書き／新規追加）
-  - `pushAllToCloud` / `syncFromCloud` で配列丸ごと置換で同期（`health_notes` と同方式）
+  - 2026-11-15 から項目単位マージ。保存データには削除の印 `{date, deleted:true, _ts}` が混ざる
+    （`getBodyWeights()` は印を除いて返す）。`blood_tests`（日付単位）・`med_list`／`recipes`（ID単位）も同じ。
+    読み書きは必ず getter / setter を通す（CLAUDE.md「項目単位マージの4キー」参照）
   - `exportData` / `importData` の対象に含まれる
   - 7日分の自動バックアップ対象に含まれる（autoBackup が全キーを自動収集）
 
