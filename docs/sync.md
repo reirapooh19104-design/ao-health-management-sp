@@ -135,5 +135,12 @@ GAS同期の特性と事故防止の鉄則。**同期をいじる前に必ず読
 保存先スプレッドシート「あお健康管理AP」の data シート（A列＝キー・B列＝JSON文字列）の
 扱いは [data-model.md](data-model.md) を参照。同期の往復としては:
 - **`doGet`**: data シート全行を読み、`{キー: 値, ...}` の JSON オブジェクトを返す。
-- **`doPost`**: 受信ボディを JSON パース。`{bulk: true, data: {...}}` 形式なら `setValues` で
-  一括書き込み、`{key, value}` 形式なら1件書き込み（後方互換）。
+  長い値は B列以降の複数セルに分かれているので連結して返す（v8〜）。
+- **`doPost`**: 受信ボディを JSON パース。`{bulk: true, data: {...}}` 形式と `{key, value}` 形式
+  （後方互換）のどちらも、シート全体を読み→メモリ上で更新→1回の `setValues` で上書きする。
+- **v8（2026-11-14）で変わった点**：45,000文字ごとの分割保存／消去なしの書き込み／
+  `deleted_ids` の合算／本体+`_ts_` の組が保存済みより古ければ書かない（`force:true` は例外）／
+  doPost のエラー応答。詳細と旧版へ戻す手順は CLAUDE.md「GAS v8」セクションを参照。
+- ※ 上の「送る側」の `pushToCloud` / `pushAllToCloud` の記述は 2026-06-14 時点のもの。
+  現在は本体+`_ts_` を1POSTで送る `pushPairToCloud` が主経路で、`pushAllToCloud` は
+  `status:'ok'` 応答のときだけ成功とする（CLAUDE.md 参照）。
