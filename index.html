@@ -1427,6 +1427,26 @@ function _syncStatus(msg, type) {
   el.className = 'sync-status' + (type ? ' ' + type : '');
 }
 
+// 個別push（pushToCloud / pushPairToCloud）の応答をコンソールに記録する（観察用・再送はしない）。
+// 応答が読めなかった場合（resBody=null）は何も出さない：GASは応答を返す前に書き込みを
+// 終えているため「応答受信失敗＝書き込み失敗」ではない（落とし穴18）。
+function _logPushResult(label, key, resBody) {
+  if (!resBody) return;
+  if (resBody.status === 'error') {
+    if (resBody.message === 'busy') {
+      // GAS側LockServiceの待機タイムアウト（30秒）
+      console.warn('[混雑] ' + label + ' key=' + key + '：GASが混み合っています。自動再送はされません');
+    } else if (resBody.message === 'unauthorized') {
+      console.warn('[認証エラー] ' + label + ' key=' + key + '：合言葉を確認してください');
+    } else {
+      console.warn('[GASエラー] ' + label + ' key=' + key + '：GAS側でエラーが起き、保存されませんでした（' + resBody.message + '）');
+    }
+  } else if (Array.isArray(resBody.skipped) && resBody.skipped.length > 0) {
+    // GAS側に、より新しい時刻のデータが保存済みだったため書き込まれなかった（GAS v8〜）
+    console.warn('[見送り] ' + label + '：GASにより新しいデータがあるため書き込まれませんでした: ' + resBody.skipped.join(', '));
+  }
+}
+
 async function pushToCloud(key, val) {
   if (_importing) return; // インポート中は個別push抑止（完了後のpushAllに集約）
   if (!getGasUrl() || !getSyncToken()) return;
@@ -1437,14 +1457,7 @@ async function pushToCloud(key, val) {
       body: JSON.stringify({ key, value: val, token: getSyncToken() })
     });
     const resBody = await res.json().catch(() => null);
-    if (resBody && resBody.status === 'error') {
-      if (resBody.message === 'busy') {
-        // GAS側LockServiceの待機タイムアウト（30秒）。リトライはしない（表示のみ）
-        console.warn('[混雑] pushToCloud key=' + key + '：GASが混み合っています。自動再送はされません');
-      } else {
-        console.warn('[認証エラー] pushToCloud key=' + key + '：合言葉を確認してください');
-      }
-    }
+    _logPushResult('pushToCloud', key, resBody);
   } catch (e) { console.error('[push失敗] pushToCloud key=' + key, e); }
 }
 
@@ -1463,14 +1476,7 @@ async function pushPairToCloud(key, val, ts) {
       body: JSON.stringify({ bulk: true, data: { [key]: val, ['_ts_' + key]: ts }, token: getSyncToken() })
     });
     const resBody = await res.json().catch(() => null);
-    if (resBody && resBody.status === 'error') {
-      if (resBody.message === 'busy') {
-        // GAS側LockServiceの待機タイムアウト（30秒）。リトライはしない（表示のみ）
-        console.warn('[混雑] pushPairToCloud key=' + key + '：GASが混み合っています。自動再送はされません');
-      } else {
-        console.warn('[認証エラー] pushPairToCloud key=' + key + '：合言葉を確認してください');
-      }
-    }
+    _logPushResult('pushPairToCloud', key, resBody);
   } catch (e) { console.error('[push失敗] pushPairToCloud key=' + key, e); }
 }
 
@@ -1650,6 +1656,17 @@ async function syncFromCloud() {
     if (gasData && gasData.status === 'error' && gasData.message === 'busy' && Object.keys(gasData).length <= 2) {
       console.warn('[混雑] syncFromCloud：GASが混み合っているため今回の受信同期をスキップしました');
       _syncStatus('混み合っているため同期をスキップしました', 'error');
+      setTimeout(() => _syncStatus(''), 5000);
+      renderAll();
+      return;
+    }
+
+    // 上記以外のエラー応答（将来GASが返しうる server_error 等）もデータとして扱わない。
+    // 「statusとmessageの2キーのみ」という形で見分ける点は上の2つと同じ
+    // （正常データに status キーが紛れても、キー数が2以下になることは無い）。
+    if (gasData && gasData.status === 'error' && typeof gasData.message === 'string' && Object.keys(gasData).length <= 2) {
+      console.warn('[GASエラー] syncFromCloud：GAS側のエラーのため今回の受信同期をスキップしました（' + gasData.message + '）');
+      _syncStatus('GAS側のエラーのため同期をスキップしました', 'error');
       setTimeout(() => _syncStatus(''), 5000);
       renderAll();
       return;
@@ -1955,7 +1972,7 @@ async function syncFromCloud() {
   }
 }
 
-// 全データを50ms間隔でGASへ手動同期
+// 全データを1回の一括送信（bulk）でGASへ手動同期
 async function pushAllToCloud() {
   if (!getGasUrl()) { showToast('GAS URLが設定されていません'); return; }
   if (!getSyncToken()) { showToast('合言葉が設定されていません'); return; }
@@ -2006,54 +2023,77 @@ async function pushAllToCloud() {
 
   showToast('GASへ全データ同期中...');
 
+  // 成功とみなすのは、GASが {status:'ok'} を返したときだけ。
+  // failKind: 失敗の種類（'auth'=合言葉違い / 'busy'=混雑 / 'server'=GAS側エラー /
+  //           'unknown'=応答が読めない / 'network'=通信できない）
+  // force:true は「この端末のデータを正として必ず書く」印（GAS v8〜の時刻新旧チェックを通す。
+  // 旧GASは無視するだけ）。
   let success = false;
-  let authError = false;
+  let failKind = '';
   let lastAttempt = 0;
   const MAX_RETRY = 3;
   for (let attempt = 0; attempt <= MAX_RETRY && !success; attempt++) {
     lastAttempt = attempt;
     if (attempt > 0) {
-      await new Promise(r => setTimeout(r, 200));
+      await new Promise(r => setTimeout(r, failKind === 'busy' ? 2000 : 200));
       console.log('[pushAllToCloud] リトライ ' + attempt + '/' + MAX_RETRY);
     }
     try {
       const res = await fetch(getGasUrl(), {
         method: 'POST',
         headers: { 'Content-Type': 'text/plain' },
-        body: JSON.stringify({ bulk: true, data: bulkData, token: getSyncToken() })
+        body: JSON.stringify({ bulk: true, force: true, data: bulkData, token: getSyncToken() })
       });
       const resBody = await res.json().catch(() => null);
-      if (resBody && resBody.status === 'error') {
-        // 合言葉が違う場合はリトライしても無意味なので打ち切る
-        authError = true;
-        break;
+      if (resBody && resBody.status === 'ok') {
+        success = true;
+      } else if (resBody && resBody.status === 'error') {
+        if (resBody.message === 'unauthorized') {
+          // 合言葉が違う場合はリトライしても無意味なので打ち切る
+          failKind = 'auth';
+          break;
+        } else if (resBody.message === 'busy') {
+          failKind = 'busy';
+          console.warn('[pushAllToCloud] 混雑：GASが混み合っています');
+        } else {
+          // GAS側の内部エラー。同じ内容を送り直しても結果は変わらないので打ち切る
+          failKind = 'server';
+          console.warn('[pushAllToCloud] GAS側エラー: ' + resBody.message);
+          break;
+        }
+      } else {
+        // 応答をJSONとして読めなかった。書き込み自体は済んでいることがある（落とし穴18）ため、
+        // 同じ内容を送り直して結果を確かめる（同じ内容の再送は無害）
+        failKind = 'unknown';
+        console.warn('[pushAllToCloud] 応答を確認できませんでした（HTTP ' + res.status + '）');
       }
-      if (res.ok) success = true;
-      else console.warn('[pushAllToCloud] HTTPエラー: ' + res.status);
     } catch (e) {
+      failKind = 'network';
       console.warn('[pushAllToCloud] fetch失敗: ' + e.message);
     }
   }
-  if (authError) {
-    console.warn('[pushAllToCloud] 認証エラー：合言葉が正しくない可能性があります');
-    _syncStatus('合言葉を確認してください', 'error');
+  if (!success) {
+    const failMsgs = {
+      auth:    { status: '合言葉を確認してください',       toast: '同期に失敗しました。合言葉を確認してください' },
+      busy:    { status: '混み合っていて同期できませんでした', toast: 'GASが混み合っていて同期できませんでした。少し待ってからもう一度お試しください' },
+      server:  { status: 'GAS側のエラーで同期できませんでした', toast: 'GAS側でエラーが起き、同期できませんでした（データは送信前のままです）' },
+      unknown: { status: '同期の結果を確認できませんでした',  toast: '同期の結果を確認できませんでした。少し待ってからもう一度お試しください' },
+      network: { status: '通信できませんでした',           toast: '通信できず、同期できませんでした。電波の状態を確認してください' },
+    };
+    const fm = failMsgs[failKind] || failMsgs.unknown;
+    console.warn('[pushAllToCloud] 失敗（種類: ' + failKind + '）・' + sendCount + 'キー未確認');
+    _syncStatus(fm.status, 'error');
     setTimeout(() => _syncStatus(''), 5000);
-    showToast('同期に失敗しました。合言葉を確認してください');
+    showToast(fm.toast);
     return;
   }
-  const retriedCount = success && lastAttempt > 0 ? sendCount : 0;
-  const failedKeys = success ? [] : Object.keys(bulkData);
+  const retriedCount = lastAttempt > 0 ? sendCount : 0;
 
   const elapsed = ((performance.now() - startTime) / 1000).toFixed(1);
-  const successCount = success ? sendCount : 0;
-  console.log('[pushAllToCloud] 最終完了: ' + elapsed + '秒, 成功' + successCount + '件, 失敗' + failedKeys.length + '件');
+  const successCount = sendCount;
+  console.log('[pushAllToCloud] 最終完了: ' + elapsed + '秒, 成功' + successCount + '件');
   let toastMsg;
-  if (failedKeys.length > 0) {
-    console.warn('[pushAllToCloud] 失敗キー:', failedKeys);
-    toastMsg = '全データ同期完了(' + successCount + '件・' + elapsed + '秒・' + failedKeys.length + '件失敗)';
-    _syncStatus('同期完了（' + failedKeys.length + '件失敗）', 'error');
-    setTimeout(() => _syncStatus(''), 5000);
-  } else if (retriedCount > 0) {
+  if (retriedCount > 0) {
     toastMsg = '全データ同期完了(' + successCount + '件・' + elapsed + '秒・リトライで' + retriedCount + '件救済)';
     _syncStatus('同期済み（リトライで' + retriedCount + '件救済）');
     setTimeout(() => _syncStatus(''), 5000);
