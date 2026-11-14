@@ -15,6 +15,8 @@
 //    （スクリプトプロパティ側にのみ保存する）。
 // ============================================================
 //
+// 【版の目印】v9（2026-11）：POSTでの全データ受信（action:'getAll'）／合言葉の間違いを auth_log タブに記録
+//
 // 【シートの保存形式（2026-11 デプロイ v8〜）】
 //   A列＝キー、B列以降＝値（JSON文字列）。
 //   値が長いときは CHUNK_SIZE 文字ごとに分けて B, C, D… に並べる
@@ -29,6 +31,8 @@ const SHEET_NAME = 'data';
 const LOCK_WAIT_MS = 30000; // ロック待機の上限（ミリ秒）
 const CHUNK_SIZE = 45000;   // 1セルに入れる最大文字数（上限50,000に対する余裕込み）
 const CELL_LIMIT = 50000;   // スプレッドシートの1セル上限
+const AUTH_LOG_SHEET = 'auth_log';  // 合言葉の間違いを記録するタブ（v9〜）
+const AUTH_LOG_MAX_ROWS = 2000;     // 記録の上限行数（超えたら古い方から消す）
 
 function getOrCreateSheet() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -55,6 +59,53 @@ function isAuthorized(token) {
 
 function unauthorizedResponse() {
   return jsonResponse({ status: 'error', message: 'unauthorized' });
+}
+
+// ── 合言葉の間違いの記録（v9〜） ─────────────────────────
+// 通信は止めず、「いつ・何回」間違いがあったかを auth_log タブに残すだけ。
+// 1時間ごとに1行（時間帯／回数／最後の時刻／受信の回数／保存の回数）。
+// 送られてきた合言葉そのものは記録しない（本物に近い打ち間違いが残るのを避ける）。
+// 記録に失敗しても応答には影響させない（全体を try/catch で囲む）。
+function logAuthFailure_(kind) {
+  try {
+    const lock = LockService.getScriptLock();
+    if (!lock.tryLock(3000)) return; // 混んでいたら記録をあきらめる
+    try {
+      const ss = SpreadsheetApp.getActiveSpreadsheet();
+      let sheet = ss.getSheetByName(AUTH_LOG_SHEET);
+      if (!sheet) {
+        sheet = ss.insertSheet(AUTH_LOG_SHEET);
+        sheet.getRange(1, 1, 1, 5).setNumberFormat('@')
+          .setValues([['時間帯', '間違いの回数', '最後の時刻', 'うち受信', 'うち保存']]);
+      }
+      const now = new Date();
+      const hour = Utilities.formatDate(now, 'Asia/Tokyo', 'yyyy-MM-dd HH') + '時台';
+      const stamp = Utilities.formatDate(now, 'Asia/Tokyo', 'yyyy-MM-dd HH:mm:ss');
+      const lastRow = sheet.getLastRow();
+      let row = null;
+      if (lastRow >= 2) {
+        const cur = sheet.getRange(lastRow, 1, 1, 5).getValues()[0];
+        if (String(cur[0]) === hour) row = cur;
+      }
+      if (row) {
+        const total = (Number(row[1]) || 0) + 1;
+        const gets = (Number(row[3]) || 0) + (kind === 'get' ? 1 : 0);
+        const posts = (Number(row[4]) || 0) + (kind === 'post' ? 1 : 0);
+        sheet.getRange(lastRow, 1, 1, 5).setNumberFormat('@')
+          .setValues([[hour, String(total), stamp, String(gets), String(posts)]]);
+      } else {
+        const next = lastRow + 1;
+        if (sheet.getMaxRows() < next) sheet.insertRowsAfter(sheet.getMaxRows(), 100);
+        sheet.getRange(next, 1, 1, 5).setNumberFormat('@')
+          .setValues([[hour, '1', stamp, kind === 'get' ? '1' : '0', kind === 'post' ? '1' : '0']]);
+        if (next > AUTH_LOG_MAX_ROWS) sheet.deleteRows(2, 500);
+      }
+    } finally {
+      lock.releaseLock();
+    }
+  } catch (err) {
+    console.error('logAuthFailure_ failed: ' + err);
+  }
 }
 
 // ── ロックヘルパー ────────────────────────────────────────
@@ -207,9 +258,15 @@ function serialize_(v) {
 // 全データ取得（GET リクエスト）
 function doGet(e) {
   // ── 認証チェック ──
+  // ※ URLに合言葉を付ける受信は旧アプリ用の互換経路（v9〜のアプリは doPost の action:'getAll' を使う）。
+  //    全端末が新しいアプリになったら、ここで受け付けをやめる予定。
   const token = e.parameter && e.parameter.token;
-  if (!isAuthorized(token)) return unauthorizedResponse();
+  if (!isAuthorized(token)) { logAuthFailure_('get'); return unauthorizedResponse(); }
+  return readAllResponse_();
+}
 
+// 全データを読んで返す（doGet と、doPost の action:'getAll' の共通処理）
+function readAllResponse_() {
   // ── ロック取得（書き込みの途中を読まないため） ──
   const lock = LockService.getScriptLock();
   try {
@@ -234,7 +291,8 @@ function doGet(e) {
   }
 }
 
-// データ保存（POST リクエスト）
+// データ保存・全データ受信（POST リクエスト）
+//   受信: { action:'getAll', token }  … doGet と同じ内容を返す（v9〜）
 //   一括: { bulk:true, data:{キー:値,…}, token, force? }
 //   1件 : { key, value, token }
 //   オプション:
@@ -252,7 +310,10 @@ function doPost(e) {
   }
 
   // ── 認証チェック ──
-  if (!isAuthorized(body.token)) return unauthorizedResponse();
+  if (!isAuthorized(body.token)) { logAuthFailure_('post'); return unauthorizedResponse(); }
+
+  // 全データの受信（v9〜）：合言葉をURLに付けずに済むよう、POSTでも読めるようにしている
+  if (body.action === 'getAll') return readAllResponse_();
 
   // 受け取ったデータを { キー: 値 } の形にそろえる
   let incoming;

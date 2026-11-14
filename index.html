@@ -532,8 +532,9 @@ body {
 .lm-memo-menu button:hover { background:var(--bg); }
 .lm-memo-menu button.lm-del { color:#d05c5c; }
 </style>
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3/dist/tabler-icons.min.css">
+<!-- 外部ライブラリは版を固定し、改ざん検知（integrity）を付ける。版を上げるときはハッシュも取り直すこと（CLAUDE.md参照） -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.6.1/dist/chart.umd.min.js" integrity="sha384-Emf5ZVIUiarAdhkgtqK+5/Z5qIvM6QoVrS+qAVtfyZVuD5lIHrac0me485+Antp0" crossorigin="anonymous"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.52.0/dist/tabler-icons.min.css" integrity="sha384-mwnzcqY8cv5426J0tglf5b/kfJNlRoajDjr7SIH7okVM3zG61jPtbbVZTegGc8vl" crossorigin="anonymous">
 </head>
 <body>
 
@@ -1270,68 +1271,20 @@ const BT_GROUPS = [
   { label:'膵臓',      keys:['amy','lip'] },
 ];
 
-// Default blood test data (newest first)
-const DEFAULT_BLOOD_TESTS = [
-  { date:'2026-04-26', gpt:89,  got:30,  alp:48,  ygtp:8,  tbil:0.2, tcho:92,  tg:40,  amy:null, lip:null, doctorNote:'' },
-  { date:'2026-03-21', gpt:122, got:null, alp:null, ygtp:null, tbil:null, tcho:null, tg:null, amy:null, lip:228, doctorNote:'ウルソ1/4錠 1日1回に増量' },
-  { date:'2026-02-21', gpt:74,  got:30,  alp:39,  ygtp:8,  tbil:0.4, tcho:99,  tg:null, amy:null, lip:null, doctorNote:'ウルソ1/4錠 2日1回に減量' },
-  { date:'2026-01-18', gpt:116, got:29,  alp:43,  ygtp:6,  tbil:null, tcho:132, tg:null, amy:null, lip:null, doctorNote:'ウルソ1/4錠 1日1回を継続' },
-  { date:'2025-12-13', gpt:69,  got:null, alp:null, ygtp:null, tbil:null, tcho:null, tg:null, amy:null, lip:null, doctorNote:'ウルソ1/4錠 1日1回に減量' },
-  { date:'2025-11-08', gpt:129, got:null, alp:null, ygtp:null, tbil:null, tcho:null, tg:null, amy:null, lip:null, doctorNote:'ウルソ1/4錠 朝夕に増量' },
-  { date:'2025-10-02', gpt:332, got:46,  alp:null, ygtp:null, tbil:null, tcho:null, tg:null, amy:null, lip:null, doctorNote:'ウルソ再開 1/6錠 朝夕（自己判断・先生は1/4錠 朝夕）' },
-  { date:'2025-07-31', gpt:385, got:51,  alp:null, ygtp:null, tbil:null, tcho:null, tg:null, amy:null, lip:null, doctorNote:'休薬で再上昇' },
-  { date:'2025-06-20', gpt:75,  got:null, alp:null, ygtp:null, tbil:null, tcho:null, tg:null, amy:null, lip:null, doctorNote:'正常・手術後休薬' },
-  { date:'2025-05-30', gpt:377, got:37,  alp:null, ygtp:null, tbil:null, tcho:null, tg:null, amy:null, lip:null, doctorNote:'ウルソ開始 1/4錠 朝夕' },
-];
+// 初期データは空（2026-11-15〜）。以前はここに実際の検査値・通院歴・食事記録が入っていたが、
+// 公開ファイルに個人的な記録を置かないために外した。記録は各端末とGASにあり、
+// データが消えた端末はバックアップのインポートかGASからの受信で戻す（CLAUDE.md 落とし穴17）。
+const DEFAULT_BLOOD_TESTS = [];
 
-const DEFAULT_SUPPLE = [
-  { name:'ニッピコラーゲン100フィッシュタイプ', detail:'開始：2026/4/15 ／ 朝夜各0.15〜0.25g ／ ごはんに混ぜる', goal:'空咳・気道・関節・皮膚ケア' },
-  { name:'バクチャーペット',                    detail:'毎日1滴（水またはごはんに）',                           goal:'腸内環境・肝機能サポート' },
-  { name:'アリビダ（VH海洋酵素調味料）',        detail:'ごはんに少々（アグア酵素水と交互に）',                  goal:'消化・ミネラル補給・旨味' },
-  { name:'Ag・uA アグア酵素水',                 detail:'ごはんに少々（アリビダと交互に）',                      goal:'消化促進・腸内環境・免疫' },
-];
+const DEFAULT_SUPPLE = [];
 
-const DEFAULT_NEXT_VISIT = [
-  '乾燥納豆でアレルギー反応（耳の腫れ・痒み）→ 大豆製品全般の可否を確認',
-  '空咳が続いている → 気管・心臓・肺の確認を依頼',
-  'TCHO 92（低値、4/26）→ コレステロール低値の原因と対策を確認',
-  'GPT 89（4/26）→ ウルソ2日に1回投薬の効果を評価・次の方針を確認',
-];
+const DEFAULT_NEXT_VISIT = [];
 
-const HOSPITAL_DATA = [
-  { date:'2023/01/11',  text:'誕生' },
-  { date:'2023/03/30',  text:'お迎え（体重1.42kg）' },
-  { date:'2023/04',     text:'混合ワクチン接種（バンガードプラス5/CV）' },
-  { date:'2024/03〜05', text:'外耳炎の治療（ノルバサンオチック等）' },
-  { date:'2024/09/06',  text:'同居犬との別れ' },
-  { date:'2025/02下旬〜',text:'食欲不振が始まる（約2ヶ月）' },
-  { date:'2025/04/02',  text:'ボミットバスター処方' },
-  { date:'2025/05/30',  text:'肝機能異常が判明（GPT 377）→ ウルソ開始' },
-  { date:'2025/06/20',  text:'避妊手術・歯科処置（GPT 75）' },
-  { date:'2025/12/13',  text:'抗体価検査：CDV 64倍・CPV 160倍・CAV 1024倍以上 / ワクチン不要' },
-  { date:'2025/12',     text:'狂犬病ワクチン免除（診断書発行）' },
-  { date:'2026/04/11',  text:'ウルソ投薬スケジュール変更（1日飲んで1日休み）' },
-  { date:'2026/04/15',  text:'ニッピコラーゲン開始' },
-  { date:'2026/04/15夜',text:'⚠️ 乾燥納豆でアレルギー反応（耳の腫れ・痒み）' },
-  { date:'2026/04/26',  text:'血液検査（GPT 89 H・GOT 30・ALP 48・γGTP 8・TBIL 0.2・TCHO 92 L・TG 40）' },
-];
+const HOSPITAL_DATA = [];
 
-const DEFAULT_DIARY = [
-  { date:'2026-04-16', urso:'rest', protein:'よしりんお魚60g・鶏もも肉40g', grain:'さつまいも55g・オートミール8g', veg:'人参20g・なめこ10g・大根20g・ブロッコリー・青菜30g', other:'海苔・生ウコン・雪塩・生姜の葉の酵素酢 少々', weight:'243', kcal:'262', finish:'完食', memo:'散歩：北大4km・レアちゃんとワンプロ / ⚠️前夜に乾燥納豆でアレルギー反応', walk:'北大4km・レアちゃんとワンプロ', coughN:'', coughL:'なし', memoOther:'⚠️前夜に乾燥納豆でアレルギー反応' },
-  { date:'2026-04-15', urso:'drink', protein:'よしりんお魚60g・鶏胸肉40g', grain:'さつまいも55g・オートミール8g', veg:'人参20g・菜花とキャベツ30g・干ししいたけ・干しなめこ2.5g', other:'切り干し大根3g・生ウコン・昆布水・宮古島の雪塩 少々', weight:'218', kcal:'235', finish:'完食', memo:'散歩：北大4km・元気 / 咳：1回・軽度 / コラーゲン開始日', walk:'北大4km・元気', coughN:'1', coughL:'軽度', memoOther:'コラーゲン開始日' },
-  { date:'2026-04-14', urso:'rest', protein:'', grain:'', veg:'', other:'', weight:'', kcal:'', finish:'完食', memo:'散歩：北大4km / 食事は翌日仕込み済み', walk:'北大4km', coughN:'', coughL:'なし', memoOther:'食事は翌日仕込み済み' },
-  { date:'2026-04-13', urso:'drink', protein:'', grain:'', veg:'', other:'', weight:'', kcal:'236', finish:'完食', memo:'散歩：北大4km / 朝：前日の残りを完食・夜：仕込みの2/5を完食', walk:'北大4km', coughN:'', coughL:'なし', memoOther:'' },
-  { date:'2026-04-12', urso:'rest', protein:'よしりんお魚55g・鶏胸肉60g', grain:'さつまいも60g・オートミール8g', veg:'人参20g・なばなとキャベツ30g・なめこ10g', other:'切り干し大根3.5g', weight:'247', kcal:'267', finish:'1/3残し', memo:'散歩：北大3〜4km', walk:'北大3〜4km', coughN:'', coughL:'なし', memoOther:'' },
-  { date:'2026-04-11', urso:'drink', protein:'よしりんお魚50g・鶏胸肉60g', grain:'さつまいも60g・オートミール8g', veg:'人参20g・ケールとキャベツ30g・干し舞茸3g・納豆10g', other:'切り干し大根3g', weight:'244', kcal:'261', finish:'完食', memo:'ウルソ開始日', walk:'', coughN:'', coughL:'なし', memoOther:'ウルソ開始日' },
-];
+const DEFAULT_DIARY = [];
 
-const DEFAULT_HEALTH_NOTES = [
-  { date:'2026/4/16', text:'散歩北大4km・レアちゃんとワンプロ・完食・元気' },
-  { date:'2026/4/15', text:'コラーゲン開始・散歩北大4km・完食・咳1回軽度' },
-  { date:'2026/4/15夜', text:'⚠️ 乾燥納豆で耳の腫れ・痒み（アレルギー疑い）' },
-  { date:'2026/4/13', text:'散歩北大4km・完食・元気' },
-  { date:'2026/4/10', text:'よく寝ている（身体がバージョンアップ中！）' },
-];
+const DEFAULT_HEALTH_NOTES = [];
 
 // ============================================================
 // STORAGE HELPERS
@@ -1856,11 +1809,38 @@ function maybeResync() {
   syncFromCloud();
 }
 
+// GASから全データを受け取る。合言葉はURLに付けず、POSTの本文に入れて送る（GAS v9〜）。
+// ・応答を読めなかったときは同じ要求をもう1回だけ送る（読むだけの要求なので再送は無害）
+// ・GASが旧版（v8以前）でこの形式を知らないときは bad_request が返るので、
+//   従来の「URLに合言葉を付けたGET」に切り替える（新旧が混ざる間の互換用）
+async function _fetchAllFromGas() {
+  const post = async () => {
+    const res = await fetch(getGasUrl(), {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify({ action: 'getAll', token: getSyncToken() }),
+      cache: 'no-store'
+    });
+    return res.json();
+  };
+  let data;
+  try { data = await post(); }
+  catch (e) { data = await post(); }
+  // v7以前のGASは、この要求を「保存」と解釈して { status:'ok' } だけを返す。それも旧版の印として扱う
+  // （データとして受け取ると status キーが保存データに紛れ込む＝落とし穴12）
+  const oldGas = data && typeof data === 'object' && Object.keys(data).length <= 2
+    && ((data.status === 'error' && data.message === 'bad_request') || data.status === 'ok');
+  if (oldGas) {
+    const res = await fetch(getGasUrl() + '?action=getAll&token=' + encodeURIComponent(getSyncToken()), { cache: 'no-store' });
+    data = await res.json();
+  }
+  return data;
+}
+
 async function _syncFromCloudInner() {
   _syncStatus('同期中…', 'syncing');
   try {
-    const res = await fetch(getGasUrl() + '?action=getAll&token=' + encodeURIComponent(getSyncToken()), { cache: 'no-store' });
-    const gasData = await res.json();
+    const gasData = await _fetchAllFromGas();
 
     // 認証エラー時はデータとして扱わず即中断する（ローカルには一切触れない）。
     // gas_code_v2.js は401を返せないため、正常応答（result）とは形の違う
@@ -2469,7 +2449,7 @@ function showBackupModal() {
           <div class="backup-item-date">${date}</div>
           <div class="backup-item-info">${info}</div>
         </div>
-        <button class="btn-restore" onclick="restoreFromBackup('${date}')">復元</button>
+        <button class="btn-restore" onclick="restoreFromBackup(${_jsq(date)})">復元</button>
       </div>`;
     }).join('');
   }
@@ -2631,6 +2611,14 @@ function migrateAoRecords() {
   localStorage.setItem('_ts_ao_records', String(baseTs));
   localStorage.setItem('ao_records_migrated_v2', '1');
   localStorage.removeItem('ao_records_migrated_v1');
+}
+
+// ボタン等の onclick="関数(…)" に値を埋め込むための変換。
+// 値を JS の文字列（"…" つき）にしてから HTML 用に変換するので、値に引用符・< > ・改行などが
+// 含まれていても、属性やスクリプトを抜け出せない。使い方: onclick="fn(${_jsq(id)})"
+// （前後に ' を付けないこと。同期で受け取ったIDや日付をそのまま '…' で囲んで埋め込まない）
+function _jsq(v) {
+  return escHtml(JSON.stringify(String(v === undefined || v === null ? '' : v)));
 }
 
 function escHtml(str) {
@@ -2814,7 +2802,7 @@ function renderCalendar() {
     const heartHtml = filariaDates.has(dateStr)
       ? `<span class="cal-filaria-mark">${_flariaHeartSvg(14)}</span>`
       : '';
-    html += `<div class="${cls}" onclick="goToDate('${dateStr}')"><span class="cal-d-num">${d}</span>${heartHtml}${dotsHtml}</div>`;
+    html += `<div class="${cls}" onclick="goToDate(${_jsq(dateStr)})"><span class="cal-d-num">${d}</span>${heartHtml}${dotsHtml}</div>`;
   }
   document.getElementById('cal-grid').innerHTML = html;
 }
@@ -2880,7 +2868,7 @@ function renderMealCard() {
             <input type="text" class="form-input" id="meal-edit-sub" style="font-size:13px;padding:6px 10px">
           </div>
           <div style="display:flex;gap:6px">
-            <button class="btn-supple" style="flex:1" onclick="saveMealItemEdit('${item.id}')">保存</button>
+            <button class="btn-supple" style="flex:1" onclick="saveMealItemEdit(${_jsq(item.id)})">保存</button>
             <button class="btn-supple" style="flex:1;background:#F0EDE8;color:#888780" onclick="cancelMealItemEdit()">キャンセル</button>
           </div>
         </div>`;
@@ -2897,8 +2885,8 @@ function renderMealCard() {
           ${item.sub ? `<div style="font-size:12px;color:var(--text-light)">${escHtml(item.sub)}</div>` : ''}
         </div>
         <div class="check-edit-actions">
-          <button class="btn-edit-icon" onclick="openMealItemEdit('${item.id}')"><i class="ti ti-pencil"></i></button>
-          <button class="btn-edit-icon danger" onclick="deleteMealItem('${item.id}')"><i class="ti ti-trash"></i></button>
+          <button class="btn-edit-icon" onclick="openMealItemEdit(${_jsq(item.id)})"><i class="ti ti-pencil"></i></button>
+          <button class="btn-edit-icon danger" onclick="deleteMealItem(${_jsq(item.id)})"><i class="ti ti-trash"></i></button>
         </div>
       </div>`;
     }).join('');
@@ -2908,8 +2896,8 @@ function renderMealCard() {
     </div>`;
   } else {
     listHtml = items.map(item =>
-      `<div class="check-item" onclick="toggleCheck('${item.id}')">
-        <div class="check-circle${c[item.id] ? ' on' : ''}" id="ck-${item.id}"></div>
+      `<div class="check-item" onclick="toggleCheck(${_jsq(item.id)})">
+        <div class="check-circle${c[item.id] ? ' on' : ''}" id="ck-${escHtml(item.id)}"></div>
         <div class="check-label">${escHtml(item.label)}${item.sub ? `<span class="check-memo">${escHtml(item.sub)}</span>` : ''}</div>
       </div>`
     ).join('');
@@ -3031,7 +3019,7 @@ function renderHealthCard() {
             <input type="text" class="form-input" id="health-edit-sub" style="font-size:13px;padding:6px 10px">
           </div>
           <div style="display:flex;gap:6px">
-            <button class="btn-supple" style="flex:1" onclick="saveHealthItemEdit('${item.id}')">保存</button>
+            <button class="btn-supple" style="flex:1" onclick="saveHealthItemEdit(${_jsq(item.id)})">保存</button>
             <button class="btn-supple" style="flex:1;background:#F0EDE8;color:#888780" onclick="cancelHealthItemEdit()">キャンセル</button>
           </div>
         </div>`;
@@ -3048,8 +3036,8 @@ function renderHealthCard() {
           ${item.sub ? `<div style="font-size:12px;color:var(--text-light)">${escHtml(item.sub)}</div>` : ''}
         </div>
         <div class="check-edit-actions">
-          <button class="btn-edit-icon" onclick="openHealthItemEdit('${item.id}')"><i class="ti ti-pencil"></i></button>
-          <button class="btn-edit-icon danger" onclick="deleteHealthItem('${item.id}')"><i class="ti ti-trash"></i></button>
+          <button class="btn-edit-icon" onclick="openHealthItemEdit(${_jsq(item.id)})"><i class="ti ti-pencil"></i></button>
+          <button class="btn-edit-icon danger" onclick="deleteHealthItem(${_jsq(item.id)})"><i class="ti ti-trash"></i></button>
         </div>
       </div>`;
     }).join('');
@@ -3059,8 +3047,8 @@ function renderHealthCard() {
     </div>`;
   } else {
     listHtml = items.map(item =>
-      `<div class="check-item" onclick="toggleCheck('${item.id}')">
-        <div class="check-circle${c[item.id] ? ' on' : ''}" id="ck-${item.id}"></div>
+      `<div class="check-item" onclick="toggleCheck(${_jsq(item.id)})">
+        <div class="check-circle${c[item.id] ? ' on' : ''}" id="ck-${escHtml(item.id)}"></div>
         <div class="check-label">${escHtml(item.label)}${item.sub ? `<span class="check-memo">${escHtml(item.sub)}</span>` : ''}</div>
       </div>`
     ).join('');
@@ -3350,12 +3338,12 @@ function renderNotes() {
     return;
   }
   list.innerHTML = notes.map(n => {
-    const safeDate = n.date.replace(/'/g, "\\'");
+    const safeDate = n.date;
     const isEditOpen = _noteEditDate === n.date;
     const btns = currentNotesMonth
       ? `<div style="display:flex;gap:4px">
-           <button class="nv-del" style="min-width:30px;min-height:30px;font-size:15px" onclick="editHealthNote('${safeDate}')" title="編集">✏️</button>
-           <button class="nv-del" style="min-width:30px;min-height:30px;font-size:16px" onclick="deleteHealthNote('${safeDate}')" title="削除">✕</button>
+           <button class="nv-del" style="min-width:30px;min-height:30px;font-size:15px" onclick="editHealthNote(${_jsq(safeDate)})" title="編集">✏️</button>
+           <button class="nv-del" style="min-width:30px;min-height:30px;font-size:16px" onclick="deleteHealthNote(${_jsq(safeDate)})" title="削除">✕</button>
          </div>`
       : '';
     const header = `<div style="display:flex;align-items:center;justify-content:space-between">
@@ -3367,7 +3355,7 @@ function renderNotes() {
         <div style="margin-top:6px;padding:10px;background:#FAF8F6;border-radius:8px;border:1px solid #EDE9E4">
           <textarea class="form-textarea" id="note-edit-textarea" style="min-height:60px;font-size:13px;padding:7px 10px;margin-bottom:8px"></textarea>
           <div style="display:flex;gap:6px">
-            <button class="btn-supple" style="flex:1" onclick="saveNoteEdit('${safeDate}')">保存</button>
+            <button class="btn-supple" style="flex:1" onclick="saveNoteEdit(${_jsq(safeDate)})">保存</button>
             <button class="btn-supple" style="flex:1;background:#F0EDE8;color:#888780" onclick="cancelNoteEdit()">キャンセル</button>
           </div>
         </div>
@@ -3583,14 +3571,14 @@ function renderSupple() {
 
   const cardHtml = s => {
     const isActive = s.status !== 'stopped';
-    const sid = (s.id || '').replace(/'/g, "\\'");
+    const sid = (s.id || '');
     const stoppedNote = (!isActive && s.stoppedAt) ? ' / 停止：' + s.stoppedAt : '';
     const detailText = s.detail
       ? escHtml(s.detail) + escHtml(stoppedNote)
       : (stoppedNote ? escHtml(stoppedNote.replace(' / ', '')) : '');
     const actionBtn = isActive
-      ? `<button class="btn-supple" onclick="stopSupple('${sid}')">停止</button>`
-      : `<button class="btn-supple" onclick="resumeSupple('${sid}')">再開</button>`;
+      ? `<button class="btn-supple" onclick="stopSupple(${_jsq(sid)})">停止</button>`
+      : `<button class="btn-supple" onclick="resumeSupple(${_jsq(sid)})">再開</button>`;
 
     const isEditOpen = _suppleEditOpenId === s.id;
     const memoText = s.memo || '';
@@ -3621,13 +3609,13 @@ function renderSupple() {
             <button class="btn-supple" style="flex:1;background:#F0EDE8;color:#888780" onclick="cancelSuppleEdit()">キャンセル</button>
           </div>
           <div style="margin-top:12px;text-align:center">
-            <button style="background:none;border:none;color:#C0392B;font-size:12px;text-decoration:underline;cursor:pointer;font-family:inherit;padding:2px" onclick="deleteSuppleById('${sid}')">このサプリを削除</button>
+            <button style="background:none;border:none;color:#C0392B;font-size:12px;text-decoration:underline;cursor:pointer;font-family:inherit;padding:2px" onclick="deleteSuppleById(${_jsq(sid)})">このサプリを削除</button>
           </div>
         </div>`
       : '';
 
     const showInToday = !!s.show_in_today;
-    const toggleHtml = `<label class="today-toggle-wrap" onclick="toggleShowInTodaySupple('${sid}')">
+    const toggleHtml = `<label class="today-toggle-wrap" onclick="toggleShowInTodaySupple(${_jsq(sid)})">
       <div class="today-toggle-track${showInToday ? ' on' : ''}"><div class="today-toggle-thumb"></div></div>
       <span class="today-toggle-lbl">今日表示</span>
     </label>`;
@@ -3642,7 +3630,7 @@ function renderSupple() {
         </div>
         <div style="display:flex;flex-direction:column;gap:6px;flex-shrink:0;align-items:flex-end">
           ${toggleHtml}
-          <button class="btn-supple" onclick="editSupple('${sid}')">${isEditOpen ? '編集中' : '編集'}</button>
+          <button class="btn-supple" onclick="editSupple(${_jsq(sid)})">${isEditOpen ? '編集中' : '編集'}</button>
           ${actionBtn}
         </div>
       </div>
@@ -3846,16 +3834,16 @@ function renderTodayMedSuppleChecks() {
     } else {
       noteText = m.purpose || '';
     }
-    return `<div class="check-item" onclick="toggleCheck('${m.id}')">
-      <div class="check-circle${c[m.id] ? ' on' : ''}" id="ck-${m.id}"></div>
+    return `<div class="check-item" onclick="toggleCheck(${_jsq(m.id)})">
+      <div class="check-circle${c[m.id] ? ' on' : ''}" id="ck-${escHtml(m.id)}"></div>
       <div class="check-label">${escHtml(m.name)}${noteText ? `<span class="check-memo">${escHtml(noteText)}</span>` : ''}</div>
     </div>`;
   }).join('');
 
   const suppleHtml = suppleItems.map(s => {
     const sid = s.id;
-    return `<div class="check-item" onclick="toggleCheck('${sid}')">
-      <div class="check-circle${c[sid] ? ' on' : ''}" id="ck-${sid}"></div>
+    return `<div class="check-item" onclick="toggleCheck(${_jsq(sid)})">
+      <div class="check-circle${c[sid] ? ' on' : ''}" id="ck-${escHtml(sid)}"></div>
       <div class="check-label">${escHtml(s.name)}${s.detail ? `<span class="check-memo">${escHtml(s.detail)}</span>` : ''}</div>
     </div>`;
   }).join('');
@@ -3907,7 +3895,7 @@ function renderMed() {
 
   const cardHtml = m => {
     const mid = escHtml(m.id);
-    const midJs = (m.id || '').replace(/'/g, "\\'");
+    const midJs = (m.id || '');
     const isEditOpen = _medEditOpenId === m.id;
     const showInToday = !!m.show_in_today;
     const badge = m.status === 'active'
@@ -3916,7 +3904,7 @@ function renderMed() {
         ? `<span class="med-status-badge pause">休薬中</span>`
         : `<span class="med-status-badge ended">服用終了</span>`;
 
-    const toggleHtml = `<label class="today-toggle-wrap" onclick="toggleShowInTodayMed('${midJs}')">
+    const toggleHtml = `<label class="today-toggle-wrap" onclick="toggleShowInTodayMed(${_jsq(midJs)})">
       <div class="today-toggle-track${showInToday ? ' on' : ''}"><div class="today-toggle-thumb"></div></div>
       <span class="today-toggle-lbl">今日表示</span>
     </label>`;
@@ -3949,12 +3937,12 @@ function renderMed() {
       <div style="margin-bottom:10px">
         <div style="font-size:12px;color:#888780;margin-bottom:6px">服用状態</div>
         <div class="med-state-btns">
-          <button class="med-state-btn${editState==='active' ? ' sel-active' : ''}" onclick="selectMedState('${midJs}','active')">通常</button>
-          <button class="med-state-btn${editState==='pause'  ? ' sel-pause'  : ''}" onclick="selectMedState('${midJs}','pause')">休薬中</button>
-          <button class="med-state-btn${editState==='ended'  ? ' sel-ended'  : ''}" onclick="selectMedState('${midJs}','ended')">服用終了</button>
+          <button class="med-state-btn${editState==='active' ? ' sel-active' : ''}" onclick="selectMedState(${_jsq(midJs)},'active')">通常</button>
+          <button class="med-state-btn${editState==='pause'  ? ' sel-pause'  : ''}" onclick="selectMedState(${_jsq(midJs)},'pause')">休薬中</button>
+          <button class="med-state-btn${editState==='ended'  ? ' sel-ended'  : ''}" onclick="selectMedState(${_jsq(midJs)},'ended')">服用終了</button>
         </div>
       </div>
-      <button class="btn-primary" onclick="saveMedEdit('${midJs}')">保存する</button>
+      <button class="btn-primary" onclick="saveMedEdit(${_jsq(midJs)})">保存する</button>
       <div style="text-align:center;margin-top:8px">
         <button style="background:none;border:none;color:#888780;font-size:12px;cursor:pointer;font-family:inherit;padding:2px" onclick="cancelMedEdit()">キャンセル</button>
       </div>
@@ -3972,7 +3960,7 @@ function renderMed() {
         </div>
         <div style="display:flex;flex-direction:column;gap:6px;flex-shrink:0;align-items:flex-end">
           ${toggleHtml}
-          <button class="btn-supple" onclick="editMed('${midJs}')">${isEditOpen ? '編集中' : '編集'}</button>
+          <button class="btn-supple" onclick="editMed(${_jsq(midJs)})">${isEditOpen ? '編集中' : '編集'}</button>
         </div>
       </div>
     </div>`;
@@ -4393,7 +4381,7 @@ function renderConsultationSummary() {
     const id     = typeof item === 'string' ? '' : item.id;
     const text   = typeof item === 'string' ? item : item.text;
     const result = typeof item === 'string' ? '' : (item.result || '');
-    const sid    = (id || '').replace(/'/g, "\\'");
+    const sid    = (id || '');
     const isEditOpen   = _csEditOpenId   === id;
     const isResultOpen = _csResultOpenId === id;
     const isExp        = _csExpandedId   === id;
@@ -4426,8 +4414,8 @@ function renderConsultationSummary() {
             <button class="nv-add-btn" style="flex:1;margin-top:0;background:#F0EDE8;color:#888780" onclick="cancelConsultationResult()">キャンセル</button>
           </div>
           <div style="display:flex;gap:6px;margin-top:6px">
-            <button class="btn-supple" style="font-size:12px;padding:4px 12px" onclick="editConsultationSummaryItem('${sid}')">編集</button>
-            <button class="btn-supple" style="font-size:12px;padding:4px 12px;background:#F0EDE8;color:#888780" onclick="deleteConsultationSummaryItem('${sid}')">削除</button>
+            <button class="btn-supple" style="font-size:12px;padding:4px 12px" onclick="editConsultationSummaryItem(${_jsq(sid)})">編集</button>
+            <button class="btn-supple" style="font-size:12px;padding:4px 12px;background:#F0EDE8;color:#888780" onclick="deleteConsultationSummaryItem(${_jsq(sid)})">削除</button>
           </div>
         </div>
       </div>`;
@@ -4436,22 +4424,22 @@ function renderConsultationSummary() {
     // ケース3: 展開中（通常表示）
     if (isExp) {
       const resultLinkLabel = result ? '診察結果を編集 ▼' : '診察結果を記入 ▼';
-      return `<div class="cs-item expanded" onclick="toggleCsExpand('${sid}')">
+      return `<div class="cs-item expanded" onclick="toggleCsExpand(${_jsq(sid)})">
         <div class="nv-num">${idx+1}.</div>
         <div class="cs-item-body">
           <div class="cs-item-text">${escHtml(text)}</div>
           ${savedHtml}
-          <button class="cs-result-link" onclick="event.stopPropagation();openConsultationResult('${sid}')">${resultLinkLabel}</button>
+          <button class="cs-result-link" onclick="event.stopPropagation();openConsultationResult(${_jsq(sid)})">${resultLinkLabel}</button>
           <div style="display:flex;gap:6px;margin-top:6px">
-            <button class="btn-supple" style="font-size:12px;padding:4px 12px" onclick="event.stopPropagation();editConsultationSummaryItem('${sid}')">編集</button>
-            <button class="btn-supple" style="font-size:12px;padding:4px 12px;background:#F0EDE8;color:#888780" onclick="event.stopPropagation();deleteConsultationSummaryItem('${sid}')">削除</button>
+            <button class="btn-supple" style="font-size:12px;padding:4px 12px" onclick="event.stopPropagation();editConsultationSummaryItem(${_jsq(sid)})">編集</button>
+            <button class="btn-supple" style="font-size:12px;padding:4px 12px;background:#F0EDE8;color:#888780" onclick="event.stopPropagation();deleteConsultationSummaryItem(${_jsq(sid)})">削除</button>
           </div>
         </div>
       </div>`;
     }
 
     // ケース4: 閉じた状態
-    return `<div class="cs-item" onclick="toggleCsExpand('${sid}')">
+    return `<div class="cs-item" onclick="toggleCsExpand(${_jsq(sid)})">
       <div class="nv-num">${idx+1}.</div>
       <div class="cs-item-body">
         <div class="cs-item-text">${escHtml(text)}</div>
@@ -4570,7 +4558,6 @@ function renderConsultationHistory() {
   const itemsHtml = sorted.length ? sorted.map(function(h) {
     const dateDisp = (h.date || '').replace(/-/g, '/');
     const items = Array.isArray(h.items) ? h.items : [];
-    const sid = (h.id || '').replace(/'/g, "\\'");
     const listHtml = items.map(function(item) {
       const resultHtml = (item.result || '').trim()
         ? '<span class="consult-history-result">→ ' + escHtml(item.result) + '</span>' : '';
@@ -4582,7 +4569,7 @@ function renderConsultationHistory() {
       + '<span class="consult-history-count">' + items.length + '項目</span>'
       + '</summary>'
       + '<ul class="consult-history-items">' + listHtml + '</ul>'
-      + '<button class="consult-history-del" onclick="deleteConsultationHistory(\'' + sid + '\')">この履歴を削除</button>'
+      + '<button class="consult-history-del" onclick="deleteConsultationHistory(' + _jsq(h.id) + ')">この履歴を削除</button>'
       + '</details>';
   }).join('') : '<div style="color:var(--text-light);font-size:14px;padding:8px 0">履歴はまだありません</div>';
 
@@ -4850,8 +4837,8 @@ function renderBloodTestHistory() {
       <div class="bt-card-top">
         <div class="bt-card-date">${dateLabel}</div>
         <div class="bt-action-row">
-          <button class="btn-edit"   onclick="editBloodTest('${t.date}')">編集</button>
-          <button class="btn-delete" onclick="deleteBloodTest('${t.date}')">削除</button>
+          <button class="btn-edit"   onclick="editBloodTest(${_jsq(t.date)})">編集</button>
+          <button class="btn-delete" onclick="deleteBloodTest(${_jsq(t.date)})">削除</button>
         </div>
       </div>
       ${groupsHtml || '<div style="color:var(--text-light);font-size:13px">数値データなし</div>'}
@@ -5177,7 +5164,7 @@ function renderHospital() {
       { cat: 'other',   label: 'その他' },
     ];
     cf.innerHTML = `<div class="cat-filter-bar">${chips.map(({cat, label}) =>
-      `<button class="cat-chip cat-${cat}${_aoRecordCategoryFilter[cat] ? ' on' : ''}" onclick="toggleAoRecordCategoryFilter('${cat}')">${label}</button>`
+      `<button class="cat-chip cat-${cat}${_aoRecordCategoryFilter[cat] ? ' on' : ''}" onclick="toggleAoRecordCategoryFilter(${_jsq(cat)})">${label}</button>`
     ).join('')}</div>`;
   }
 
@@ -5250,7 +5237,7 @@ function renderHospital() {
     } else {
       textHtml = escHtml(r.text);
     }
-    return `<div class="hist-item${isExp ? ' expanded' : ''}" onclick="toggleAoRecordExpand('${r.id}')">
+    return `<div class="hist-item${isExp ? ' expanded' : ''}" onclick="toggleAoRecordExpand(${_jsq(r.id)})">
       <div class="hist-date">${escHtml(r.date)}</div>
       <div class="hist-dot cat-${r.category}"></div>
       <div class="hist-body">
@@ -5258,7 +5245,7 @@ function renderHospital() {
         ${isExp ? (
           _aoRecordEditOpenId === r.id
             ? renderAoRecordEditFormHtml(r)
-            : `<div class="hist-actions" style="display:flex;gap:6px"><button class="btn-supple" style="font-size:12px;padding:4px 12px" onclick="event.stopPropagation();openAoRecordEdit('${r.id}')">編集</button><button class="btn-supple" style="font-size:12px;padding:4px 12px;background:#F0EDE8;color:#888780" onclick="event.stopPropagation();deleteAoRecord('${r.id}')">削除</button></div>`
+            : `<div class="hist-actions" style="display:flex;gap:6px"><button class="btn-supple" style="font-size:12px;padding:4px 12px" onclick="event.stopPropagation();openAoRecordEdit(${_jsq(r.id)})">編集</button><button class="btn-supple" style="font-size:12px;padding:4px 12px;background:#F0EDE8;color:#888780" onclick="event.stopPropagation();deleteAoRecord(${_jsq(r.id)})">削除</button></div>`
         ) : ''}
       </div>
     </div>`;
@@ -5556,7 +5543,7 @@ function renderLearning() {
   document.getElementById('lm-filter-bar').innerHTML = `<div class="lm-filter-bar">
     <span class="lm-flabel">絞り込み：</span>
     <button class="lm-filter-chip${_lmFilterCat === null ? ' on' : ''}" onclick="lmSetFilter(null)">すべて</button>
-    ${cats.map(c => `<button class="lm-filter-chip${_lmFilterCat === c.id ? ' on' : ''}" onclick="lmSetFilter('${escHtml(c.id)}')">${escHtml(c.label)}</button>`).join('')}
+    ${cats.map(c => `<button class="lm-filter-chip${_lmFilterCat === c.id ? ' on' : ''}" onclick="lmSetFilter(${_jsq(c.id)})">${escHtml(c.label)}</button>`).join('')}
   </div>`;
 
   // ── メモ一覧（月ごとの折りたたみ・最新月のみ既定で開く） ──
@@ -5575,7 +5562,7 @@ function renderLearning() {
       return (b._ts || 0) - (a._ts || 0);
     });
     return `<div class="lm-month-group">
-      <button class="lm-month-head${isOpen ? ' open' : ''}" onclick="lmToggleMonth('${escHtml(ym)}')"><span class="lm-arrow">▶</span>${_lmMonthLabel(ym)}<span class="lm-count">${items.length}件</span></button>
+      <button class="lm-month-head${isOpen ? ' open' : ''}" onclick="lmToggleMonth(${_jsq(ym)})"><span class="lm-arrow">▶</span>${_lmMonthLabel(ym)}<span class="lm-count">${items.length}件</span></button>
       <div class="lm-month-body${isOpen ? ' open' : ''}">${items.map(_lmMemoCardHtml).join('')}</div>
     </div>`;
   }).join('') || '<div style="text-align:center;color:var(--text-light);font-size:13px;padding:20px 0">まだ学びメモがありません</div>';
@@ -5617,10 +5604,10 @@ function _lmMemoCardHtml(m) {
   }
 
   return `<div class="lm-memo" style="${style}">
-    <button class="lm-kebab" onclick="lmToggleMenu(event, '${escHtml(m.id)}')">⋯</button>
+    <button class="lm-kebab" onclick="lmToggleMenu(event, ${_jsq(m.id)})">⋯</button>
     <div class="lm-memo-menu${menuOpen ? ' open' : ''}">
-      <button onclick="lmOpenEdit('${escHtml(m.id)}')">✏️ 編集</button>
-      <button class="lm-del" onclick="lmDelete('${escHtml(m.id)}')">🗑 削除</button>
+      <button onclick="lmOpenEdit(${_jsq(m.id)})">✏️ 編集</button>
+      <button class="lm-del" onclick="lmDelete(${_jsq(m.id)})">🗑 削除</button>
     </div>
     <div class="lm-memo-top">
       <span class="lm-memo-cat">${escHtml(catLabel)}</span>
@@ -5638,20 +5625,20 @@ function _lmFormFieldsHtml(p, m) {
   return `
     <div class="lm-field"><label>日付</label><input type="date" id="${p}-date" value="${escHtml(m ? m.date : todayKey())}"></div>
     <div class="lm-field"><label>カテゴリ</label><div class="lm-cat-picker">
-      ${cats.map(c => `<button type="button" class="lm-cat-chip${selCat === c.id ? ' selected' : ''}"${selCat === c.id ? ` style="background:${escHtml(c.fill)}"` : ''} onclick="lmPickCat('${p}','${escHtml(c.id)}')">${escHtml(c.label)}</button>`).join('')}
-      <button type="button" class="lm-cat-chip lm-add-cat" onclick="lmAddCategory('${p}')">＋ カテゴリ追加</button>
+      ${cats.map(c => `<button type="button" class="lm-cat-chip${selCat === c.id ? ' selected' : ''}"${selCat === c.id ? ` style="background:${escHtml(c.fill)}"` : ''} onclick="lmPickCat(${_jsq(p)},${_jsq(c.id)})">${escHtml(c.label)}</button>`).join('')}
+      <button type="button" class="lm-cat-chip lm-add-cat" onclick="lmAddCategory(${_jsq(p)})">＋ カテゴリ追加</button>
     </div></div>
     <div class="lm-field"><label>タイトル</label><input type="text" id="${p}-title" value="${escHtml(m ? (m.title || '') : '')}" placeholder="例：後ろ足の負重トレーニング"></div>
     <div class="lm-field"><label>講座名・先生の名前</label><input type="text" id="${p}-course" value="${escHtml(m ? (m.course || '') : '')}" placeholder="例：IAALP 筋トレ講座／山田りこ先生"></div>
     <div class="lm-field"><label>学んだ場所・形式</label><div class="lm-seg">
-      ${LM_FORMATS.map(f => `<button type="button"${selFmt === f ? ' class="on"' : ''} onclick="lmPickFormat('${p}','${f}')">${f}</button>`).join('')}
+      ${LM_FORMATS.map(f => `<button type="button"${selFmt === f ? ' class="on"' : ''} onclick="lmPickFormat(${_jsq(p)},${_jsq(f)})">${f}</button>`).join('')}
     </div></div>
     <div class="lm-field"><label>学んだ内容・ポイント</label><textarea id="${p}-content" placeholder="習ったこと、覚えておきたいポイントなど">${escHtml(m ? (m.content || '') : '')}</textarea></div>
     <div class="lm-field"><label>あおの反応・様子</label><textarea id="${p}-reaction" placeholder="あおがどんな様子だったか など">${escHtml(m ? (m.reaction || '') : '')}</textarea></div>
     <div class="lm-field"><label>次回試したいこと</label><textarea id="${p}-next" placeholder="次にやってみたいこと、宿題など">${escHtml(m ? (m.next || '') : '')}</textarea></div>
     <div class="lm-field"><label>参考リンク・資料</label><input type="url" id="${p}-link" value="${escHtml(m ? (m.link || '') : '')}" placeholder="テキスト・動画・DVDのURLなど"></div>
     <div class="lm-field"><label>習得度・継続メモ</label><div class="lm-mastery-row">
-      ${LM_MASTERY_LABELS.map((lb, i) => `<button type="button"${selMas === i + 1 ? ' class="on"' : ''} onclick="lmPickMastery('${p}',${i + 1})">${lb}</button>`).join('')}
+      ${LM_MASTERY_LABELS.map((lb, i) => `<button type="button"${selMas === i + 1 ? ' class="on"' : ''} onclick="lmPickMastery(${_jsq(p)},${i + 1})">${lb}</button>`).join('')}
     </div></div>`;
 }
 
@@ -5950,17 +5937,16 @@ function renderRecipe() {
       ).join('')}
     </div>` : '';
 
-  const escapedId = _esc(_currentRecipeId || '');
   container.innerHTML = `
     <div class="card">
       <div class="recipe-toolbar">
         <select class="recipe-select" onchange="selectRecipe(this.value)">${selectOpts}</select>
-        <button class="btn-edit" onclick="startEditRecipe('${escapedId}')">編集</button>
-        <button class="btn-small" onclick="duplicateRecipe('${escapedId}')">📋 複製</button>
+        <button class="btn-edit" onclick="startEditRecipe(${_jsq(_currentRecipeId || '')})">編集</button>
+        <button class="btn-small" onclick="duplicateRecipe(${_jsq(_currentRecipeId || '')})">📋 複製</button>
       </div>
       <div class="recipe-toolbar" style="margin-top:-2px">
         <button class="btn-primary" style="flex:1;padding:10px;font-size:14px" onclick="addRecipe()">＋ 新規レシピ追加</button>
-        ${recipes.length > 1 ? `<button class="btn-delete" onclick="deleteRecipe('${escapedId}')">削除</button>` : ''}
+        ${recipes.length > 1 ? `<button class="btn-delete" onclick="deleteRecipe(${_jsq(_currentRecipeId || '')})">削除</button>` : ''}
       </div>
       ${recipe ? `
         <div class="section-header" style="margin-top:12px">
@@ -6273,7 +6259,7 @@ function renderBodyWeights() {
     '<div class="weight-entry">' +
       '<span class="weight-entry-date">' + w.date + '</span>' +
       '<span class="weight-entry-val">' + Number(w.weight).toFixed(2) + ' kg</span>' +
-      '<button class="btn-delete" onclick="deleteBodyWeight(\'' + w.date + '\')">削除</button>' +
+      '<button class="btn-delete" onclick="deleteBodyWeight(' + _jsq(w.date) + ')">削除</button>' +
     '</div>'
   ).join('');
   if (all.length > 5) {
