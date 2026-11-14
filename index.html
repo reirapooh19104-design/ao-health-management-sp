@@ -1383,6 +1383,15 @@ let _noteSearchDebounce = null;
 let _chkPushTimers = {};   // key(chk_<日付>) -> setTimeoutのID
 let _chkPushPending = {};  // key(chk_<日付>) -> { val, ts }
 let _importing = false;    // インポート中は個別pushを抑止し、完了後にpushAll 1回へ集約（落とし穴16対策）
+let _syncInFlight = false;     // 受信同期（syncFromCloud）の実行中フラグ（多重実行防止）
+let _lastSyncAt = 0;           // 直近の受信同期を始めた時刻（表に戻ったときの受信し直しの間隔制御用）
+let _pushAllInFlight = false;  // 「全データGAS同期」の実行中フラグ（連打による多重実行防止）
+let _renderDeferTimer = null;  // 編集中のため後回しにした再描画の見張りタイマー
+let _formDirty = false;        // 今日タブのフォームに未保存の入力がある
+let _btFormDirty = false;      // 血液検査フォームに未保存の入力がある
+let _formFollowsToday = true;  // 今日タブのフォームが「今日」を表示している（日付が変わったら追従する）
+let _lastRenderDay = null;     // 最後に画面を描いた日付（日付またぎの検出用）
+const RESYNC_MIN_INTERVAL_MS = 60000; // 受信し直しの最短間隔
 let _filariaEditOpen = false;  // フィラリア初回日の編集フォーム表示中（設定は保存まで消さない）
 
 // ============================================================
@@ -1660,8 +1669,89 @@ function _saneEntries(label, arr) {
 }
 // ──────────────────────────────────────────────────
 
+// ── 受信同期の入口 ──────────────────────────────────
+// 実行中にもう一度呼ばれても重ねて走らせない（起動時・表に戻ったとき・URL保存時から呼ばれる）
 async function syncFromCloud() {
   if (!getGasUrl() || !getSyncToken()) return;
+  if (_syncInFlight) return;
+  _syncInFlight = true;
+  _lastSyncAt = Date.now();
+  try {
+    await _syncFromCloudInner();
+  } finally {
+    _syncInFlight = false;
+  }
+}
+
+// いま何かを編集中か（インライン編集フォーム・編集モード・モーダルのどれかが開いている）。
+// 編集中に一覧を描き直すと入力途中の文字が消え、番号指定の編集・削除の対象もずれうるため、
+// 「表に戻ったときの受信し直し」と「同期後の再描画」はこれが false のときだけ行う。
+// ※ 今日タブ・血液検査のフォームは別の仕組み（_formDirty / _btFormDirty）で守っているので含めない
+function _isUserBusy() {
+  if (_importing) return true;
+  if (_noteEditDate !== null || _nvEditOpenIdx !== null || _csEditOpenId !== null || _csResultOpenId !== null) return true;
+  if (_suppleEditOpenId !== null || _suppleFormOpenId !== null || _medEditOpenId !== null) return true;
+  if (_mealEditMode || _healthEditMode || _aoRecordFormOpen || _aoRecordEditOpenId !== null) return true;
+  if (_lmFormOpen || _lmEditId !== null || _filariaEditOpen || _csAggPending !== null) return true;
+  if (window._editData) return true; // レシピ編集中
+  return ['gas-url-modal', 'backup-modal', 'med-end-modal', 'cs-agg-modal'].some(id => {
+    const el = document.getElementById(id);
+    return !!el && el.style.display !== 'none';
+  });
+}
+
+// 同期後の再描画。編集中なら終わるまで待ってから描く（データは保存済みで、表示だけ後回し）
+function _renderAllWhenIdle() {
+  if (!_isUserBusy()) { renderAll(); return; }
+  if (_renderDeferTimer) return;
+  _renderDeferTimer = setInterval(() => {
+    if (_isUserBusy()) return;
+    clearInterval(_renderDeferTimer);
+    _renderDeferTimer = null;
+    renderAll();
+  }, 1500);
+}
+
+// 日付が変わっていたら表示を新しい日に合わせる。変化があれば true。
+// ・今日タブのフォームが「今日」を表示していた場合だけ、新しい今日へ進める
+//   （過去日を見ているとき・未保存の入力があるときは動かさない。入力は保存後の次の機会に進む）
+// ・カレンダーが当月表示なら新しい月へ、日付欄の初期値（体重・診察日・血液検査）も旧「今日」なら進める
+function _rollDateIfNeeded() {
+  const now = todayKey();
+  let changed = false;
+  if (_formFollowsToday && _currentFormDate !== now && !_formDirty) {
+    _currentFormDate = now;
+    changed = true;
+  }
+  if (_lastRenderDay !== null && _lastRenderDay !== now) {
+    const oldDay = _lastRenderDay;
+    if (currentCalMonth === oldDay.slice(0, 7)) currentCalMonth = now.slice(0, 7);
+    ['weight-date', 'cs-consult-date'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el && el.value === oldDay) el.value = now;
+    });
+    const bt = document.getElementById('bt-date');
+    if (bt && bt.value === oldDay && !_btFormDirty) bt.value = now;
+    changed = true;
+  }
+  _lastRenderDay = now;
+  return changed;
+}
+
+// 画面が表に戻ったとき（タブ切り替え・スマホで他のアプリから戻る等）と、0時の切り替え時に呼ぶ。
+// ① 日付が変わっていれば表示を合わせる ② 条件がそろえば受信し直す。
+// 受信が起動時の1回だけだと、開いたままの端末が他端末の変更を知らないまま保存し、
+// 古い一覧でGASを上書きする（2026-10 の日誌4日分欠落の原因と推定）。
+function maybeResync() {
+  if (_rollDateIfNeeded()) _renderAllWhenIdle();
+  if (!getGasUrl() || !getSyncToken()) return;
+  if (isMaintenanceMode() || _importing || _syncInFlight || _pushAllInFlight) return;
+  if (Date.now() - _lastSyncAt < RESYNC_MIN_INTERVAL_MS) return;
+  if (_isUserBusy()) return; // 編集が終わった後、次に表に戻ったときに受信する
+  syncFromCloud();
+}
+
+async function _syncFromCloudInner() {
   _syncStatus('同期中…', 'syncing');
   try {
     const res = await fetch(getGasUrl() + '?action=getAll&token=' + encodeURIComponent(getSyncToken()), { cache: 'no-store' });
@@ -1677,7 +1767,7 @@ async function syncFromCloud() {
     if (gasData && gasData.status === 'error' && gasData.message === 'unauthorized' && Object.keys(gasData).length <= 2) {
       _syncStatus('合言葉を確認してください', 'error');
       setTimeout(() => _syncStatus(''), 5000);
-      renderAll();
+      _renderAllWhenIdle();
       return;
     }
 
@@ -1689,7 +1779,7 @@ async function syncFromCloud() {
       console.warn('[混雑] syncFromCloud：GASが混み合っているため今回の受信同期をスキップしました');
       _syncStatus('混み合っているため同期をスキップしました', 'error');
       setTimeout(() => _syncStatus(''), 5000);
-      renderAll();
+      _renderAllWhenIdle();
       return;
     }
 
@@ -1700,7 +1790,7 @@ async function syncFromCloud() {
       console.warn('[GASエラー] syncFromCloud：GAS側のエラーのため今回の受信同期をスキップしました（' + gasData.message + '）');
       _syncStatus('GAS側のエラーのため同期をスキップしました', 'error');
       setTimeout(() => _syncStatus(''), 5000);
-      renderAll();
+      _renderAllWhenIdle();
       return;
     }
 
@@ -2047,16 +2137,29 @@ async function syncFromCloud() {
     setTimeout(() => _syncStatus(''), 3000);
     migrateSupplements();
     migrateNextVisitItems();
-    renderAll();
-  } catch {
+    _renderAllWhenIdle();
+  } catch (err) {
+    // 通信失敗だけでなく、マージ処理中の予期しないエラーもここに来る。原因を追えるよう記録する
+    console.error('[同期失敗] syncFromCloud', err);
     _syncStatus('オフライン');
     setTimeout(() => _syncStatus(''), 5000);
-    renderAll();
+    _renderAllWhenIdle();
   }
 }
 
 // 全データを1回の一括送信（bulk）でGASへ手動同期
 async function pushAllToCloud() {
+  // 実行中の連打は無視する（同じ全量送信が重なって走るのを防ぐ）
+  if (_pushAllInFlight) { showToast('同期中です。完了までお待ちください'); return; }
+  _pushAllInFlight = true;
+  try {
+    await _pushAllToCloudInner();
+  } finally {
+    _pushAllInFlight = false;
+  }
+}
+
+async function _pushAllToCloudInner() {
   if (!getGasUrl()) { showToast('GAS URLが設定されていません'); return; }
   if (!getSyncToken()) { showToast('合言葉が設定されていません'); return; }
   _syncStatus('同期中…', 'syncing');
@@ -2294,6 +2397,7 @@ function restoreFromBackup(date) {
   if (!localStorage.getItem('gas_url') && savedGasUrl) localStorage.setItem('gas_url', savedGasUrl);
   if (!localStorage.getItem('sync_token') && savedSyncToken) localStorage.setItem('sync_token', savedSyncToken);
   closeBackupModal();
+  _formDirty = false; _btFormDirty = false; // 復元した内容でフォームも読み直す
   renderAll();
   showToast(date + ' から復元しました。「全データGAS同期」でクラウドに反映できます');
 }
@@ -3003,6 +3107,7 @@ function saveTodayAll() {
   }
   const badge = document.getElementById('form-saved-badge');
   if (badge) badge.style.display = 'block';
+  _formDirty = false; // 保存したので未保存の入力は無し
   showToast('記録を保存しました');
 }
 function saveTodayMemo() { saveTodayAll(); }
@@ -3231,6 +3336,13 @@ function deleteHealthNote(dateStr) {
         setDiary(diary);
       }
       setDayMemo(isoDate, { walk:'', coughN:'', coughL:'なし', energyLv:'普通', specialNote:'', memoOther:'' });
+      // 今日タブのフォームがその日を表示中なら、体調メモの欄も空に戻す。
+      // 残したままだと、次に「保存」を押したとき消したはずのノートが作り直されてしまう
+      if (isoDate === _currentFormDate) {
+        const setVal = (id, v) => { const el = document.getElementById(id); if (el) el.value = v; };
+        setVal('memo-walk', ''); setVal('memo-cough-n', ''); setVal('memo-cough-lv', 'なし');
+        setVal('memo-energy', '普通'); setVal('memo-special', ''); setVal('memo-other', '');
+      }
     }
   }
   renderNotes();
@@ -4642,6 +4754,7 @@ function renderBloodTestHistory() {
 
 function loadBloodTestForDate(date) {
   if (!date) return;
+  _btFormDirty = false;
   const tests = getBloodTests();
   const t = tests.find(x => x.date === date);
   const badge = document.getElementById('bt-form-badge');
@@ -4669,6 +4782,7 @@ function saveBloodTest() {
   renderGPT();
   const badge = document.getElementById('bt-form-badge');
   if (badge) badge.style.display = 'block';
+  _btFormDirty = false;
   showToast('血液検査データを保存しました');
 }
 
@@ -4692,6 +4806,7 @@ function deleteBloodTest(date) {
 }
 
 function initBloodForm() {
+  if (_btFormDirty) return; // 入力途中なら再描画で書き換えない
   const di = document.getElementById('bt-date');
   if (!di.value) di.value = todayKey();
   loadBloodTestForDate(di.value);
@@ -4731,6 +4846,7 @@ function manualWeight() {
   else setCalDisplay(null, null);
 }
 function nudgeWeight(d) {
+  _formDirty = true; // ボタン操作も未保存の入力として扱う
   const inp = document.getElementById('d-weight');
   inp.value = Math.max(0, (parseFloat(inp.value) || 0) + d);
   manualWeight();
@@ -6287,6 +6403,7 @@ function importData(e) {
       }
       if (d.checks) Object.keys(d.checks).forEach(k => save(k, d.checks[k]));
       _importing = false; // 集約pushの前に解除
+      _formDirty = false; _btFormDirty = false; // 取り込んだ内容でフォームも読み直す
       renderAll();
       showToast('インポートしました');
       // 個別pushの代わりに1回だけ集約送信（deleted_idsも収集対象に含まれるため削除伝播もこの1回で送られる）。
@@ -6328,9 +6445,14 @@ function goToDate(date) {
   if (card) card.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
-function loadFormForDate(date) {
+// keepFollow=true は「表示中の日付の読み直し」（reloadDiaryForm）用。
+// 利用者が日付を選んだとき（カレンダー・日付欄・「今日に戻る」）は省略し、
+// 「今日を表示しているか」を覚え直す（日付が変わったときに追従するかの判断に使う）。
+function loadFormForDate(date, keepFollow) {
   if (!date) return;
   _currentFormDate = date;
+  _formDirty = false; // 保存済みの内容で読み直すので、未保存の入力は無くなる
+  if (!keepFollow) _formFollowsToday = (date === todayKey());
   document.getElementById('d-date').value = date;
   const diary   = getDiary();
   const entry   = diary.find(e => e.date === date);
@@ -6388,7 +6510,12 @@ function loadFormForDate(date) {
     }
   }
 }
-function reloadDiaryForm() { loadFormForDate(_currentFormDate); }
+// 再描画（renderAll）から呼ばれる読み直し。未保存の入力があるときはフォームを書き換えない
+// （同期完了や0時の再描画で、入力途中の文字が保存済みの値に戻ってしまうのを防ぐ）。
+function reloadDiaryForm() {
+  if (_formDirty) { renderChecks(); updateMetrics(); return; }
+  loadFormForDate(_currentFormDate, true);
+}
 
 // ============================================================
 // BOOT
@@ -6491,10 +6618,32 @@ if (!getGasUrl()) showGasUrlModal();
   });
 });
 
+// 未保存の入力の検知（今日タブのフォーム／血液検査フォーム）
+['d-protein','d-grain','d-veg','d-other','d-weight','d-finish','d-memo',
+ 'memo-walk','memo-cough-n','memo-cough-lv','memo-energy','memo-special','memo-other'].forEach(function(id) {
+  var el = document.getElementById(id);
+  if (!el) return;
+  ['input', 'change'].forEach(function(ev) { el.addEventListener(ev, function() { _formDirty = true; }); });
+});
+BT_KEYS.map(function(k) { return 'bt-' + k; }).concat(['bt-note']).forEach(function(id) {
+  var el = document.getElementById(id);
+  if (!el) return;
+  ['input', 'change'].forEach(function(ev) { el.addEventListener(ev, function() { _btFormDirty = true; }); });
+});
+
+// 画面が表に戻ったら、日付の切り替えと受信し直しを試みる
+_lastRenderDay = todayKey();
+document.addEventListener('visibilitychange', function() {
+  if (document.visibilityState === 'visible') maybeResync();
+});
+window.addEventListener('focus', function() { maybeResync(); });
+window.addEventListener('pageshow', function(e) { if (e.persisted) maybeResync(); });
+
 (function scheduleMidnightRefresh() {
   const now = new Date();
   const msUntilMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1) - now;
-  setTimeout(function() { renderAll(); scheduleMidnightRefresh(); }, msUntilMidnight);
+  // 0時を少し過ぎてから実行（ちょうど0時だと日付判定が前日のままになりうるため）
+  setTimeout(function() { maybeResync(); scheduleMidnightRefresh(); }, msUntilMidnight + 1000);
 })();
 
 // ============================================================
