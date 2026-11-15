@@ -6579,8 +6579,10 @@ function importData(e) {
     // 取り込む直前の状態を自動バックアップに残す（「バックアップから復元」に「…-インポート前-時刻」として出る）
     const nowT = new Date();
     const backupName = todayKey() + '-インポート前-' + String(nowT.getHours()).padStart(2, '0') + String(nowT.getMinutes()).padStart(2, '0') + String(nowT.getSeconds()).padStart(2, '0');
+    // バックアップを作れなかったら取り込まない（戻せない状態で上書きしない）
     if (!_writeBackup(backupName)) {
-      if (!confirm('取り込む前のバックアップを作れませんでした（端末の保存領域が足りない可能性があります）。\nバックアップなしで取り込みを続けますか？')) return;
+      showToast('読み込みを中止しました。取り込み前のバックアップを作れませんでした（端末の保存領域が足りない可能性があります）');
+      return;
     }
     try {
       // インポート中は個別pushを抑止（キー数×2の一斉発射でbusy多発＝落とし穴16対策）。
