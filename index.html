@@ -1423,6 +1423,22 @@ async function pushToCloud(key, val) {
   } catch (e) { console.error('[push失敗] pushToCloud key=' + key, e); }
 }
 
+// 複数キーを1回の送信にまとめて送る（時刻なし＝GAS側の新旧チェックを通さない書き戻し用）。
+// 何十件もの書き戻しを1件ずつ送ると、GASの順番待ちで混雑（busy）が多発するため。
+async function pushBulkToCloud(data) {
+  if (_importing) return;
+  if (!getGasUrl() || !getSyncToken()) return;
+  try {
+    const res = await fetch(getGasUrl(), {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify({ bulk: true, data: data, token: getSyncToken() })
+    });
+    const resBody = await res.json().catch(() => null);
+    _logPushResult('pushBulkToCloud', Object.keys(data).length + '件', resBody);
+  } catch (e) { console.error('[push失敗] pushBulkToCloud', e); }
+}
+
 // 本体と _ts_ を2キーbulkの1POSTで送る（GAS v7のdoPost bulk分岐を利用・GAS側変更なし）。
 // 独立2フェッチだと片方だけのネットワーク失敗で「_ts_だけ着地・本体は旧値」の
 // 不整合が起きるため（2026-07-05 recipes本体不達の実例）、1POSTに統合した。
@@ -1895,6 +1911,7 @@ async function _syncFromCloudInner() {
       if (missing) pushToCloud('deleted_ids', localDel);
     }
 
+    const chkPushBack = {}; // 書き戻しが必要な chk_<日付>（最後に1回の送信にまとめる）
     Object.keys(gasData).forEach(k => {
       if (k.startsWith('autobackup_') || k.startsWith('_ts_') || k === 'gas_url' || k === 'sync_token' || k === 'entry_merge_ready' || (k.startsWith('custom_') && k !== 'custom_meal_checks' && k !== 'custom_health_checks')) return;
 
@@ -2206,11 +2223,10 @@ async function _syncFromCloudInner() {
         // chk_<日付>: 項目単位 OR マージ（true は消えない・断片が完全データに勝つバグ対策）
         if (gasVal == null || typeof gasVal !== 'object' || Array.isArray(gasVal)) return;
         const localVal = load(k, {});
-        const merged = { ...localVal };
-        for (const [id, val] of Object.entries(gasVal)) {
-          merged[id] = !!(localVal[id] || val);
-        }
+        const merged = _mergeChecks(localVal, gasVal);
         localStorage.setItem(k, JSON.stringify(merged));
+        // 合わせた結果がGASと違えば、あとでまとめて書き戻す（GASに断片が残り続けるのを防ぐ）
+        if (_stableStr(merged) !== _stableStr(gasVal)) chkPushBack[k] = merged;
       } else if (gasTs > localTs || (gasTs === 0 && localTs === 0)) {
         // 安全ガード: GAS が空配列・null・undefined のときは上書きしない
         // (誤って空になった可能性が高く、ローカル保持を優先)
@@ -2221,6 +2237,7 @@ async function _syncFromCloudInner() {
       }
     });
 
+    if (Object.keys(chkPushBack).length > 0) pushBulkToCloud(chkPushBack);
     _syncStatus('同期済み');
     setTimeout(() => _syncStatus(''), 3000);
     migrateSupplements();
@@ -2229,6 +2246,7 @@ async function _syncFromCloudInner() {
   } catch (err) {
     // 通信失敗だけでなく、マージ処理中の予期しないエラーもここに来る。原因を追えるよう記録する
     console.error('[同期失敗] syncFromCloud', err);
+    if (err && (err.name === 'QuotaExceededError' || err.code === 22)) _showStorageError();
     _syncStatus('オフライン');
     setTimeout(() => _syncStatus(''), 5000);
     _renderAllWhenIdle();
@@ -2382,10 +2400,48 @@ async function _pushAllToCloudInner() {
 function load(key, def) {
   try { const v = localStorage.getItem(key); return v ? JSON.parse(v) : def; } catch { return def; }
 }
+// 端末の保存領域がいっぱい等で保存できなかったことを、消えない帯で知らせる
+// （各保存処理は最後に「保存しました」を出すので、すぐ消える通知では埋もれるため）。
+function _showStorageError() {
+  let el = document.getElementById('storage-error-banner');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'storage-error-banner';
+    el.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:2000;background:#B71C1C;color:#fff;font-size:13px;line-height:1.5;padding:10px 40px 10px 12px';
+    el.innerHTML = '⚠️ 保存できませんでした。端末の保存領域がいっぱいの可能性があります。いまの入力は記録されていません。下の「バックアップ書き出し」でデータを保存してから、原因を調べてください。'
+      + '<button onclick="this.parentNode.style.display=\'none\'" style="position:absolute;top:6px;right:8px;background:none;border:none;color:#fff;font-size:18px;cursor:pointer">✕</button>';
+    document.body.appendChild(el);
+  }
+  el.style.display = 'block';
+}
+// 古い自動バックアップを1つ消して空きを作る（最新の2つは残す）。消せたら true
+function _freeOldestBackup() {
+  const keys = [];
+  for (let i = 0; i < localStorage.length; i++) {
+    const k = localStorage.key(i);
+    if (k && k.startsWith('autobackup_')) keys.push(k);
+  }
+  keys.sort();
+  if (keys.length <= 2) return false;
+  localStorage.removeItem(keys[0]);
+  return true;
+}
+// 保存を試み、失敗したら古い自動バックアップを消しながらやり直す。最終的に保存できたら true
+function _setItemWithRetry(key, str) {
+  for (;;) {
+    try { localStorage.setItem(key, str); return true; }
+    catch (e) {
+      if (!_freeOldestBackup()) { console.error('[保存失敗] ' + key, e); return false; }
+    }
+  }
+}
 function save(key, val) {
-  localStorage.setItem(key, JSON.stringify(val));
   const ts = Date.now();
-  localStorage.setItem('_ts_' + key, ts);
+  if (!_setItemWithRetry(key, JSON.stringify(val)) || !_setItemWithRetry('_ts_' + key, String(ts))) {
+    // 端末に保存できなかった。GASへも送らない（端末とGASで食い違うより、何も変えない方が安全）
+    _showStorageError();
+    return;
+  }
   if (key.startsWith('chk_') && typeof val === 'object' && val !== null && Object.keys(val).length === 0) return;
   if (key.startsWith('chk_')) {
     // インポート中はpending登録・タイマーもスキップ（フラグ解除後にタイマーから発射される漏れを塞ぐ。
@@ -2408,14 +2464,23 @@ function save(key, val) {
 // ============================================================
 // AUTO BACKUP
 // ============================================================
+// いまの全データを autobackup_<名前> として保存する。保存できたら true。
+// 容量不足のときは古いバックアップを消しながらやり直し、それでも無理ならあきらめる（例外は出さない）
+function _writeBackup(name) {
+  try {
+    const snapshot = {};
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k && !k.startsWith('autobackup_')) snapshot[k] = localStorage.getItem(k);
+    }
+    return _setItemWithRetry('autobackup_' + name, JSON.stringify(snapshot));
+  } catch (e) { console.error('[バックアップ失敗] ' + name, e); return false; }
+}
 function autoBackup() {
+  // その日の最初の起動時だけ作る（2回目以降は上書きしない）。
+  // 上書きすると、データがおかしくなってから再読み込みしたとき、その日のバックアップも壊れた状態になる
   const key = 'autobackup_' + todayKey();
-  const snapshot = {};
-  for (let i = 0; i < localStorage.length; i++) {
-    const k = localStorage.key(i);
-    if (k && !k.startsWith('autobackup_')) snapshot[k] = localStorage.getItem(k);
-  }
-  localStorage.setItem(key, JSON.stringify(snapshot));
+  if (localStorage.getItem(key) === null) _writeBackup(todayKey());
   // 7日より古いバックアップを削除
   const cutoff = new Date();
   cutoff.setDate(cutoff.getDate() - 7);
@@ -2425,6 +2490,14 @@ function autoBackup() {
     if (k && k.startsWith('autobackup_') && k.replace('autobackup_', '') < cutoffStr) {
       localStorage.removeItem(k);
     }
+  }
+}
+// 起動時の準備処理を1つずつ安全に実行する（1つの失敗で起動全体が止まり、画面が真っ白になるのを防ぐ）
+function _bootStep(name, fn) {
+  try { fn(); }
+  catch (e) {
+    console.error('[起動処理失敗] ' + name, e);
+    if (e && (e.name === 'QuotaExceededError' || e.code === 22)) { try { _showStorageError(); } catch (e2) {} }
   }
 }
 
@@ -2810,9 +2883,50 @@ function renderCalendar() {
 // ============================================================
 // CHECK ITEMS
 // ============================================================
+// チェック1項目の値を変え、その項目の変更時刻を _t に記録する。
+// chk_<日付> の形: { 項目ID: true/false, …, _t: { 項目ID: 変更時刻 } }
+// 同期は項目ごとに時刻の新しい方を採るので、「外した」操作も他端末に伝わる（2026-11-15〜）。
+// _t の無い古いデータ・時刻の無い項目は、従来どおり「どちらかがオンならオン」で合わせる。
+function _setCheckValue(c, id, val) {
+  c[id] = val;
+  const t = (c._t && typeof c._t === 'object' && !Array.isArray(c._t)) ? c._t : {};
+  t[id] = Date.now();
+  c._t = t;
+  return c;
+}
+// 同期用：2つの chk_ を項目単位で合わせる（remote=GAS側）
+function _mergeChecks(localVal, remoteVal) {
+  const isObj = v => !!v && typeof v === 'object' && !Array.isArray(v);
+  const l = isObj(localVal) ? localVal : {};
+  const r = isObj(remoteVal) ? remoteVal : {};
+  const lt = isObj(l._t) ? l._t : {};
+  const rt = isObj(r._t) ? r._t : {};
+  const out = {};
+  const outT = {};
+  const ids = new Set(Object.keys(l).concat(Object.keys(r)));
+  ids.delete('_t');
+  ids.forEach(id => {
+    const hasL = typeof lt[id] === 'number', hasR = typeof rt[id] === 'number';
+    if (hasL && hasR) {
+      if (rt[id] >= lt[id]) { out[id] = !!r[id]; outT[id] = rt[id]; }
+      else { out[id] = !!l[id]; outT[id] = lt[id]; }
+    } else if (hasR) { out[id] = !!r[id]; outT[id] = rt[id]; }
+    else if (hasL)   { out[id] = !!l[id]; outT[id] = lt[id]; }
+    else out[id] = !!(l[id] || r[id]); // 両方とも時刻なし → 従来のORマージ
+  });
+  if (Object.keys(outT).length > 0) out._t = outT;
+  return out;
+}
+// 並び順に左右されない比較用の文字列
+function _stableStr(v) {
+  if (Array.isArray(v)) return '[' + v.map(_stableStr).join(',') + ']';
+  if (v && typeof v === 'object') return '{' + Object.keys(v).sort().map(k => JSON.stringify(k) + ':' + _stableStr(v[k])).join(',') + '}';
+  return JSON.stringify(v);
+}
+
 function toggleCheck(id) {
   const c = getChecks();
-  c[id] = !c[id];
+  _setCheckValue(c, id, !c[id]);
   setChecks(c);
   renderChecks();
   updateMetrics();
@@ -3475,13 +3589,13 @@ function migrateCheckItems() {
   ].forEach(({ key, defaults }) => {
     const raw = localStorage.getItem(key);
     let items;
-    if (raw) {
-      try { items = JSON.parse(raw); } catch { return; }
-    } else {
-      items = defaults.map(i => ({ ...i }));
-    }
+    // まだ保存データが無い端末では何もしない（初期項目は表示用の既定値として出るだけ）。
+    // ここで初期項目を保存すると、まっさらな端末が、利用者が消した初期項目を書き戻しで
+    // 全端末に復活させてしまう（落とし穴17の残り）。項目を追加・編集したときに初めて保存される
+    if (!raw) return;
+    try { items = JSON.parse(raw); } catch { return; }
     if (!Array.isArray(items)) return;
-    let changed = !raw;
+    let changed = false;
     const migrated = items.map((item, idx) => {
       const needsTs    = !('_ts' in item);
       const needsOrder = !('order' in item);
@@ -3864,7 +3978,7 @@ function toggleFialariaCheck() {
   const c = getChecks();
   const todayStr = todayKey();
   const newVal = !c['filaria_today'];
-  c['filaria_today'] = newVal;
+  _setCheckValue(c, 'filaria_today', newVal);
   setChecks(c);
   if (newVal) {
     // 履歴に記録
@@ -6422,12 +6536,53 @@ function exportData() {
   showToast(skipped ? 'エクスポートしました（' + skipped + '件のデータが破損のため除外）' : 'エクスポートしました');
 }
 
+// インポートするファイルの形式チェック。問題があれば、その項目名（日本語）を返す。問題なしは null。
+// ここを通らないファイルは1文字も取り込まない（途中まで上書きして壊れるのを防ぐ）。
+function _validateImportData(d) {
+  if (!d || typeof d !== 'object' || Array.isArray(d)) return 'ファイル全体';
+  const isObj = v => !!v && typeof v === 'object' && !Array.isArray(v);
+  const objList = v => Array.isArray(v) && v.every(isObj);
+  const objOrStrList = v => Array.isArray(v) && v.every(e => typeof e === 'string' || isObj(e));
+  const dated = v => objList(v) && v.every(e => typeof e.date === 'string' && e.date !== '');
+  const withId = v => objList(v) && v.every(e => typeof e.id === 'string' && e.id !== '');
+  const rules = [
+    ['healthNotes', '健康ノート', dated], ['diary', '食事日誌', dated], ['bloodTests', '血液検査', dated],
+    ['bodyWeights', '体重', dated], ['supple', 'サプリ', objList], ['nextVisit', '次回来院時に伝えること', objOrStrList],
+    ['aoRecords', 'あおの記録', withId], ['consultationSummary', '次回診察用まとめ', objOrStrList],
+    ['consultationHistory', '診察履歴', withId], ['medList', '薬', withId],
+    ['customMealChecks', '食事チェック項目', withId], ['customHealthChecks', '健康チェック項目', withId],
+    ['recipes', 'レシピ', withId], ['filariaHistory', 'フィラリア履歴', objList],
+    ['learningMemos', '学びメモ', withId], ['learningCategories', '学びメモのカテゴリ', withId],
+    ['deletedIds', '削除記録', v => isObj(v) && Object.values(v).every(Array.isArray)],
+    ['filariaSettings', 'フィラリア設定', isObj],
+    ['checks', 'チェックと日別メモ', v => isObj(v) && Object.keys(v).every(k => (k.startsWith('chk_') || k.startsWith('day_memo_')) && isObj(v[k]))],
+  ];
+  let known = 0;
+  for (const [key, label, ok] of rules) {
+    if (d[key] === undefined || d[key] === null) continue;
+    known++;
+    if (!ok(d[key])) return label;
+  }
+  if (known === 0) return 'ファイル全体（このアプリの書き出しファイルではないようです）';
+  return null;
+}
+
 function importData(e) {
   const f = e.target.files[0]; if (!f) return;
   const r = new FileReader();
   r.onload = async ev => {
+    let d;
+    try { d = JSON.parse(ev.target.result); }
+    catch { showToast('読み込めませんでした（JSONファイルではないか、壊れています）'); return; }
+    const bad = _validateImportData(d);
+    if (bad) { showToast('読み込みを中止しました。形式が違います：' + bad); return; }
+    // 取り込む直前の状態を自動バックアップに残す（「バックアップから復元」に「…-インポート前-時刻」として出る）
+    const nowT = new Date();
+    const backupName = todayKey() + '-インポート前-' + String(nowT.getHours()).padStart(2, '0') + String(nowT.getMinutes()).padStart(2, '0') + String(nowT.getSeconds()).padStart(2, '0');
+    if (!_writeBackup(backupName)) {
+      if (!confirm('取り込む前のバックアップを作れませんでした（端末の保存領域が足りない可能性があります）。\nバックアップなしで取り込みを続けますか？')) return;
+    }
     try {
-      const d = JSON.parse(ev.target.result);
       // インポート中は個別pushを抑止（キー数×2の一斉発射でbusy多発＝落とし穴16対策）。
       // localStorage保存と_ts_刻印は従来どおり行われ、送信だけを最後のpushAll 1回に集約する
       _importing = true;
@@ -6508,7 +6663,10 @@ function importData(e) {
       // 個別pushの代わりに1回だけ集約送信（deleted_idsも収集対象に含まれるため削除伝播もこの1回で送られる）。
       // GAS URL未設定時はスキップ（落とし穴17の復旧手順＝URL未設定インポートでは送信ゼロを維持）
       if (getGasUrl() && getSyncToken()) await pushAllToCloud();
-    } catch { showToast('読み込みに失敗しました'); }
+    } catch (err) {
+      console.error('[インポート失敗]', err);
+      showToast('読み込みの途中で失敗しました。「バックアップから復元」の「' + backupName + '」で取り込み前に戻せます');
+    }
     // フラグ立ちっぱなしだと以後の全pushが無音で消えるため、例外時も必ず戻す
     finally { _importing = false; }
   };
@@ -6686,17 +6844,17 @@ function renderAll() {
   initBloodForm();
 }
 
-autoBackup(); // renderAllより前に自動バックアップ
-migrateCheckItems();
-migrateSupplements();
-migrateNextVisitItems();
-migrateAoRecords();
-migrateUrsoSetting();
-migrateMedList();
-localStorage.removeItem('last_backup_date');
-initConsultationKeys();
-seedLearningCategories();
-renderAll();
+_bootStep('autoBackup', autoBackup); // renderAllより前に自動バックアップ
+_bootStep('migrateCheckItems', migrateCheckItems);
+_bootStep('migrateSupplements', migrateSupplements);
+_bootStep('migrateNextVisitItems', migrateNextVisitItems);
+_bootStep('migrateAoRecords', migrateAoRecords);
+_bootStep('migrateUrsoSetting', migrateUrsoSetting);
+_bootStep('migrateMedList', migrateMedList);
+_bootStep('removeLegacyKey', () => localStorage.removeItem('last_backup_date'));
+_bootStep('initConsultationKeys', initConsultationKeys);
+_bootStep('seedLearningCategories', seedLearningCategories);
+_bootStep('renderAll', renderAll);
 document.getElementById('weight-date').value = todayKey();
 document.getElementById('cs-consult-date').value = todayKey();
 renderMaintenanceBanner();
