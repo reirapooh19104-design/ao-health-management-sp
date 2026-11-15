@@ -413,6 +413,8 @@ GitHub Pagesで公開、GASでデータ同期。Last-Write-Wins方式の双方�
   - 経路②：initConsultationKeys()。consultation_summary / consultation_history キー不存在の初回のみ
     （2026-07-06追加の seedLearningCategories() も同型：learning_categories キー不存在の初回のみ）
   - 経路③：renderAll内の setBloodTests / setNotes。blood_tests / health_notes キー不存在の初回のみ
+    ※ 経路②③は 2026-11-15 に廃止（初期化を直接保存に変更し、送信しなくなった。
+      「起動時の初期化は save() を使わない」セクション参照）
   - 経路④：syncFromCloud の書き戻しpush（下記。定常運用でも条件が成立しうる）
 - 経路④の対象5キー：next_visit / consultation_summary / consultation_history / ao_records /
   learning_memos（2026-07-06 学びメモ機能追加時に同型で追加）。
@@ -830,6 +832,20 @@ GitHub Pagesで公開、GASでデータ同期。Last-Write-Wins方式の双方�
 - **初期チェック項目は保存しない**（`migrateCheckItems` は保存データのある端末だけを対象にする）。
   まっさらな端末が、利用者の消した初期項目を書き戻しで復活させるのを防ぐ。レビュー高-6はこれで全項目対応済み
   （初期データそのものも第5弾で空にしてある）。
+
+## 起動時の初期化は save() を使わない（2026-11-15 修正・通しテストで発見）
+- 不具合：**GAS URL設定済みなのに一部のキーが無い端末**（保存データが部分的に消えた端末など）が起動すると、
+  受信より先に「空の一覧」を現在時刻つきでGASへ送り、GAS側の健康ノート・次回診察用まとめ・診察履歴を
+  空で上書きした。学びメモのカテゴリは初期3件だけで上書きした（利用者が足したカテゴリがGASから消える）。
+  他端末にデータが残っていれば書き戻しで戻るが、カテゴリには書き戻しが無く、1台運用なら戻らなかった。
+  （「起動時の自動同期の性質」の経路②③がこれ。丸ごと消えた端末はURLも無いので送信されず、表面化しにくかった）
+- 修正：`renderAll` の health_notes 初期化、`initConsultationKeys`、`seedLearningCategories` を
+  `localStorage.setItem` の直接保存に変更（`_ts_` を刻まない・送信しない。初期カテゴリの時刻は0）。
+- 鉄則（再掲・docs/sync.md「マイグレーション処理の注意点」）：**起動時に走る初期化・移行で save() や
+  setter を呼ばない**。「キーが無いから作る」処理は必ず端末内だけで完結させる。
+- 通しテスト（PC役・スマホ役の2台＋gas_code_v2.js を模型のシートにつないで index.html 全体を動かす）は
+  一時フォルダで作成（リポジトリ外）。関数を個別に取り出すテストでは、起動時の処理どうしの
+  順序の問題は見つけられなかった。同期まわりを大きく変えるときは通しテストを作り直す価値がある。
 
 ## 次セッション候補（2026-07-07 更新）
 
