@@ -6357,9 +6357,14 @@ function renderAll() {
     _merged.sort((a,b) => b.date < a.date ? -1 : 1);
     setDiary(_merged);
   }
+  // 食事日誌にあって日別メモ（day_memo_<日付>）が無い日は、日誌の内容から日別メモを作り直す。
+  // save()（setDayMemo）は使わず、時刻なしで端末内にだけ保存する（GASへ送らない）。
+  // save() だと「いま作った」時刻が付いてGASへ送られ、GASや他の端末にある本物の日別メモ
+  // （散歩・咳などの記録）を、作り直しただけのメモで上書きしてしまう。
+  // 時刻が無ければ、次の受信でGASに本物があればそちらに置き換わる。
   getDiary().forEach(e => {
-    if (localStorage.getItem('day_memo_' + e.date)) return;
-    setDayMemo(e.date, { walk: e.walk||'', coughN: e.coughN||'', coughL: e.coughL||'なし', energyLv: e.energyLv||'普通', specialNote: e.specialNote||'', memoOther: e.memoOther||'' });
+    if (!e || !e.date || localStorage.getItem('day_memo_' + e.date)) return;
+    _setItemWithRetry('day_memo_' + e.date, JSON.stringify({ walk: e.walk||'', coughN: e.coughN||'', coughL: e.coughL||'なし', energyLv: e.energyLv||'普通', specialNote: e.specialNote||'', memoOther: e.memoOther||'' }));
   });
 
   // blood tests 初期化
