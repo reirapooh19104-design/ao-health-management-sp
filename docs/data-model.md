@@ -103,7 +103,7 @@ ao-health-management-sp のデータ構造・キー名・保存先・同期方�
 この保存方法（localStorage主＋スプレッドシート同期）は設計として妥当。変更不要。
 
 ## フィラリア（2026-11-16 第8弾）
-- `filaria_settings`：`{ firstDoseDate, year }`（今年の6/1〜11/30のみ）。
+- `filaria_settings`：`{ firstDoseDate, year }`（今年の日付のみ。6〜11月の外は確認のうえ保存）。
 - `filaria_history`：`[{ scheduledDate, administeredAt, _ts }]`。取り消しは `{ scheduledDate, deleted:true, _ts }` の印に置き換える。
 - `filaria_plan`：`[{ id:'<年>-<回>', year, n, date, shift, skip, _ts }]`（予定日の変更・削除。項目は取り除かない）。
 - 詳細は CLAUDE.md「フィラリア：予定日の変更・削除…」。

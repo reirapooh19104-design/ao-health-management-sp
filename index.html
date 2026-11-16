@@ -2623,26 +2623,31 @@ function _ymdAddDays(s, days) {
   return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
 }
 const FILARIA_INTERVAL_DAYS = 40;
+// いつもの投与期間（6月〜11月）。予定日は、この期間の終わり（11/30）までの分を出す
+function _filariaSeasonEnd(year) { return year + '-11-30'; }
+function _inFilariaSeason(dateStr, year) { return dateStr >= year + '-06-01' && dateStr <= _filariaSeasonEnd(year); }
 // その年の予定（回ごと）。plan を渡すと、その内容で計算する（保存前の確かめ用）。
 // 返す項目：{ n(何回目), date(予定日), base(変更していなければこの日だった), moved(日を変更した), skip(削除した) }
-// ・予定日は、初回日から40日おき（6/1〜11/30）。日を変更した回があり shift が付いていれば、
-//   そのあとの回は変更後の日から40日おきに数え直す
+// ・1回目は初回日そのもの（暖かい年は5月以前に始めることがある。期間の外でも必ず1回目として出す）
+// ・2回目以降は40日おきで、11/30 までに来る分を出す。始まりは区切らない（初回日が早い年も、最初の方の回が欠けない）
+// ・日を変更した回があり shift が付いていれば、そのあとの回は変更後の日から40日おきに数え直す
+// ・日を変更した回は、11/30 を過ぎていても（その年のうちなら）出す
 function _filariaSlots(year, plan) {
   const cfg = getFilariaSettings();
-  if (!cfg || cfg.year !== year || !_isYmd(cfg.firstDoseDate)) return [];
+  if (!cfg || cfg.year !== year || !_isYmd(cfg.firstDoseDate) || cfg.firstDoseDate.slice(0, 4) !== String(year)) return [];
   const ov = new Map((plan || getFilariaPlan()).filter(p => p && typeof p === 'object' && p.year === year).map(p => [p.n, p]));
-  const start = year + '-06-01', end = year + '-11-30';
+  const end = _filariaSeasonEnd(year);
   const slots = [];
   let chain = cfg.firstDoseDate;
-  for (let n = 1; n <= 12; n++) {
+  for (let n = 1; n <= 24; n++) {
     if (n > 1) chain = _ymdAddDays(chain, FILARIA_INTERVAL_DAYS);
-    if (chain > end) break;                       // 変更していない場合の日が期間を過ぎたら、そこで終わり
+    if (n > 1 && chain > end) break;              // 変更していない場合の日が期間を過ぎたら、そこで終わり
     const o = ov.get(n);
     const moved = !!(o && _isYmd(o.date) && o.date !== chain);
     const base = chain;
     const date = moved ? o.date : chain;
     if (moved && o.shift !== false) chain = o.date;
-    if (date < start || date > end) continue;
+    if (date.slice(0, 4) !== String(year)) continue;
     slots.push({ n, date, base, moved, skip: !!(o && o.skip) });
   }
   return slots;
@@ -2803,9 +2808,7 @@ function renderFilariaBanner() {
   const fb = document.getElementById('filaria-banner');
   if (!fb) return;
   const today = new Date(); today.setHours(0,0,0,0);
-  const mon = today.getMonth() + 1;
-  // フィラリア期間外（12〜5月）は非表示
-  if (mon < 6 || mon > 11) { fb.style.display = 'none'; return; }
+  // 今日が予定日のときだけ出す（予定日なら、いつもの期間（6〜11月）の外でも出す）
   const todayStr = todayKey();
   const scheduledDates = getFilariaScheduledDates(today.getFullYear());
   if (!scheduledDates.has(todayStr)) { fb.style.display = 'none'; return; }
@@ -3922,7 +3925,7 @@ function renderTodayMedSuppleChecks() {
   const today = new Date(); today.setHours(0,0,0,0);
   const todayStr = todayKey();
   const mon = today.getMonth() + 1;
-  const isFilariaDay = (mon >= 6 && mon <= 11) && getFilariaScheduledDates(today.getFullYear()).has(todayStr);
+  const isFilariaDay = getFilariaScheduledDates(today.getFullYear()).has(todayStr);   // 予定日なら、期間（6〜11月）の外でも出す
 
   _dynamicCheckIds = [
     ...medItems.map(m => m.id),
@@ -4260,7 +4263,7 @@ function renderFilaria() {
       <div class="form-group">
         <label class="form-label">初回投与日</label>
         <input type="date" class="form-input" id="filaria-first-date"
-               min="${currentYear}-06-01" max="${currentYear}-11-30"${isEdit ? ` value="${cfg.firstDoseDate}"` : ''}>
+               min="${currentYear}-01-01" max="${currentYear}-12-31"${isEdit ? ` value="${cfg.firstDoseDate}"` : ''}>
       </div>
       <button class="btn-primary" onclick="saveFilariaFirstDate()">保存する</button>${isEdit ? `
       <button class="btn-secondary" style="margin-top:6px" onclick="cancelFilariaEdit()">キャンセル</button>` : ''}`;
@@ -4289,7 +4292,7 @@ function renderFilaria() {
     if (_filariaPlanEditN === sl.n) {
       body = `<div style="margin:6px 0 8px;padding:10px;background:#FBF6F1;border-radius:10px" onclick="event.stopPropagation()">
         <div style="font-size:12px;color:var(--text-light);margin-bottom:6px">${sl.n}回目の予定日を変更</div>
-        <input type="date" class="form-input" id="filaria-plan-date" autocomplete="off" min="${currentYear}-06-01" max="${currentYear}-11-30" value="${escHtml(sl.date)}">
+        <input type="date" class="form-input" id="filaria-plan-date" autocomplete="off" min="${currentYear}-01-01" max="${currentYear}-12-31" value="${escHtml(sl.date)}">
         <label style="display:flex;align-items:flex-start;gap:6px;font-size:12px;margin:8px 0;line-height:1.5">
           <input type="checkbox" id="filaria-plan-shift" checked style="margin-top:2px">
           <span>このあとの予定日も、この日から${FILARIA_INTERVAL_DAYS}日おきに組み直す</span>
@@ -4372,13 +4375,16 @@ function saveFilariaFirstDate() {
   const val = document.getElementById('filaria-first-date')?.value;
   if (!val) { showToast('日付を入力してください'); return; }
   const currentYear = new Date().getFullYear();
-  // 今年の 6/1〜11/30 だけ受け付ける（それ以外を保存すると、予定日が1つも出ない・設定画面に戻る、になる）
-  if (!_isYmd(val) || val < currentYear + '-06-01' || val > currentYear + '-11-30') {
-    showToast('初回投与日は、' + currentYear + '年の6月1日〜11月30日の日付を入力してください');
+  // 別の年の日付は受け付けない（保存すると、今年の予定日が1つも出ない・設定画面に戻る、になる）
+  if (!_isYmd(val) || val.slice(0, 4) !== String(currentYear)) {
+    showToast('初回投与日は、' + currentYear + '年の日付を入力してください');
     return;
   }
   const cfg = getFilariaSettings();
   const changed = !cfg || cfg.year !== currentYear || cfg.firstDoseDate !== val;
+  // いつもの期間（6月〜11月）の外は、確かめてから保存する（暖かい年は投与が早まることがある）
+  if (changed && !_inFilariaSeason(val, currentYear)
+      && !confirm('いつもの投与期間（6月〜11月）の外ですが、保存しますか？\n（' + _dateJa(val) + '）')) return;
   // 初回日が変わると予定日がすべて変わるので、その年の「日の変更・削除」は元に戻す
   const plan = getFilariaPlan();
   const hasOverride = plan.some(x => x && x.year === currentYear && (x.skip || _isYmd(x.date)));
@@ -4422,7 +4428,7 @@ function saveFilariaPlanDate(n) {
   if (!slot) { _filariaPlanEditN = null; renderFilaria(); return; }
   const val = document.getElementById('filaria-plan-date')?.value;
   const shift = !!document.getElementById('filaria-plan-shift')?.checked;
-  if (!_isYmd(val) || val < year + '-06-01' || val > year + '-11-30') { showToast(year + '年の6月1日〜11月30日の日付を入力してください'); return; }
+  if (!_isYmd(val) || val.slice(0, 4) !== String(year)) { showToast(year + '年の日付を入力してください'); return; }
   if (isFilariaGiven(slot.date)) { showToast('投与済みの回は変更できません。先に投与済みを取り消してください'); return; }
   if (val === slot.date) { _filariaPlanEditN = null; renderFilaria(); return; }
   // 保存した場合の予定を先に作って確かめる（順番が入れ替わる・同じ日が重なる・投与済みの回が動く、は受け付けない）
@@ -4434,6 +4440,7 @@ function saveFilariaPlanDate(n) {
     showToast('前後の予定日と順番が入れ替わるため、この日には変更できません');
     return;
   }
+  if (!_inFilariaSeason(val, year) && !confirm('いつもの投与期間（6月〜11月）の外ですが、保存しますか？\n（' + _dateJa(val) + '）')) return;
   const before = new Map(_filariaSlots(year).map(sl => [sl.n, sl]));
   const movedGiven = after.find(sl => sl.n !== n && before.has(sl.n) && before.get(sl.n).date !== sl.date && isFilariaGiven(before.get(sl.n).date));
   const lostGiven = [...before.values()].find(sl => !after.some(a => a.n === sl.n) && isFilariaGiven(sl.date));
