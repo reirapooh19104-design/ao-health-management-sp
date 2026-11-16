@@ -2002,11 +2002,12 @@ async function _syncFromCloudInner() {
         const nvMerged = Array.from(nvMap.values());
         const nvClean = filterByTombstone('next_visit', nvMerged);
         localStorage.setItem('next_visit', JSON.stringify(nvClean));
-        // ローカルにあってクラウドにない項目があればマージ結果をGASに書き戻す
+        // 書き戻し：マージ結果に「GASに無い」または「GASと内容が違う（＝端末側が新しかった）」項目があれば送る。
+        // 以前は「GASに無い項目があれば」だけだったため、他の端末の古い一覧でGASの編集内容が消されたとき、
+        // 編集した端末が受信しても書き戻さず、GASと他の端末が古いままになった（2026-11-16 修正）。
         // （壊れた項目はpush対象から除外する。ローカルは削除しない）
         const nvPushable = _filterForPushBack('next_visit', nvClean, _validNextVisitEntry);
-        const gasNvKeySet = new Set(gasNv.map(ge => nvKey(ge)));
-        if (nvPushable.some(e => !gasNvKeySet.has(nvKey(e)))) {
+        if (_needsPushBack(nvPushable, gasNv, nvKey)) {
           pushToCloud('next_visit', nvPushable);
         }
       } else if (k === 'consultation_summary') {
@@ -2030,11 +2031,10 @@ async function _syncFromCloudInner() {
         const csMerged = Array.from(csMap.values());
         const csClean = filterByTombstone('consultation_summary', csMerged);
         localStorage.setItem('consultation_summary', JSON.stringify(csClean));
-        // ローカルにあってクラウドにない項目があればマージ結果をGASに書き戻す
+        // 書き戻しの条件は next_visit と同じ（GASに無い、またはGASと内容が違う項目があれば送る）
         // （壊れた項目はpush対象から除外する。ローカルは削除しない）
         const csPushable = _filterForPushBack('consultation_summary', csClean, _validConsultationSummaryEntry);
-        const gasCsKeySet = new Set(gasCs.map(ge => csKey(ge)));
-        if (csPushable.some(e => !gasCsKeySet.has(csKey(e)))) {
+        if (_needsPushBack(csPushable, gasCs, csKey)) {
           pushToCloud('consultation_summary', csPushable);
         }
       } else if (k === 'consultation_history') {
@@ -2059,8 +2059,8 @@ async function _syncFromCloudInner() {
         localStorage.setItem('consultation_history', JSON.stringify(chClean));
         // 壊れた項目はpush対象から除外する（ローカルは削除しない）
         const chPushable = _filterForPushBack('consultation_history', chClean, _validConsultationHistoryEntry);
-        const gasChKeySet = new Set(gasCh.map(ge => chKey(ge)));
-        if (chPushable.some(e => !gasChKeySet.has(chKey(e)))) {
+        // 書き戻しの条件は next_visit と同じ（GASに無い、またはGASと内容が違う項目があれば送る）
+        if (_needsPushBack(chPushable, gasCh, chKey)) {
           pushToCloud('consultation_history', chPushable);
         }
       } else if (k === 'ao_records') {
@@ -2083,23 +2083,36 @@ async function _syncFromCloudInner() {
         localStorage.setItem('ao_records', JSON.stringify(arClean));
         // 壊れた項目はpush対象から除外する（ローカルは削除しない）
         const arPushable = _filterForPushBack('ao_records', arClean, _validAoRecordEntry);
-        const gasArKeySet = new Set(gasAr.map(ge => arKey(ge)));
-        if (arPushable.some(e => !gasArKeySet.has(arKey(e)))) {
+        // 書き戻しの条件は next_visit と同じ（GASに無い、またはGASと内容が違う項目があれば送る）
+        if (_needsPushBack(arPushable, gasAr, arKey)) {
           pushToCloud('ao_records', arPushable);
         }
       } else if (k === 'filaria_history') {
-        // filaria_history: scheduledDate単位のunion（和集合）マージ + 安全ガード(cloud が空なら保持)
+        // filaria_history: scheduledDate単位のunion（和集合）マージ。
         // 投与履歴は追記専用（チェックを外しても履歴は消さない・同日重複はalreadyガード済み）のため
-        // LWW比較はせず和集合にする。同じscheduledDateが両側にあればローカル優先（内容は実質等価）。
-        // 削除UIが無いためtombstone照合は不要。
-        const fhIsEmpty = gasVal == null || (Array.isArray(gasVal) && gasVal.length === 0);
-        if (fhIsEmpty) return;
+        // 新旧の比較はせず和集合にする。同じscheduledDateが両側にあればローカル優先（内容は実質等価）。
+        // GASが空でも端末の履歴は消えない（和集合なので）。
         const localFh = _saneEntries('filaria_history(ローカル)', load('filaria_history', []));
         const gasFh = _saneEntries('filaria_history(GAS)', gasVal || []);
         const fhMap = new Map();
         gasFh.forEach(ge => fhMap.set(ge.scheduledDate, ge));
         localFh.forEach(le => fhMap.set(le.scheduledDate, le));
-        localStorage.setItem('filaria_history', JSON.stringify(Array.from(fhMap.values())));
+        const fhMerged = Array.from(fhMap.values());
+        localStorage.setItem('filaria_history', JSON.stringify(fhMerged));
+        // 書き戻し：端末にあってGASに無い予定日があれば、合算した一覧を送る（2026-11-16 追加）。
+        // 以前は書き戻しが無く、他の端末の古い一覧でGASから消された履歴が、GASにも他の端末にも戻らなかった。
+        // ・「内容が違う」だけでは送らない。この一覧の項目には時刻が無く、同じ予定日はどの端末も自分の側を
+        //   優先するので、違いで送ると2台が互いに送り合って終わらなくなる。
+        // ★ 予定日の削除・チェックの取り消しを作るとき（第8弾）：履歴を配列から取り除く方式にしないこと。
+        //   取り除いても、他の端末の合算とこの書き戻しで必ず復活する。体重などと同じく、
+        //   「削除の印」（{ scheduledDate, deleted:true, _ts }）を配列に残し、同じ予定日は _ts の新しい方を
+        //   採用するマージに変え、書き戻しの条件も「内容が違えば」（_needsPushBack）に替えること。
+        //   印も scheduledDate を持つ1項目なので、いまの「GASに無い予定日があれば送る」は印もそのまま運ぶ。
+        const gasFhDates = new Set(gasFh.map(ge => ge.scheduledDate));
+        const fhPushable = fhMerged.filter(e => e && typeof e === 'object' && typeof e.scheduledDate === 'string' && e.scheduledDate !== '');
+        if (fhPushable.some(e => !gasFhDates.has(e.scheduledDate))) {
+          pushToCloud('filaria_history', fhPushable);
+        }
       } else if (ENTRY_MERGE_KEYS[k]) {
         // 体重・血液検査・薬・レシピ：項目単位マージ（削除は「削除の印」で伝わる）
         _mergeEntryListFromCloud(k, gasVal, gasTs, localTs);
