@@ -1274,6 +1274,7 @@ let _btFormDirty = false;      // 血液検査フォームに未保存の入力�
 let _formFollowsToday = true;  // 今日タブのフォームが「今日」を表示している（日付が変わったら追従する）
 let _lastRenderDay = null;     // 最後に画面を描いた日付（日付またぎの検出用）
 const RESYNC_MIN_INTERVAL_MS = 60000; // 受信し直しの最短間隔
+let _filariaHistYearOpen = {}; // フィラリアの投与履歴で、開いている年（描き直しても閉じないように覚えておく）
 let _filariaRowOpen = null;    // フィラリアの予定日の一覧で、開いている回（操作ボタンを出している）
 let _filariaPlanEditN = null;  // 予定日を変更するフォームを開いている回
 let _filariaEditOpen = false;  // フィラリア初回日の編集フォーム表示中（設定は保存まで消さない）
@@ -4266,7 +4267,8 @@ function renderFilaria() {
                min="${currentYear}-01-01" max="${currentYear}-12-31"${isEdit ? ` value="${cfg.firstDoseDate}"` : ''}>
       </div>
       <button class="btn-primary" onclick="saveFilariaFirstDate()">保存する</button>${isEdit ? `
-      <button class="btn-secondary" style="margin-top:6px" onclick="cancelFilariaEdit()">キャンセル</button>` : ''}`;
+      <button class="btn-secondary" style="margin-top:6px" onclick="cancelFilariaEdit()">キャンセル</button>` : ''}
+      <div style="margin-top:14px;border-top:1px solid var(--border);padding-top:12px">${_filariaHistoryHtml([])}</div>`;
     return;
   }
 
@@ -4325,34 +4327,7 @@ function renderFilaria() {
   }).join('');
   const dates = active;
 
-  // 履歴（年ごと折りたたみ）
-  const histByYear = {};
-  hist.forEach(h => {
-    const y = h.scheduledDate.split('-')[0];
-    if (!histByYear[y]) histByYear[y] = [];
-    histByYear[y].push(h);
-  });
-  const histYears = Object.keys(histByYear).sort((a,b) => b - a);
-  const histHtml = histYears.length
-    ? histYears.map(y => {
-        const rows = histByYear[y].sort((a,b) => a.scheduledDate > b.scheduledDate ? 1 : -1).map(h => {
-          const sd = new Date(h.scheduledDate + 'T00:00:00');
-          const at = h.administeredAt ? new Date(h.administeredAt) : null;
-          const atStr = at ? (at.getMonth()+1) + '/' + at.getDate() + ' ' + String(at.getHours()).padStart(2,'0') + ':' + String(at.getMinutes()).padStart(2,'0') : '';
-          return `<div style="font-size:12px;padding:3px 0;display:flex;gap:8px;color:var(--text)">
-            <span style="color:var(--text-light)">${(sd.getMonth()+1)}/${sd.getDate()}</span>
-            <span>${atStr ? '記録：' + atStr : '—'}</span>
-          </div>`;
-        }).join('');
-        return `<details style="margin-top:4px">
-          <summary class="supple-summary supple-section-label" style="font-size:12px;padding:4px 0">
-            <span>${y}年（${histByYear[y].length}回）</span>
-            <span style="font-size:10px;color:var(--text-light)">▼</span>
-          </summary>
-          <div style="margin-top:4px;padding-left:4px">${rows}</div>
-        </details>`;
-      }).join('')
-    : '<div style="font-size:13px;color:var(--text-light);padding:4px 0">まだ投与記録がありません</div>';
+  const histHtml = _filariaHistoryHtml(slots);
 
   el.innerHTML =
     `<div style="margin-bottom:10px">
@@ -4365,10 +4340,57 @@ function renderFilaria() {
       ${datesHtml}
     </div>
     <div style="margin-bottom:14px;border-top:1px solid var(--border);padding-top:12px">
-      <div style="font-size:12px;color:var(--text-light);margin-bottom:4px;font-weight:600">投与履歴</div>
       ${histHtml}
     </div>
     <button class="btn-secondary" onclick="openFilariaEdit()">初回日を変更</button>`;
+}
+
+// 投与履歴（年ごとに折りたたみ）。取り消しの印は出さない・数えない。
+// 各記録に「削除」を付ける（予定日と結びつかない記録も、ここから消せる）。
+// slots：いまの年の予定（結びついている回には「◯回目」を添える）
+function _filariaHistoryHtml(slots) {
+  const hist = getFilariaGiven().filter(h => _isYmd(h.scheduledDate));
+  const title = '<div style="font-size:12px;color:var(--text-light);margin-bottom:4px;font-weight:600">投与履歴</div>';
+  if (!hist.length) return title + '<div style="font-size:13px;color:var(--text-light);padding:4px 0">まだ投与記録がありません</div>';
+  const slotOf = new Map((slots || []).filter(sl => !sl.skip).map(sl => [sl.date, sl.n]));
+  const byYear = {};
+  hist.forEach(h => { const y = h.scheduledDate.slice(0, 4); (byYear[y] = byYear[y] || []).push(h); });
+  return title + Object.keys(byYear).sort((a, b) => b - a).map(y => {
+    const rows = byYear[y].sort((a, b) => a.scheduledDate > b.scheduledDate ? 1 : -1).map(h => {
+      const sd = new Date(h.scheduledDate + 'T00:00:00');
+      const at = h.administeredAt ? new Date(h.administeredAt) : null;
+      const atStr = (at && !isNaN(at.getTime())) ? (at.getMonth()+1) + '/' + at.getDate() + ' ' + String(at.getHours()).padStart(2,'0') + ':' + String(at.getMinutes()).padStart(2,'0') : '';
+      const n = slotOf.get(h.scheduledDate);
+      return `<div style="font-size:12px;padding:5px 0;display:flex;align-items:center;gap:8px;color:var(--text);border-bottom:1px solid var(--border)">
+        <span style="color:var(--text-light);min-width:38px">${(sd.getMonth()+1)}/${sd.getDate()}</span>
+        <span style="flex:1">${atStr ? '記録：' + atStr : '—'}${n ? `<span style="color:var(--text-light)">（${n}回目）</span>` : ''}</span>
+        <button class="btn-supple" style="padding:3px 10px;min-height:24px;font-size:11px;background:#F0EDE8;color:#888780" onclick="deleteFilariaRecord(${_jsq(h.scheduledDate)})">削除</button>
+      </div>`;
+    }).join('');
+    return `<details style="margin-top:4px"${_filariaHistYearOpen[y] ? ' open' : ''} ontoggle="_filariaHistYearOpen[${_jsq(y)}] = this.open">
+      <summary class="supple-summary supple-section-label" style="font-size:12px;padding:4px 0">
+        <span>${escHtml(y)}年（${byYear[y].length}回）</span>
+        <span style="font-size:10px;color:var(--text-light)">▼</span>
+      </summary>
+      <div style="margin-top:4px;padding-left:4px">${rows}</div>
+    </details>`;
+  }).join('');
+}
+// 投与履歴の記録を1件削除する。配列からは取り除かず「取り消しの印」に置き換える（他の端末やGASから復活しない）。
+// 予定日と結びついている記録なら、その回の「投与済み ✓」も外れる（予定日の行で取り消したのと同じ）。
+// 今日の分なら、今日タブのチェックも外す
+function deleteFilariaRecord(dateStr) {
+  if (!_isYmd(dateStr) || !isFilariaGiven(dateStr)) { renderFilaria(); return; }
+  const d = new Date(dateStr + 'T00:00:00');
+  if (!confirm(d.getFullYear() + '年' + (d.getMonth()+1) + '月' + d.getDate() + '日の投与の記録を削除しますか？')) return;
+  _setFilariaGiven(dateStr, false);
+  if (dateStr === todayKey()) {
+    const c = load('chk_' + dateStr, {});
+    if (c['filaria_today']) { _setCheckValue(c, 'filaria_today', false); save('chk_' + dateStr, c); }
+  }
+  _filariaHistYearOpen[dateStr.slice(0, 4)] = true;   // 消したあとも、その年の履歴を開いたままにする
+  _renderFilariaAll();
+  showToast('投与の記録を削除しました');
 }
 
 function saveFilariaFirstDate() {
@@ -4388,8 +4410,16 @@ function saveFilariaFirstDate() {
   // 初回日が変わると予定日がすべて変わるので、その年の「日の変更・削除」は元に戻す
   const plan = getFilariaPlan();
   const hasOverride = plan.some(x => x && x.year === currentYear && (x.skip || _isYmd(x.date)));
+  // すでに投与の記録がある年に初回日を変えると、記録は残るが、新しい予定日と結びつかなくなることがある
+  const yearRecs = (cfg && cfg.year === currentYear && changed) ? getFilariaGiven().filter(h => h.scheduledDate.slice(0, 4) === String(currentYear)).length : 0;
+  if (changed && (hasOverride || yearRecs > 0)) {
+    const msg = '初回投与日を変えると、予定日がすべて組み直されます。'
+      + (hasOverride ? '\nこれまでに行った予定日の変更・削除は元に戻ります。' : '')
+      + (yearRecs > 0 ? '\n今年の投与の記録（' + yearRecs + '件）は投与履歴に残りますが、新しい予定日と日付が合わない記録は「投与済み ✓」に表示されなくなります（不要な記録は投与履歴から削除できます）。' : '')
+      + '\nよろしいですか？';
+    if (!confirm(msg)) return;
+  }
   if (changed && hasOverride) {
-    if (!confirm('初回投与日を変えると、予定日がすべて組み直されます。\nこれまでに行った予定日の変更・削除は元に戻ります。よろしいですか？')) return;
     const now = Date.now();
     setFilariaPlan(plan.map(x => (x && x.year === currentYear && (x.skip || _isYmd(x.date))) ? Object.assign({}, x, { date: '', skip: false, _ts: now }) : x));
   }
