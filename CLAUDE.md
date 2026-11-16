@@ -411,7 +411,6 @@ GitHub Pagesで公開、GASでデータ同期。Last-Write-Wins方式の双方�
 - 起動時にpushが走りうる経路は4つ：
   - 経路①：migrateSupplements()。移行が発生したときのみ setSupple→save→pushToCloud
   - 経路②：initConsultationKeys()。consultation_summary / consultation_history キー不存在の初回のみ
-    （2026-07-06追加の seedLearningCategories() も同型：learning_categories キー不存在の初回のみ）
   - 経路③：renderAll内の setBloodTests / setNotes。blood_tests / health_notes キー不存在の初回のみ
     ※ 経路②③は 2026-11-15 に廃止（初期化を直接保存に変更し、送信しなくなった。
       「起動時の初期化は save() を使わない」セクション参照）
@@ -970,6 +969,38 @@ GitHub Pagesで公開、GASでデータ同期。Last-Write-Wins方式の双方�
 - 修正後のGASで **deleted_ids の削除伝播（PC削除→他端末反映）が正常動作することを実証**。
 - recipes は別途ピンポイント送信（本体+_tsをawait直列で明示送信）でシートを正へ復旧
   （経緯は落とし穴15・16参照）。
+
+## 学びメモの独立と「自分のキーの一覧」方式（2026-11-16 対応済み）
+- **学びメモは別アプリになった**：「あおの学びメモ」（リポジトリ `ao-manabi-memo`／
+  https://reirapooh19104-design.github.io/ao-manabi-memo/ ／スプレッドシート「あお学びメモAP」と専用のGAS）。
+  このアプリからタブ・画面・同期・書き出し/読み込みを外し、今日タブの一番下にリンクを1つ置いた。
+  このファイルの古い記述に出てくる `learning_memos` / `learning_categories` / `seedLearningCategories` は、もう存在しない。
+  - GASコードは変更なし（v9 のまま）。スプレッドシート「あお健康管理AP」に残った
+    `learning_memos` / `learning_categories` / `_ts_learning_memos` / `_ts_learning_categories` の行は
+    受信しても無視する（消すなら A列のキー名の完全一致で手作業。消さなくても害は無い）。
+  - 端末に残っていた学びメモのキーは起動時に消す（`LEGACY_KEYS`）。
+    `deleted_ids` の中の区分名 `learning_memos` は残るが害は無い（GASは削除記録を減らせない）。
+- **同じ住所のアプリは保存場所（localStorage・約5MB）を共有している**。
+  `reirapooh19104-design.github.io` の下に置いたアプリ同士は、互いのデータが見える・消せる。
+  そのため、このアプリは**一覧に載っているキーだけ**を扱う（index.html「このアプリが持つ保存キーの一覧」）：
+  - `SYNC_KEYS`＋`SYNC_KEY_PREFIXES`（`chk_`・`day_memo_`）：全データGAS同期で送る／受信で受け取る。
+  - それに `_ts_<同期キー>` と `LOCAL_KEYS`（端末だけの設定）を足したもの（`_isOwnKey`）：
+    自動バックアップに入れる／「バックアップから復元」で消して戻す。
+  - 一覧に無いキーは、送らない・受け取らない・バックアップしない・復元で消さない・戻さない。
+    以前は「`custom_` 以外は全部」だったため、ほかのアプリのデータをこのアプリのスプレッドシートへ
+    送る・復元で消す、という作りだった（学びメモは `custom_manabi_` で始まるので送信だけは免れていた）。
+  - ★ **新しい保存キーを作ったら、必ず一覧に足すこと**（足し忘れると同期もバックアップもされない）。
+    同期するキーなら `EXPORT_FIELDS`・`exportData`・`_validateImportData`・`importData` にも足す
+    （通しテストが「同期するキーは全部書き出しに入る」を確かめている）。
+  - ★ 一覧の判定を「〜以外は全部」の形に戻さないこと。
+  - ほかのアプリを同じ住所に置くときは、キーの前置きがこのアプリの一覧（特に `chk_`・`day_memo_`・`_ts_`）と
+    ぶつからないことを確かめる。
+- **書き出しは ver 6**：ウルソの設定（`ursoSetting`）を追加。同期はされていたのに書き出しに入っていなかった。
+  ver 5 以前のファイルを読み込んだときは、ウルソの設定は今のまま。古いファイルの学びメモは取り込まない。
+- 確認方法：過去の全バージョンのコードで使われたキー名の洗い出し＋最新の書き出しの実データで、
+  「変更前と変更後で送るキーが同じ（257キー）」を通しテストで確認（`_worknotes/tests/e2e_test.js`）。
+- 気づき（未対応）：`renderAll` は、食事日誌にあって `day_memo_<日付>` が無い日の日別メモを `save()` で作る
+  （送信が出る）。日別メモだけが欠けた端末という珍しい状況でしか起きないため、そのままにしてある。
 
 ## 運用ルール（恒久）
 - 各セッションで、コードや同期の挙動について新たに確定した知見・落とし穴・

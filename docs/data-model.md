@@ -49,30 +49,29 @@ ao-health-management-sp のデータ構造・キー名・保存先・同期方�
 - 削除の同期は tombstone（`deleted_ids`）で10カテゴリ実装済み：
   `custom_meal_checks` / `custom_health_checks` / `health_notes` / `supple` /
   `next_visit` / `consultation_summary` / `consultation_history` / `ao_records` /
-  `learning_memos` / `learning_categories`（learning_categoriesは削除UIなし・予防適用）。
-  push back（GASへの書き戻し）を持つキーは5つ（next_visit/consultation_summary/
-  consultation_history/ao_records ＋ 2026-07-06追加の learning_memos）。
+  `learning_memos` / `learning_categories`（この2つは 2026-11-16 に学びメモが別アプリへ独立して不使用。
+  `deleted_ids` の中に区分名だけ残っているが害は無い）。
+  push back（GASへの書き戻し）を持つキーは next_visit/consultation_summary/
+  consultation_history/ao_records ほか（CLAUDE.md「削除の伝え方と書き戻しの拡張」参照）。
   うち従来4キーは2026-06-19にtombstone適用漏れを修正済み（history.md参照）。
   `med_list`（薬管理）・`recipes` は対象外（med_listは`status:'ended'`の論理削除で要素を消さない、
   recipesはそもそもtombstone未実装）。
 
-## 学びメモ（learning_memos / learning_categories）（2026-07-06 追加）
-- `learning_memos`：学びメモ本体の配列。1件＝
-  `{ id:'lm_<ts>_<乱数>', date:'YYYY-MM-DD', category:<カテゴリid>, title, course,
-     format('Zoom'|'対面'|'動画'|'その他'), content, reaction, next, link,
-     mastery(1〜4: 習いたて/練習中/できた/定着した), _ts }`
-  テキスト系は任意（未入力はUI上ラベルごと非表示）。骨格必須は id / date / _ts
-  （push-back整合チェック `_validLearningMemoEntry` の判定対象）。
-- `learning_categories`：ユーザー定義カテゴリの配列。1件＝
-  `{ id, label, fill(淡い塗り色), solid(濃色), _ts, order }`
-  初期3件は固定id（`lcat_kintore` / `lcat_massage` / `lcat_praise`）でキー不存在の
-  初回のみシード（固定idなので複数端末が独立にシードしても同期で重複しない）。
-  追加カテゴリは `lcat_<ts>_<乱数>`・未使用色をLM_PALETTEから自動割当。
-- 同期方式：learning_memos＝ao_records同型（エントリ単位LWWマージ＋tombstone＋push-back）、
-  learning_categories＝custom_meal_checks同型（id単位LWWマージ＋tombstone・push-backなし）。
-  両方とも受信nullガード（_saneEntries）適用・isEmpty early-returnなし（B1方針）。
-- エクスポート：ver 5 から `learningMemos` / `learningCategories` を含む。
-  インポートはid単位unionマージ（同idは_tsの新しい方を採用）。
+## 学びメモ（2026-11-16 に別アプリへ独立）
+- 学びメモは別アプリ「あおの学びメモ」（リポジトリ `ao-manabi-memo`・別のスプレッドシートとGAS）に移した。
+  このアプリには `learning_memos` / `learning_categories` はもう無い（端末に残っていた分は起動時に消す）。
+- 新アプリのキーは `custom_manabi_` で始まる。同じ住所で保存場所を共有しているが、このアプリは
+  「自分のキーの一覧」に載っているキーしか扱わないので触れない（下記）。
+
+## このアプリの保存キーの一覧（2026-11-16〜・index.html の SYNC_KEYS ほか）
+- GASと同期するキー（`SYNC_KEYS`）：diary / health_notes / blood_tests / bodyWeights / supple / med_list /
+  recipes / next_visit / consultation_summary / consultation_history / ao_records / custom_meal_checks /
+  custom_health_checks / urso_setting / filaria_settings / filaria_history / deleted_ids / ao_records_migrated_v2
+- 日付ごとに増える同期キー（`SYNC_KEY_PREFIXES`）：`chk_<日付>` / `day_memo_<日付>`
+- 端末だけのキー（`LOCAL_KEYS`）：gas_url / sync_token / entry_merge_ready / view_month_diary /
+  view_month_notes / selected_recipe_id / maintenance_mode
+- 各同期キーの時刻は `_ts_<キー>`、自動バックアップは `autobackup_<名前>`。
+- 書き出しファイルでの項目名は `EXPORT_FIELDS`（ver 6 から `ursoSetting` を追加）。
 
 ## サプリの status フィールド
 - サプリには `status: 'stopped'`（中止）という値がある。
