@@ -2329,8 +2329,14 @@ const EXPORT_FIELDS = {
 };
 // この端末だけで使うキー（GASへは送らない。バックアップ・復元の対象にはなる）
 const LOCAL_KEYS = ['gas_url', 'sync_token', 'entry_merge_ready', 'view_month_diary', 'view_month_notes', 'selected_recipe_id', 'maintenance_mode'];
-// もう使っていないキー（起動時に端末から消す。学びメモは 2026-11-16 に別アプリへ独立）
-const LEGACY_KEYS = ['last_backup_date', 'ao_records_migrated_v1', 'learning_memos', 'learning_categories', '_ts_learning_memos', '_ts_learning_categories'];
+// もう使っていないキー（起動時に端末から消す。決まった名前だけ。「一覧に無いキーを消す」処理にはしないこと）
+// ・学びメモは 2026-11-16 に別アプリへ独立
+// ・端末だけのキーの時刻（_ts_view_month_diary など）は、昔の「全データGAS同期」が送ったキーすべてに
+//   時刻を付けていた名残り。どこからも読まれていない
+const LEGACY_KEYS = ['last_backup_date', 'ao_records_migrated_v1', 'learning_memos', 'learning_categories',
+  '_ts_learning_memos', '_ts_learning_categories', '_ts_last_backup_date', '_ts_ao_records_migrated_v1',
+  '_ts_gas_url', '_ts_sync_token', '_ts_entry_merge_ready', '_ts_view_month_diary', '_ts_view_month_notes',
+  '_ts_selected_recipe_id', '_ts_maintenance_mode'];
 function _isSyncKey(k) {
   return typeof k === 'string' && (SYNC_KEYS.includes(k) || SYNC_KEY_PREFIXES.some(p => k.startsWith(p)));
 }
