@@ -60,10 +60,13 @@ body {
   display: flex;
   overflow-x: auto;
   border-bottom: 1px solid var(--border);
-  position: sticky;
-  top: 71px;
-  z-index: 99;
 }
+/* タブの列は横に続く。続きがある側の端に、薄い帯と「›」「‹」を重ねて知らせる（_updateTabsHint が出し分ける） */
+.tabs-wrap { position: sticky; top: 71px; z-index: 99; }
+.tabs-hint { position: absolute; top: 0; bottom: 1px; width: 34px; display: none; align-items: center; pointer-events: none; color: #8a8a8a; font-size: 20px; font-weight: 700; line-height: 1; }
+.tabs-hint.right { right: 0; justify-content: flex-end; padding-right: 4px; background: linear-gradient(to right, rgba(255,255,255,0), var(--card) 55%); }
+.tabs-hint.left { left: 0; justify-content: flex-start; padding-left: 4px; background: linear-gradient(to left, rgba(255,255,255,0), var(--card) 55%); }
+.tabs-wrap.more-right .tabs-hint.right, .tabs-wrap.more-left .tabs-hint.left { display: flex; }
 .tabs::-webkit-scrollbar { display: none; }
 .tab {
   flex-shrink: 0;
@@ -355,7 +358,7 @@ body {
 .today-toggle-track.on { background:var(--green); }
 .today-toggle-thumb { position:absolute; top:2px; left:2px; width:13px; height:13px; background:#FFF; border-radius:50%; transition:left 0.15s; box-shadow:0 1px 2px rgba(0,0,0,0.15); }
 .today-toggle-track.on .today-toggle-thumb { left:15px; }
-.today-toggle-lbl { font-size:10px; color:var(--text-light); white-space:nowrap; }
+.today-toggle-lbl { font-size:12px; color:var(--text-light); white-space:nowrap; }
 .med-status-badge { font-size:11px; padding:2px 8px; border-radius:20px; font-weight:600; }
 .med-status-badge.active { background:var(--green-light); color:var(--green); }
 .med-status-badge.pause  { background:#FFF8E7; color:#C07A00; }
@@ -493,7 +496,8 @@ body {
   ⚠️ メンテナンスモード中：起動時の自動同期を停止しています
 </div>
 
-<nav class="tabs">
+<div class="tabs-wrap" id="tabs-wrap">
+<nav class="tabs" id="tabs-nav" onscroll="_updateTabsHint()">
   <div class="tab active" onclick="switchTab('today')">今日</div>
   <div class="tab"        onclick="switchTab('notes')">健康ノート</div>
   <div class="tab"        onclick="switchTab('weight')">体重グラフ</div>
@@ -504,6 +508,9 @@ body {
   <div class="tab"        onclick="switchTab('blood')">血液検査</div>
   <div class="tab"        onclick="switchTab('gpt')">GPT推移</div>
 </nav>
+<div class="tabs-hint left" aria-hidden="true">‹</div>
+<div class="tabs-hint right" aria-hidden="true">›</div>
+</div>
 
 <div class="content">
 
@@ -1231,7 +1238,6 @@ let currentNotesMonth = (() => { const v = localStorage.getItem('view_month_note
 let currentDiaryMonth = (() => { const v = localStorage.getItem('view_month_diary'); return v === 'null' ? null : (v || _todayYM()); })();
 let currentCalMonth   = _todayYM();
 let _suppleStoppedOpen = false;
-let _suppleFormOpenId  = null;
 let _suppleEditOpenId  = null;
 let _addFormType       = 'supple';
 let _medEditOpenId     = null;
@@ -1246,8 +1252,8 @@ let _healthDragSrcIdx  = null;
 let _csEditOpenId        = null;
 let _csResultOpenId      = null;
 let _csExpandedId        = null;
-let _nvEditOpenIdx       = null;
-let _nvExpandedIdx       = null;
+let _nvEditOpenIdx       = null;   // 編集中の項目（名前は Idx のままだが、中身は番号ではなく項目のキー＝_nvItemKey）
+let _nvExpandedIdx       = null;   // 開いている項目（同上。番号で持つと、同期で並びが変わったとき別の項目に当たる）
 let _csAggPending        = null;
 let _consultHistoryOpen  = false;
 let _noteEditDate        = null;
@@ -1703,7 +1709,7 @@ async function syncFromCloud() {
 function _isUserBusy() {
   if (_importing) return true;
   if (_noteEditDate !== null || _nvEditOpenIdx !== null || _csEditOpenId !== null || _csResultOpenId !== null) return true;
-  if (_suppleEditOpenId !== null || _suppleFormOpenId !== null || _medEditOpenId !== null) return true;
+  if (_suppleEditOpenId !== null || _medEditOpenId !== null) return true;
   if (_mealEditMode || _healthEditMode || _aoRecordFormOpen || _aoRecordEditOpenId !== null) return true;
   if (_filariaEditOpen || _filariaPlanEditN !== null || _csAggPending !== null) return true;
   if (window._editData) return true; // レシピ編集中
@@ -2762,10 +2768,11 @@ const ursoLabel = s => s === 'drink' ? '飲む' : '休む';
 // ============================================================
 function calcAge() {
   const now = new Date();
-  let y = now.getFullYear() - DOG_BIRTHDAY.getFullYear();
-  let m = now.getMonth() - DOG_BIRTHDAY.getMonth();
-  if (m < 0) { y--; m += 12; }
-  return y + '歳' + m + 'ヶ月';
+  // 年・月の差を出し、今月の誕生日（日）がまだ来ていなければ1か月引く
+  let months = (now.getFullYear() - DOG_BIRTHDAY.getFullYear()) * 12 + (now.getMonth() - DOG_BIRTHDAY.getMonth());
+  if (now.getDate() < DOG_BIRTHDAY.getDate()) months--;
+  if (months < 0) months = 0;
+  return Math.floor(months / 12) + '歳' + (months % 12) + 'ヶ月';
 }
 
 // ============================================================
@@ -3449,8 +3456,8 @@ function renderNotes() {
     const isEditOpen = _noteEditDate === n.date;
     const btns = currentNotesMonth
       ? `<div style="display:flex;gap:4px">
-           <button class="nv-del" style="min-width:30px;min-height:30px;font-size:15px" onclick="editHealthNote(${_jsq(safeDate)})" title="編集">✏️</button>
-           <button class="nv-del" style="min-width:30px;min-height:30px;font-size:16px" onclick="deleteHealthNote(${_jsq(safeDate)})" title="削除">✕</button>
+           <button class="nv-del" style="min-width:40px;min-height:40px;font-size:16px;margin-right:10px" onclick="editHealthNote(${_jsq(safeDate)})" title="編集">✏️</button>
+           <button class="nv-del" style="min-width:40px;min-height:40px;font-size:17px" onclick="deleteHealthNote(${_jsq(safeDate)})" title="削除">✕</button>
          </div>`
       : '';
     const header = `<div style="display:flex;align-items:center;justify-content:space-between">
@@ -3620,9 +3627,8 @@ function migrateSupplements() {
     if (!needsStatus && !needsId && !needsTs) return s;
     const entry = { ...s };
     if (needsStatus) {
-      entry.status = 'active'; entry.stoppedAt = ''; entry.memos = [];
-      if (s.memo) { entry.memos = [{ date: '', text: s.memo }]; delete entry.memo; }
-      addedFields.add('status'); addedFields.add('stoppedAt'); addedFields.add('memos');
+      entry.status = 'active'; entry.stoppedAt = '';
+      addedFields.add('status'); addedFields.add('stoppedAt');
     }
     if (needsId)  { entry.id  = 'supple_legacy_' + s.name; addedFields.add('id'); }
     // 時刻が無い項目（＝内蔵の初期サプリ）は 0 を入れる（理由は migrateCheckItems と同じ）
@@ -3631,7 +3637,11 @@ function migrateSupplements() {
     return entry;
   });
   if (count > 0) {
-    setSupple(migrated);
+    // setSupple（save）は使わず、端末内だけに保存する（時刻を刻まない・送信しない）。
+    // 起動時と同期のあとに走る処理なので、save() だと「いま変えた」時刻つきの一覧がGASへ送られ、
+    // 他の端末の変更を古い内容で上書きしうる（「起動時の初期化は save() を使わない」と同じ鉄則）。
+    // 足す内容は項目から決まる（id は名前から作る）ので、どの端末でも同じ結果になる
+    localStorage.setItem('supple', JSON.stringify(migrated));
     console.log('[migrateSupplements] migrated ' + count + ' entries (added: ' + Array.from(addedFields).join(', ') + ')');
   }
 }
@@ -3671,6 +3681,17 @@ function initConsultationKeys() {
   if (localStorage.getItem('consultation_history') === null) localStorage.setItem('consultation_history', '[]');
 }
 
+// サプリのメモ（1つ）。以前の「メモ履歴」（memos）にだけ入っているメモがあれば、それをつなげて見せる
+// （追加画面のメモが memos に入り、どこにも表示されなかった時期のデータを救う）
+function _suppleMemoText(s) {
+  if (s && typeof s.memo === 'string' && s.memo !== '') return s.memo;
+  return (s && Array.isArray(s.memos)) ? s.memos.map(m => (m && m.text) || '').filter(t => t !== '').join('\n') : '';
+}
+// 中止・再開の記録（history：[{ stoppedAt, resumedAt }]）を1行ずつの文字にする
+function _suppleHistoryLines(s) {
+  return (s && Array.isArray(s.history) ? s.history : []).filter(h => h && h.stoppedAt)
+    .map(h => h.stoppedAt + ' 停止' + (h.resumedAt ? ' → ' + h.resumedAt + ' 再開' : ''));
+}
 function renderSupple() {
   const list = getSupple();
   const el = document.getElementById('supple-list');
@@ -3690,10 +3711,12 @@ function renderSupple() {
       : `<button class="btn-supple" onclick="resumeSupple(${_jsq(sid)})">再開</button>`;
 
     const isEditOpen = _suppleEditOpenId === s.id;
-    const memoText = s.memo || '';
-    const memoLine = memoText
-      ? `<div style="font-size:12px;color:var(--text-light);margin-top:3px">${escHtml(memoText)}</div>`
-      : `<div style="font-size:12px;color:#ccc;margin-top:3px">メモなし</div>`;
+    const memoText = _suppleMemoText(s);
+    const histLines = _suppleHistoryLines(s);
+    const memoLine = (memoText
+      ? `<div style="font-size:12px;color:var(--text-light);margin-top:3px;white-space:pre-wrap">${escHtml(memoText)}</div>`
+      : `<div style="font-size:12px;color:#ccc;margin-top:3px">メモなし</div>`)
+      + (histLines.length ? `<div style="font-size:11px;color:var(--text-light);margin-top:4px">停止・再開の記録：${histLines.map(escHtml).join(' ／ ')}</div>` : '');
 
     const editFormHtml = isEditOpen
       ? `<div style="margin-bottom:8px;padding:10px;background:#FAF8F6;border-radius:8px;border:1px solid #EDE9E4">
@@ -3779,47 +3802,9 @@ function renderSupple() {
       if (ne) ne.value = et.name   || '';
       if (de) de.value = et.detail || '';
       if (ge) ge.value = et.goal   || '';
-      if (me) me.value = et.memo   || '';
+      if (me) me.value = _suppleMemoText(et);
     }
   }
-}
-
-function toggleSuppleMemoForm(id) {
-  _suppleEditOpenId = null;
-  _suppleFormOpenId = (_suppleFormOpenId === id) ? null : id;
-  renderSupple();
-}
-
-function saveSuppleMemo() {
-  if (!_suppleFormOpenId) return;
-  const text = (document.getElementById('supple-memo-text')?.value || '').trim();
-  if (!text) { showToast('テキストを入力してください'); return; }
-  const date = document.getElementById('supple-memo-date')?.value || '';
-  const list = getSupple();
-  const s = list.find(e => e.id === _suppleFormOpenId);
-  if (!s) return;
-  if (!s.memos) s.memos = [];
-  s.memos.push({ date, text });
-  s._ts = Date.now();
-  _suppleFormOpenId = null;
-  setSupple(list);
-  renderSupple();
-}
-
-function cancelSuppleMemo() {
-  _suppleFormOpenId = null;
-  renderSupple();
-}
-
-function deleteSuppleMemo(id, memoIdx) {
-  if (!confirm('このメモを削除しますか?')) return;
-  const list = getSupple();
-  const s = list.find(e => e.id === id);
-  if (!s || !s.memos) return;
-  s.memos.splice(memoIdx, 1);
-  s._ts = Date.now();
-  setSupple(list);
-  renderSupple();
 }
 
 function stopSupple(id) {
@@ -3828,6 +3813,9 @@ function stopSupple(id) {
   const s = list.find(e => e.id === id);
   if (!s) return;
   s.status = 'stopped'; s.stoppedAt = todayKey(); s._ts = Date.now();
+  // いつ止めて、いつ再開したかを残す（再開すると stoppedAt は消えるため、別に記録しておく）
+  if (!Array.isArray(s.history)) s.history = [];
+  s.history.push({ stoppedAt: s.stoppedAt, resumedAt: '' });
   setSupple(list);
   renderSupple();
 }
@@ -3837,13 +3825,17 @@ function resumeSupple(id) {
   const list = getSupple();
   const s = list.find(e => e.id === id);
   if (!s) return;
+  // 再開した日を記録に残す（以前のデータで記録が無いときは、止めた日から作る）
+  if (!Array.isArray(s.history)) s.history = [];
+  const lastHist = s.history[s.history.length - 1];
+  if (lastHist && lastHist.stoppedAt && !lastHist.resumedAt) lastHist.resumedAt = todayKey();
+  else if (s.stoppedAt) s.history.push({ stoppedAt: s.stoppedAt, resumedAt: todayKey() });
   s.status = 'active'; s.stoppedAt = ''; s._ts = Date.now();
   setSupple(list);
   renderSupple();
 }
 
 function editSupple(id) {
-  _suppleFormOpenId = null;
   _suppleEditOpenId = (_suppleEditOpenId === id) ? null : id;
   renderSupple();
 }
@@ -3859,6 +3851,7 @@ function saveSuppleEdit() {
   const s = list.find(e => e.id === _suppleEditOpenId);
   if (!s) return;
   s.name = name; s.detail = detail; s.goal = goal; s.memo = memo; s._ts = Date.now();
+  if (Array.isArray(s.memos)) s.memos = [];   // メモは memo の1つに統一（以前の履歴用の欄は空にする）
   _suppleEditOpenId = null;
   setSupple(list);
   renderSupple();
@@ -3899,8 +3892,9 @@ function addSupple() {
   const memoText = (document.getElementById('supple-add-memo')?.value || '').trim();
   if (!name) { showToast('サプリ名を入力してください'); return; }
   const list = getSupple();
-  const memos = memoText ? [{ date: todayKey(), text: memoText }] : [];
-  list.push({ id: 'supple_' + Date.now() + '_' + Math.random().toString(36).slice(2,8), name, detail, goal, status: 'active', stoppedAt: '', memos, show_in_today: false, _ts: Date.now() });
+  // メモは、カードに表示され編集画面でも直せる memo（1つ）に入れる
+  // （以前は履歴用の memos に入れていたため、追加画面で書いたメモがどこにも表示されなかった）
+  list.push({ id: 'supple_' + Date.now() + '_' + Math.random().toString(36).slice(2,8), name, detail, goal, memo: memoText, status: 'active', stoppedAt: '', show_in_today: false, _ts: Date.now() });
   setSupple(list);
   renderSupple();
   document.getElementById('supple-name').value   = '';
@@ -3923,10 +3917,12 @@ function renderTodayMedSuppleChecks() {
   const suppleItems = getSupple().filter(s => s.show_in_today && s.status !== 'stopped');
 
   // フィラリア：投与予定日のみチェック項目追加
-  const today = new Date(); today.setHours(0,0,0,0);
-  const todayStr = todayKey();
-  const mon = today.getMonth() + 1;
-  const isFilariaDay = getFilariaScheduledDates(today.getFullYear()).has(todayStr);   // 予定日なら、期間（6〜11月）の外でも出す
+  // 「表示中の日付」が予定日のときに出す（今日が予定日かどうかではない）。
+  // 以前は今日で判定していたため、過去の日付を表示したままチェックすると、チェックは表示中の日に、
+  // 履歴は今日の日付に入っていた。先の日付には出さない（まだ投与済みにできないため）
+  const formDate = _currentFormDate;
+  const isFilariaDay = _isYmd(formDate) && formDate <= todayKey()
+    && getFilariaScheduledDates(Number(formDate.slice(0, 4))).has(formDate);   // 予定日なら、期間（6〜11月）の外でも出す
 
   _dynamicCheckIds = [
     ...medItems.map(m => m.id),
@@ -3934,7 +3930,7 @@ function renderTodayMedSuppleChecks() {
     ...(isFilariaDay ? ['filaria_today'] : [])
   ];
 
-  const { todayIs: ursoTs } = ursoStatus(new Date(_currentFormDate));
+  const { todayIs: ursoTs } = ursoStatus(new Date(_currentFormDate + 'T00:00:00'));
 
   const medHtml = medItems.map(m => {
     let noteText = '';
@@ -3970,19 +3966,29 @@ function renderTodayMedSuppleChecks() {
 }
 
 function toggleFialariaCheck() {
+  // チェックも履歴も「表示中の日付」に入れる
+  const dateStr = _currentFormDate;
+  if (!_isYmd(dateStr) || dateStr > todayKey()) { showToast('先の日付は、まだ投与済みにできません'); return; }
   const c = getChecks();
-  const todayStr = todayKey();
   const newVal = !c['filaria_today'];
   _setCheckValue(c, 'filaria_today', newVal);
   setChecks(c);
   // チェックを付けたら履歴に記録し、外したら履歴も取り消す（取り消しの印を残す）
-  if (newVal !== isFilariaGiven(todayStr)) {
-    _setFilariaGiven(todayStr, newVal);
+  if (newVal !== isFilariaGiven(dateStr)) {
+    _setFilariaGiven(dateStr, newVal);
     renderFilaria();
   }
   renderChecks();
   renderFilariaBanner();
   updateMetrics();
+}
+// 予定日の一覧・投与履歴から記録を変えたとき、その日の今日タブのチェック（filaria_today）も同じ状態にそろえる
+function _syncFilariaCheck(dateStr, given) {
+  const c = load('chk_' + dateStr, {});
+  if (!!c['filaria_today'] === given) return;
+  if (!given && !('filaria_today' in c)) return;
+  _setCheckValue(c, 'filaria_today', given);
+  save('chk_' + dateStr, c);
 }
 
 function renderMed() {
@@ -4384,10 +4390,7 @@ function deleteFilariaRecord(dateStr) {
   const d = new Date(dateStr + 'T00:00:00');
   if (!confirm(d.getFullYear() + '年' + (d.getMonth()+1) + '月' + d.getDate() + '日の投与の記録を削除しますか？')) return;
   _setFilariaGiven(dateStr, false);
-  if (dateStr === todayKey()) {
-    const c = load('chk_' + dateStr, {});
-    if (c['filaria_today']) { _setCheckValue(c, 'filaria_today', false); save('chk_' + dateStr, c); }
-  }
+  _syncFilariaCheck(dateStr, false);
   _filariaHistYearOpen[dateStr.slice(0, 4)] = true;   // 消したあとも、その年の履歴を開いたままにする
   _renderFilariaAll();
   showToast('投与の記録を削除しました');
@@ -4520,10 +4523,7 @@ function setFilariaGivenFromList(dateStr, given) {
   if (given && dateStr > todayKey()) { showToast('先の予定日は、まだ投与済みにできません'); return; }
   if (!given && !confirm('この回の「投与済み」を取り消しますか？')) return;
   if (isFilariaGiven(dateStr) !== given) _setFilariaGiven(dateStr, given);
-  if (dateStr === todayKey()) {
-    const c = load('chk_' + dateStr, {});
-    if (!!c['filaria_today'] !== given) { _setCheckValue(c, 'filaria_today', given); save('chk_' + dateStr, c); }
-  }
+  _syncFilariaCheck(dateStr, given);
   _filariaRowOpen = null;
   _renderFilariaAll();
   showToast(given ? '投与済みにしました' : '投与済みを取り消しました');
@@ -4564,40 +4564,49 @@ function renderNextVisitItems() {
     list.innerHTML = '<div style="color:var(--text-light);font-size:14px;padding:8px 0">項目はありません</div>';
     return;
   }
+  if (_nvExpandedIdx !== null && !items.some(it => _nvItemKey(it) === _nvExpandedIdx)) _nvExpandedIdx = null;
+  if (_nvEditOpenIdx !== null && !items.some(it => _nvItemKey(it) === _nvEditOpenIdx)) _nvEditOpenIdx = null;
   list.innerHTML = items.map((item, idx) => {
     const text = typeof item === 'string' ? item : item.text;
-    const isExp = _nvExpandedIdx === idx;
-    if (_nvEditOpenIdx === idx) {
+    const key = _nvItemKey(item);
+    const isExp = _nvExpandedIdx === key;
+    if (_nvEditOpenIdx === key) {
       return `<div class="nv-item expanded">
         <div class="nv-num">${idx+1}.</div>
         <div class="cs-item-body" onclick="event.stopPropagation()">
           <textarea class="nv-input" id="nv-edit-input" style="min-height:52px"></textarea>
           <div class="cs-edit-row">
-            <button class="nv-add-btn" style="flex:1;margin-top:0" onclick="saveNextVisitItemEdit(${idx})">保存</button>
+            <button class="nv-add-btn" style="flex:1;margin-top:0" onclick="saveNextVisitItemEdit(${_jsq(key)})">保存</button>
             <button class="nv-add-btn" style="flex:1;margin-top:0;background:#F0EDE8;color:#888780" onclick="cancelNextVisitItemEdit()">キャンセル</button>
           </div>
         </div>
       </div>`;
     }
-    return `<div class="nv-item${isExp ? ' expanded' : ''}" onclick="toggleNvExpand(${idx})">
+    return `<div class="nv-item${isExp ? ' expanded' : ''}" onclick="toggleNvExpand(${_jsq(key)})">
       <div class="nv-num">${idx+1}.</div>
       <div class="cs-item-body">
         <div class="nv-text">${escHtml(text)}</div>
         ${isExp ? `<div style="display:flex;gap:6px;margin-top:6px" onclick="event.stopPropagation()">
-          <button class="btn-supple" style="font-size:12px;padding:4px 12px" onclick="openNextVisitItemEdit(${idx})">編集</button>
-          <button class="btn-supple" style="font-size:12px;padding:4px 12px;background:#F0EDE8;color:#888780" onclick="deleteNextVisitItem(${idx})">削除</button>
+          <button class="btn-supple" style="font-size:12px;padding:4px 12px" onclick="openNextVisitItemEdit(${_jsq(key)})">編集</button>
+          <button class="btn-supple" style="font-size:12px;padding:4px 12px;background:#F0EDE8;color:#888780" onclick="deleteNextVisitItem(${_jsq(key)})">削除</button>
         </div>` : ''}
       </div>
     </div>`;
   }).join('');
   if (_nvEditOpenIdx !== null) {
     const ta = document.getElementById('nv-edit-input');
-    const editItem = items[_nvEditOpenIdx];
+    const editItem = items.find(it => _nvItemKey(it) === _nvEditOpenIdx);
     if (ta && editItem !== undefined) {
       ta.value = typeof editItem === 'string' ? editItem : (editItem.text || '');
       ta.focus();
     }
   }
+}
+// 「次回来院時に伝えること」の項目を指すキー（IDがあればID。古い文字列だけの項目は本文）。
+// 編集・削除は、番号ではなくこのキーで項目を探す（同期で並びが変わっても、別の項目に当たらない）
+function _nvItemKey(item) {
+  if (typeof item === 'string') return 'text:' + item;
+  return (item && item.id) ? ('id:' + item.id) : ('text:' + ((item && item.text) || ''));
 }
 function addNextVisitItem() {
   const input = document.getElementById('nv-input');
@@ -4611,12 +4620,13 @@ function addNextVisitItem() {
   input.value = '';
   showToast('追加しました');
 }
-function deleteNextVisitItem(idx) {
+function deleteNextVisitItem(key) {
   const items = getNextVisitItems();
+  const idx = items.findIndex(it => _nvItemKey(it) === key);
   const item = items[idx];
-  if (!item) return;
+  if (!item) { showToast('この項目は、別の端末で削除または変更されています'); _nvExpandedIdx = null; _nvEditOpenIdx = null; renderNextVisitItems(); return; }
   const text = typeof item === 'string' ? item : item.text;
-  if (!confirm('「' + text.slice(0, 20) + '」を削除しますか?')) return;
+  if (!confirm('「' + String(text || '').slice(0, 20) + '」を削除しますか?')) return;
   const id = typeof item === 'object' ? item.id : null;
   items.splice(idx, 1);
   if (id) addDeletedId('next_visit', id);
@@ -4625,22 +4635,23 @@ function deleteNextVisitItem(idx) {
   _nvEditOpenIdx = null;
   renderNextVisitItems();
 }
-function toggleNvExpand(idx) {
-  _nvExpandedIdx = (_nvExpandedIdx === idx) ? null : idx;
-  if (_nvExpandedIdx !== idx) _nvEditOpenIdx = null;
+function toggleNvExpand(key) {
+  _nvExpandedIdx = (_nvExpandedIdx === key) ? null : key;
+  if (_nvExpandedIdx !== key) _nvEditOpenIdx = null;
   renderNextVisitItems();
 }
-function openNextVisitItemEdit(idx) {
-  _nvExpandedIdx = idx;
-  _nvEditOpenIdx = idx;
+function openNextVisitItemEdit(key) {
+  _nvExpandedIdx = key;
+  _nvEditOpenIdx = key;
   renderNextVisitItems();
 }
-function saveNextVisitItemEdit(idx) {
+function saveNextVisitItemEdit(key) {
   const ta = document.getElementById('nv-edit-input');
   const newText = ta ? ta.value.trim() : '';
   if (!newText) { showToast('内容を入力してください'); return; }
   const items = getNextVisitItems();
-  if (idx < 0 || idx >= items.length) return;
+  const idx = items.findIndex(it => _nvItemKey(it) === key);
+  if (idx < 0) { showToast('この項目は、別の端末で削除されています。保存できませんでした'); return; }
   const old = items[idx];
   const ts = Date.now();
   items[idx] = typeof old === 'string'
@@ -4774,11 +4785,15 @@ function toggleCsExpand(id) {
   renderConsultationSummary();
 }
 function deleteConsultationSummaryItem(id) {
+  const item = getConsultationSummary().find(e => e && typeof e === 'object' && e.id === id);
+  if (!item) { renderConsultationSummary(); return; }
+  if (!confirm('「' + String(item.text || '').slice(0, 20) + '」を削除しますか?')) return;
   _csEditOpenId = null;
   _csResultOpenId = null;
   _csExpandedId = null;
   addDeletedId('consultation_summary', id);
-  setConsultationSummary(getConsultationSummary().filter(e => typeof e === 'string' ? false : e.id !== id));
+  // 消すのは指定した項目だけ（以前は、IDを持たない古い文字列だけの項目も一緒に消していた）
+  setConsultationSummary(getConsultationSummary().filter(e => !(e && typeof e === 'object' && e.id === id)));
   renderConsultationSummary();
 }
 function editConsultationSummaryItem(id) {
@@ -4919,9 +4934,9 @@ function collectAbnormalRecords(periodKey) {
   } else if (periodKey === '3m') {
     since = now - 90 * 86400000;
   } else if (periodKey === 'last_visit') {
-    const history = load('consultation_history', []);
-    if (!history.length) return null;
-    const lastDate = history[history.length - 1].date;
+    // 一覧の最後ではなく、日付がいちばん新しい診察を使う（同期で並び順が変わることがあるため）
+    const lastDate = _latestConsultationDate();
+    if (!lastDate) return null;
     const p = lastDate.split('-');
     since = new Date(parseInt(p[0]), parseInt(p[1]) - 1, parseInt(p[2])).getTime();
   }
@@ -5006,11 +5021,16 @@ function collectAbnormalRecords(periodKey) {
   return items;
 }
 
+// 診察履歴のうち、いちばん新しい日付（'YYYY-MM-DD'）。無ければ null
+function _latestConsultationDate() {
+  const dates = load('consultation_history', []).map(h => h && h.date).filter(d => typeof d === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d));
+  return dates.length ? dates.sort()[dates.length - 1] : null;
+}
+
 function runAggregation() {
   const periodKey = (document.getElementById('cs-period-select') || {}).value || '1m';
   if (periodKey === 'last_visit') {
-    const history = load('consultation_history', []);
-    if (!history.length) {
+    if (!_latestConsultationDate()) {
       showToast('診察履歴がまだ登録されていません');
       return;
     }
@@ -6308,6 +6328,14 @@ function renderWeightGraph() {
 // TAB SWITCHING
 // ============================================================
 const TAB_NAMES = ['today','notes','weight','hospital','diary','recipe','supple','blood','gpt'];
+// タブの列に、まだ見えていない続きがある側を知らせる（端の「‹」「›」）
+function _updateTabsHint() {
+  const nav = document.getElementById('tabs-nav'), wrap = document.getElementById('tabs-wrap');
+  if (!nav || !wrap || !wrap.classList) return;
+  const max = (nav.scrollWidth || 0) - (nav.clientWidth || 0);
+  wrap.classList.toggle('more-left', (nav.scrollLeft || 0) > 4);
+  wrap.classList.toggle('more-right', max - (nav.scrollLeft || 0) > 4);
+}
 function switchTab(name) {
   document.querySelectorAll('.tab').forEach((t,i) => t.classList.toggle('active', TAB_NAMES[i] === name));
   document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
@@ -6674,6 +6702,8 @@ _bootStep('removeLegacyKeys', () => LEGACY_KEYS.forEach(k => localStorage.remove
 _bootStep('initConsultationKeys', initConsultationKeys);
 _bootStep('renderAll', renderAll);
 document.getElementById('weight-date').value = todayKey();
+_bootStep('tabsHint', _updateTabsHint);
+window.addEventListener('resize', _updateTabsHint);
 document.getElementById('cs-consult-date').value = todayKey();
 renderMaintenanceBanner();
 if (isMaintenanceMode()) {
