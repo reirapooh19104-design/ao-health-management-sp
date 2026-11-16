@@ -1274,6 +1274,8 @@ let _btFormDirty = false;      // 血液検査フォームに未保存の入力�
 let _formFollowsToday = true;  // 今日タブのフォームが「今日」を表示している（日付が変わったら追従する）
 let _lastRenderDay = null;     // 最後に画面を描いた日付（日付またぎの検出用）
 const RESYNC_MIN_INTERVAL_MS = 60000; // 受信し直しの最短間隔
+let _filariaRowOpen = null;    // フィラリアの予定日の一覧で、開いている回（操作ボタンを出している）
+let _filariaPlanEditN = null;  // 予定日を変更するフォームを開いている回
 let _filariaEditOpen = false;  // フィラリア初回日の編集フォーム表示中（設定は保存まで消さない）
 
 // ============================================================
@@ -1528,6 +1530,19 @@ function _needsPushBack(merged, gasArr, keyFn) {
   const gasMap = new Map(gasArr.map(e => [keyFn(e), JSON.stringify(e)]));
   return merged.some(e => gasMap.get(keyFn(e)) !== JSON.stringify(e));
 }
+// 一覧を、項目ごとに「時刻（_ts）の新しい方」でマージする（同点はGAS）。キーを持たない壊れた項目は外す。
+// 端末にある項目は必ず候補に入り、GASにしか無い項目は足される（項目が消えることはない）
+function _mergeListByTs(localArr, gasArr, keyFn, label) {
+  const okEntry = e => !!e && typeof e === 'object' && !Array.isArray(e) && typeof keyFn(e) === 'string' && keyFn(e) !== '';
+  const local = _saneEntries(label + '(ローカル)', Array.isArray(localArr) ? localArr : []).filter(okEntry);
+  const gas = _saneEntries(label + '(GAS)', Array.isArray(gasArr) ? gasArr : []).filter(okEntry);
+  const map = new Map(local.map(e => [keyFn(e), e]));
+  gas.forEach(ge => {
+    const le = map.get(keyFn(ge));
+    if (!le || Number(ge._ts || 0) >= Number(le._ts || 0)) map.set(keyFn(ge), ge);
+  });
+  return Array.from(map.values());
+}
 // 書き戻し用の最低限の骨格チェック（日付またはIDを持つオブジェクトであること）
 function _validDatedEntry(e) {
   return !!e && typeof e === 'object' && !Array.isArray(e) && typeof e.date === 'string' && e.date !== '';
@@ -1689,7 +1704,7 @@ function _isUserBusy() {
   if (_noteEditDate !== null || _nvEditOpenIdx !== null || _csEditOpenId !== null || _csResultOpenId !== null) return true;
   if (_suppleEditOpenId !== null || _suppleFormOpenId !== null || _medEditOpenId !== null) return true;
   if (_mealEditMode || _healthEditMode || _aoRecordFormOpen || _aoRecordEditOpenId !== null) return true;
-  if (_filariaEditOpen || _csAggPending !== null) return true;
+  if (_filariaEditOpen || _filariaPlanEditN !== null || _csAggPending !== null) return true;
   if (window._editData) return true; // レシピ編集中
   return ['gas-url-modal', 'backup-modal', 'med-end-modal', 'cs-agg-modal'].some(id => {
     const el = document.getElementById(id);
@@ -2087,32 +2102,17 @@ async function _syncFromCloudInner() {
         if (_needsPushBack(arPushable, gasAr, arKey)) {
           pushToCloud('ao_records', arPushable);
         }
-      } else if (k === 'filaria_history') {
-        // filaria_history: scheduledDate単位のunion（和集合）マージ。
-        // 投与履歴は追記専用（チェックを外しても履歴は消さない・同日重複はalreadyガード済み）のため
-        // 新旧の比較はせず和集合にする。同じscheduledDateが両側にあればローカル優先（内容は実質等価）。
-        // GASが空でも端末の履歴は消えない（和集合なので）。
-        const localFh = _saneEntries('filaria_history(ローカル)', load('filaria_history', []));
-        const gasFh = _saneEntries('filaria_history(GAS)', gasVal || []);
-        const fhMap = new Map();
-        gasFh.forEach(ge => fhMap.set(ge.scheduledDate, ge));
-        localFh.forEach(le => fhMap.set(le.scheduledDate, le));
-        const fhMerged = Array.from(fhMap.values());
-        localStorage.setItem('filaria_history', JSON.stringify(fhMerged));
-        // 書き戻し：端末にあってGASに無い予定日があれば、合算した一覧を送る（2026-11-16 追加）。
-        // 以前は書き戻しが無く、他の端末の古い一覧でGASから消された履歴が、GASにも他の端末にも戻らなかった。
-        // ・「内容が違う」だけでは送らない。この一覧の項目には時刻が無く、同じ予定日はどの端末も自分の側を
-        //   優先するので、違いで送ると2台が互いに送り合って終わらなくなる。
-        // ★ 予定日の削除・チェックの取り消しを作るとき（第8弾）：履歴を配列から取り除く方式にしないこと。
-        //   取り除いても、他の端末の合算とこの書き戻しで必ず復活する。体重などと同じく、
-        //   「削除の印」（{ scheduledDate, deleted:true, _ts }）を配列に残し、同じ予定日は _ts の新しい方を
-        //   採用するマージに変え、書き戻しの条件も「内容が違えば」（_needsPushBack）に替えること。
-        //   印も scheduledDate を持つ1項目なので、いまの「GASに無い予定日があれば送る」は印もそのまま運ぶ。
-        const gasFhDates = new Set(gasFh.map(ge => ge.scheduledDate));
-        const fhPushable = fhMerged.filter(e => e && typeof e === 'object' && typeof e.scheduledDate === 'string' && e.scheduledDate !== '');
-        if (fhPushable.some(e => !gasFhDates.has(e.scheduledDate))) {
-          pushToCloud('filaria_history', fhPushable);
-        }
+      } else if (k === 'filaria_history' || k === 'filaria_plan') {
+        // filaria_history（投与履歴）・filaria_plan（予定日の変更・削除）：項目ごとに _ts の新しい方を採る。
+        // ・端末にある項目は必ず候補に入る（GASが空でも端末の項目は消えない）
+        // ・取り消し・削除は「印」を持つ項目として一覧に残っているので、ほかの項目と同じように新しい方が勝つ
+        // ・時刻の無い古い履歴（2026-11-16 より前の記録）は時刻0として扱い、同点はGASを採る（2台が送り合わない）
+        // ・マージ結果に「GASに無い、またはGASと内容が違う」項目があれば書き戻す（ほかの一覧と同じ条件）
+        const fKey = k === 'filaria_history' ? (e => e.scheduledDate) : (e => e.id);
+        const merged = _mergeListByTs(load(k, []), gasVal, fKey, k);
+        localStorage.setItem(k, JSON.stringify(merged));
+        const gasList = _saneEntries(k + '(GAS)', Array.isArray(gasVal) ? gasVal : []).filter(e => typeof e === 'object');
+        if (_needsPushBack(merged, gasList, fKey)) pushToCloud(k, merged);
       } else if (ENTRY_MERGE_KEYS[k]) {
         // 体重・血液検査・薬・レシピ：項目単位マージ（削除は「削除の印」で伝わる）
         _mergeEntryListFromCloud(k, gasVal, gasTs, localTs);
@@ -2324,7 +2324,7 @@ const SYNC_KEYS = [
   'diary', 'health_notes', 'blood_tests', 'bodyWeights', 'supple', 'med_list', 'recipes',
   'next_visit', 'consultation_summary', 'consultation_history', 'ao_records',
   'custom_meal_checks', 'custom_health_checks', 'urso_setting',
-  'filaria_settings', 'filaria_history', 'deleted_ids', 'ao_records_migrated_v2',
+  'filaria_settings', 'filaria_history', 'filaria_plan', 'deleted_ids', 'ao_records_migrated_v2',
 ];
 // GASと同期するキーのうち、日付ごとに増えるもの（この前置きで始まるキー）
 const SYNC_KEY_PREFIXES = ['chk_', 'day_memo_'];
@@ -2337,7 +2337,7 @@ const EXPORT_FIELDS = {
   supple: 'supple', med_list: 'medList', recipes: 'recipes', next_visit: 'nextVisit',
   consultation_summary: 'consultationSummary', consultation_history: 'consultationHistory',
   ao_records: 'aoRecords', custom_meal_checks: 'customMealChecks', custom_health_checks: 'customHealthChecks',
-  urso_setting: 'ursoSetting', filaria_settings: 'filariaSettings', filaria_history: 'filariaHistory',
+  urso_setting: 'ursoSetting', filaria_settings: 'filariaSettings', filaria_history: 'filariaHistory', filaria_plan: 'filariaPlan',
   deleted_ids: 'deletedIds',
 };
 // この端末だけで使うキー（GASへは送らない。バックアップ・復元の対象にはなる）
@@ -2589,24 +2589,66 @@ function getFilariaSettings() {
   try { return JSON.parse(localStorage.getItem('filaria_settings') || 'null'); } catch { return null; }
 }
 function setFilariaSettings(d) { save('filaria_settings', d); }
+// ── フィラリア：投与履歴・予定日 ──
+// filaria_history：[{ scheduledDate, administeredAt, _ts }]。投与済みを取り消したときは、配列から取り除かず
+//   「取り消しの印」{ scheduledDate, deleted:true, _ts } に置き換える（取り除くと、他の端末の一覧と合わさって復活する）。
+//   ・表示・判定は getFilariaGiven()（印を除く）を使う
+//   ・保存し直す処理は getFilariaHistory()（印を含む全件）を使う。印を落として保存しないこと
+// filaria_plan：予定日の変更・削除。[{ id:'<年>-<回>', year, n, date, shift, skip, _ts }]
+//   ・date＝変更後の日（''＝変更なし）／shift＝このあとの回も、その日から40日おきに組み直す／skip＝その回を削除
+//   ・「元に戻す」も項目を消さず、date:''・skip:false にして時刻を刻む（配列から取り除かない）
+// どちらも受信時は、同じ項目（予定日／id）について _ts の新しい方を採る（_mergeListByTs）。
 function getFilariaHistory() {
-  try { return JSON.parse(localStorage.getItem('filaria_history') || '[]'); } catch { return []; }
+  try { const a = JSON.parse(localStorage.getItem('filaria_history') || '[]'); return Array.isArray(a) ? a : []; } catch { return []; }
 }
 function setFilariaHistory(d) { save('filaria_history', d); }
-function getFilariaScheduledDates(year) {
+function getFilariaGiven() {
+  return getFilariaHistory().filter(h => h && typeof h === 'object' && typeof h.scheduledDate === 'string' && h.scheduledDate !== '' && !h.deleted);
+}
+function isFilariaGiven(dateStr) { return getFilariaGiven().some(h => h.scheduledDate === dateStr); }
+// 予定日 dateStr を「投与済み」にする／取り消す（その予定日の項目を、いまの時刻つきで置き換える）
+function _setFilariaGiven(dateStr, given) {
+  const hist = getFilariaHistory().filter(h => h && typeof h === 'object' && h.scheduledDate !== dateStr);
+  hist.push(given ? { scheduledDate: dateStr, administeredAt: new Date().toISOString(), _ts: Date.now() }
+                  : { scheduledDate: dateStr, deleted: true, _ts: Date.now() });
+  setFilariaHistory(hist);
+}
+function getFilariaPlan() {
+  try { const a = JSON.parse(localStorage.getItem('filaria_plan') || '[]'); return Array.isArray(a) ? a : []; } catch { return []; }
+}
+function setFilariaPlan(d) { save('filaria_plan', d); }
+function _isYmd(s) { return typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s) && !isNaN(new Date(s + 'T00:00:00').getTime()); }
+function _ymdAddDays(s, days) {
+  const d = new Date(s + 'T00:00:00'); d.setDate(d.getDate() + days);
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+}
+const FILARIA_INTERVAL_DAYS = 40;
+// その年の予定（回ごと）。plan を渡すと、その内容で計算する（保存前の確かめ用）。
+// 返す項目：{ n(何回目), date(予定日), base(変更していなければこの日だった), moved(日を変更した), skip(削除した) }
+// ・予定日は、初回日から40日おき（6/1〜11/30）。日を変更した回があり shift が付いていれば、
+//   そのあとの回は変更後の日から40日おきに数え直す
+function _filariaSlots(year, plan) {
   const cfg = getFilariaSettings();
-  if (!cfg || cfg.year !== year) return new Set();
-  const dates = new Set();
-  const nov30 = new Date(year, 10, 30);
-  let d = new Date(cfg.firstDoseDate + 'T00:00:00');
-  while (d <= nov30) {
-    const mon = d.getMonth() + 1;
-    if (d.getFullYear() === year && mon >= 6 && mon <= 11) {
-      dates.add(year + '-' + String(mon).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0'));
-    }
-    d = new Date(d.getTime() + 40 * 86400000);
+  if (!cfg || cfg.year !== year || !_isYmd(cfg.firstDoseDate)) return [];
+  const ov = new Map((plan || getFilariaPlan()).filter(p => p && typeof p === 'object' && p.year === year).map(p => [p.n, p]));
+  const start = year + '-06-01', end = year + '-11-30';
+  const slots = [];
+  let chain = cfg.firstDoseDate;
+  for (let n = 1; n <= 12; n++) {
+    if (n > 1) chain = _ymdAddDays(chain, FILARIA_INTERVAL_DAYS);
+    if (chain > end) break;                       // 変更していない場合の日が期間を過ぎたら、そこで終わり
+    const o = ov.get(n);
+    const moved = !!(o && _isYmd(o.date) && o.date !== chain);
+    const base = chain;
+    const date = moved ? o.date : chain;
+    if (moved && o.shift !== false) chain = o.date;
+    if (date < start || date > end) continue;
+    slots.push({ n, date, base, moved, skip: !!(o && o.skip) });
   }
-  return dates;
+  return slots;
+}
+function getFilariaScheduledDates(year) {
+  return new Set(_filariaSlots(year).filter(sl => !sl.skip).map(sl => sl.date));
 }
 
 function classifyAoRecord(text) {
@@ -2768,8 +2810,7 @@ function renderFilariaBanner() {
   const scheduledDates = getFilariaScheduledDates(today.getFullYear());
   if (!scheduledDates.has(todayStr)) { fb.style.display = 'none'; return; }
   // 投与日 → バナー表示
-  const hist = getFilariaHistory();
-  const done = hist.some(h => h.scheduledDate === todayStr);
+  const done = isFilariaGiven(todayStr);
   const subEl = document.getElementById('filaria-banner-sub');
   fb.style.display = '';
   if (subEl) subEl.textContent = done ? '投与済み ✓' : '今日が投与予定日です';
@@ -3930,15 +3971,10 @@ function toggleFialariaCheck() {
   const newVal = !c['filaria_today'];
   _setCheckValue(c, 'filaria_today', newVal);
   setChecks(c);
-  if (newVal) {
-    // 履歴に記録
-    const hist = getFilariaHistory();
-    const already = hist.some(h => h.scheduledDate === todayStr);
-    if (!already) {
-      hist.push({ scheduledDate: todayStr, administeredAt: new Date().toISOString() });
-      setFilariaHistory(hist);
-      renderFilaria();
-    }
+  // チェックを付けたら履歴に記録し、外したら履歴も取り消す（取り消しの印を残す）
+  if (newVal !== isFilariaGiven(todayStr)) {
+    _setFilariaGiven(todayStr, newVal);
+    renderFilaria();
   }
   renderChecks();
   renderFilariaBanner();
@@ -4231,20 +4267,60 @@ function renderFilaria() {
     return;
   }
 
-  const dates = [...getFilariaScheduledDates(currentYear)].sort();
-  const hist  = getFilariaHistory();
-  const datesHtml = dates.map((ds, i) => {
-    const d = new Date(ds + 'T00:00:00');
-    const label = (d.getMonth()+1) + '月' + d.getDate() + '日';
-    const rec = hist.find(h => h.scheduledDate === ds);
-    const badge = rec
-      ? `<span style="font-size:10px;background:#FBEAF0;color:#993556;border-radius:20px;padding:1px 6px;margin-left:4px">投与済み ✓</span>`
-      : '';
-    return `<div style="font-size:13px;padding:3px 0;display:flex;align-items:center;gap:8px">
-      <span style="font-size:11px;color:#ED93B1;font-weight:700;min-width:20px">${i+1}回</span>
-      <span>${label}</span>${badge}
+  const slots = _filariaSlots(currentYear);
+  const active = slots.filter(sl => !sl.skip);
+  const hist  = getFilariaGiven();
+  const todayStr = todayKey();
+  const md = ds => { const d = new Date(ds + 'T00:00:00'); return (d.getMonth()+1) + '月' + d.getDate() + '日'; };
+  const tag = (txt, bg, col) => `<span style="font-size:10px;background:${bg};color:${col};border-radius:20px;padding:1px 6px;margin-left:4px">${txt}</span>`;
+  if (_filariaRowOpen !== null && !slots.some(sl => sl.n === _filariaRowOpen)) _filariaRowOpen = null;
+  if (_filariaPlanEditN !== null && !slots.some(sl => sl.n === _filariaPlanEditN)) _filariaPlanEditN = null;
+  // 行を押すと、その回の操作ボタンが開く（投与済みにする／取り消す・日を変更・削除・元に戻す）
+  const datesHtml = slots.map(sl => {
+    const given = !sl.skip && hist.some(h => h.scheduledDate === sl.date);
+    const open = _filariaRowOpen === sl.n;
+    let badge = '';
+    if (sl.skip) badge = tag('削除済み', '#F0EDE8', '#888780');
+    else {
+      if (given) badge += tag('投与済み ✓', '#FBEAF0', '#993556');
+      if (sl.moved) badge += tag('変更', '#EEF3FB', '#4A6FA5');
+    }
+    let body = '';
+    if (_filariaPlanEditN === sl.n) {
+      body = `<div style="margin:6px 0 8px;padding:10px;background:#FBF6F1;border-radius:10px" onclick="event.stopPropagation()">
+        <div style="font-size:12px;color:var(--text-light);margin-bottom:6px">${sl.n}回目の予定日を変更</div>
+        <input type="date" class="form-input" id="filaria-plan-date" autocomplete="off" min="${currentYear}-06-01" max="${currentYear}-11-30" value="${escHtml(sl.date)}">
+        <label style="display:flex;align-items:flex-start;gap:6px;font-size:12px;margin:8px 0;line-height:1.5">
+          <input type="checkbox" id="filaria-plan-shift" checked style="margin-top:2px">
+          <span>このあとの予定日も、この日から${FILARIA_INTERVAL_DAYS}日おきに組み直す</span>
+        </label>
+        <div style="display:flex;gap:6px">
+          <button class="btn-supple" style="flex:1" onclick="event.stopPropagation(); saveFilariaPlanDate(${sl.n})">保存</button>
+          <button class="btn-supple" style="flex:1;background:#F0EDE8;color:#888780" onclick="event.stopPropagation(); cancelFilariaPlanEdit()">キャンセル</button>
+        </div>
+      </div>`;
+    } else if (open) {
+      const btns = [];
+      if (sl.skip) btns.push(`<button class="btn-supple" onclick="event.stopPropagation(); resetFilariaSlot(${sl.n})">元に戻す</button>`);
+      else if (given) btns.push(`<button class="btn-supple" onclick="event.stopPropagation(); setFilariaGivenFromList(${_jsq(sl.date)}, false)">投与済みを取り消す</button>`);
+      else {
+        if (sl.date <= todayStr) btns.push(`<button class="btn-supple" onclick="event.stopPropagation(); setFilariaGivenFromList(${_jsq(sl.date)}, true)">投与済みにする</button>`);
+        btns.push(`<button class="btn-supple" onclick="event.stopPropagation(); openFilariaPlanEdit(${sl.n})">日を変更</button>`);
+        if (sl.moved) btns.push(`<button class="btn-supple" onclick="event.stopPropagation(); resetFilariaSlot(${sl.n})">元に戻す</button>`);
+        btns.push(`<button class="btn-supple" style="background:#F0EDE8;color:#888780" onclick="event.stopPropagation(); skipFilariaSlot(${sl.n})">削除</button>`);
+      }
+      const note = given ? '<div style="font-size:11px;color:var(--text-light);margin-top:4px">日の変更・削除は、投与済みを取り消してから行えます。</div>' : '';
+      body = `<div style="display:flex;flex-wrap:wrap;gap:6px;margin:6px 0 8px">${btns.join('')}</div>${note}`;
+    }
+    return `<div style="border-bottom:1px solid var(--border);cursor:pointer" onclick="toggleFilariaRow(${sl.n})">
+      <div style="font-size:13px;padding:7px 0;display:flex;align-items:center;gap:8px${sl.skip ? ';color:var(--text-light)' : ''}">
+        <span style="font-size:11px;color:#ED93B1;font-weight:700;min-width:26px">${sl.n}回</span>
+        <span${sl.skip ? ' style="text-decoration:line-through"' : ''}>${md(sl.date)}</span>${badge}
+        <span style="margin-left:auto;font-size:10px;color:var(--text-light)">${open ? '▲' : '▼'}</span>
+      </div>${body}
     </div>`;
   }).join('');
+  const dates = active;
 
   // 履歴（年ごと折りたたみ）
   const histByYear = {};
@@ -4281,7 +4357,8 @@ function renderFilaria() {
       <div style="font-size:15px;font-weight:600">${_dateJa(cfg.firstDoseDate)}</div>
     </div>
     <div style="margin-bottom:14px">
-      <div style="font-size:12px;color:var(--text-light);margin-bottom:6px">投与予定日（全${dates.length}回）</div>
+      <div style="font-size:12px;color:var(--text-light);margin-bottom:2px">投与予定日（全${dates.length}回）</div>
+      <div style="font-size:11px;color:var(--text-light);margin-bottom:4px">日付を押すと、投与済みの記録・取り消し、日の変更、削除ができます。</div>
       ${datesHtml}
     </div>
     <div style="margin-bottom:14px;border-top:1px solid var(--border);padding-top:12px">
@@ -4294,12 +4371,125 @@ function renderFilaria() {
 function saveFilariaFirstDate() {
   const val = document.getElementById('filaria-first-date')?.value;
   if (!val) { showToast('日付を入力してください'); return; }
-  const year = new Date(val + 'T00:00:00').getFullYear();
-  setFilariaSettings({ firstDoseDate: val, year });
-  _filariaEditOpen = false;
+  const currentYear = new Date().getFullYear();
+  // 今年の 6/1〜11/30 だけ受け付ける（それ以外を保存すると、予定日が1つも出ない・設定画面に戻る、になる）
+  if (!_isYmd(val) || val < currentYear + '-06-01' || val > currentYear + '-11-30') {
+    showToast('初回投与日は、' + currentYear + '年の6月1日〜11月30日の日付を入力してください');
+    return;
+  }
+  const cfg = getFilariaSettings();
+  const changed = !cfg || cfg.year !== currentYear || cfg.firstDoseDate !== val;
+  // 初回日が変わると予定日がすべて変わるので、その年の「日の変更・削除」は元に戻す
+  const plan = getFilariaPlan();
+  const hasOverride = plan.some(x => x && x.year === currentYear && (x.skip || _isYmd(x.date)));
+  if (changed && hasOverride) {
+    if (!confirm('初回投与日を変えると、予定日がすべて組み直されます。\nこれまでに行った予定日の変更・削除は元に戻ります。よろしいですか？')) return;
+    const now = Date.now();
+    setFilariaPlan(plan.map(x => (x && x.year === currentYear && (x.skip || _isYmd(x.date))) ? Object.assign({}, x, { date: '', skip: false, _ts: now }) : x));
+  }
+  if (changed) setFilariaSettings({ firstDoseDate: val, year: currentYear });
+  _filariaEditOpen = false; _filariaRowOpen = null; _filariaPlanEditN = null;
+  _renderFilariaAll();
+  showToast('フィラリア設定を保存しました');
+}
+
+// フィラリアに関係する表示をまとめて描き直す（一覧・カレンダーのハート・今日のチェック・バナー）
+function _renderFilariaAll() {
   renderFilaria();
   renderCalendar();
-  showToast('フィラリア設定を保存しました');
+  renderChecks();
+  renderFilariaBanner();
+  updateMetrics();
+}
+function toggleFilariaRow(n) {
+  if (_filariaPlanEditN !== null) return;   // 日の変更フォームを開いている間は、行の開け閉めをしない
+  _filariaRowOpen = (_filariaRowOpen === n) ? null : n;
+  renderFilaria();
+}
+function openFilariaPlanEdit(n) { _filariaPlanEditN = n; _filariaRowOpen = n; renderFilaria(); }
+function cancelFilariaPlanEdit() { _filariaPlanEditN = null; renderFilaria(); }
+// 予定日の変更・削除・元に戻すを1件保存する。patch：{ date, shift, skip }
+// 項目は取り除かず、その回の項目を時刻つきで置き換える（他の端末にも、新しい方として伝わる）
+function _saveFilariaPlanEntry(year, n, patch) {
+  const id = year + '-' + n;
+  const plan = getFilariaPlan().filter(x => x && typeof x === 'object' && x.id !== id);
+  plan.push(Object.assign({ id, year, n, date: '', shift: true, skip: false }, patch, { _ts: Date.now() }));
+  setFilariaPlan(plan);
+}
+function saveFilariaPlanDate(n) {
+  const year = new Date().getFullYear();
+  const slot = _filariaSlots(year).find(sl => sl.n === n);
+  if (!slot) { _filariaPlanEditN = null; renderFilaria(); return; }
+  const val = document.getElementById('filaria-plan-date')?.value;
+  const shift = !!document.getElementById('filaria-plan-shift')?.checked;
+  if (!_isYmd(val) || val < year + '-06-01' || val > year + '-11-30') { showToast(year + '年の6月1日〜11月30日の日付を入力してください'); return; }
+  if (isFilariaGiven(slot.date)) { showToast('投与済みの回は変更できません。先に投与済みを取り消してください'); return; }
+  if (val === slot.date) { _filariaPlanEditN = null; renderFilaria(); return; }
+  // 保存した場合の予定を先に作って確かめる（順番が入れ替わる・同じ日が重なる・投与済みの回が動く、は受け付けない）
+  const id = year + '-' + n;
+  const trial = getFilariaPlan().filter(x => x && x.id !== id).concat([{ id, year, n, date: val, shift, skip: false }]);
+  const after = _filariaSlots(year, trial);
+  const act = after.filter(sl => !sl.skip);
+  if (!after.some(sl => sl.n === n) || act.some((sl, i) => i > 0 && act[i - 1].date >= sl.date)) {
+    showToast('前後の予定日と順番が入れ替わるため、この日には変更できません');
+    return;
+  }
+  const before = new Map(_filariaSlots(year).map(sl => [sl.n, sl]));
+  const movedGiven = after.find(sl => sl.n !== n && before.has(sl.n) && before.get(sl.n).date !== sl.date && isFilariaGiven(before.get(sl.n).date));
+  const lostGiven = [...before.values()].find(sl => !after.some(a => a.n === sl.n) && isFilariaGiven(sl.date));
+  if (movedGiven || lostGiven) { showToast('投与済みの回の予定日が動いてしまうため、変更できません（「このあとの予定日も組み直す」を外すか、先に投与済みを取り消してください）'); return; }
+  _saveFilariaPlanEntry(year, n, { date: val, shift: shift, skip: false });
+  _filariaPlanEditN = null;
+  _renderFilariaAll();
+  showToast(n + '回目の予定日を変更しました');
+}
+function skipFilariaSlot(n) {
+  const year = new Date().getFullYear();
+  const slot = _filariaSlots(year).find(sl => sl.n === n);
+  if (!slot || slot.skip) return;
+  if (isFilariaGiven(slot.date)) { showToast('投与済みの回は削除できません。先に投与済みを取り消してください'); return; }
+  const d = new Date(slot.date + 'T00:00:00');
+  if (!confirm(n + '回目（' + (d.getMonth()+1) + '月' + d.getDate() + '日）の予定を削除しますか？\n（あとで「元に戻す」で戻せます。ほかの回の予定日は変わりません）')) return;
+  const cur = getFilariaPlan().find(x => x && x.id === year + '-' + n) || {};
+  _saveFilariaPlanEntry(year, n, { date: _isYmd(cur.date) ? cur.date : '', shift: cur.shift !== false, skip: true });
+  _filariaRowOpen = null;
+  _renderFilariaAll();
+  showToast(n + '回目の予定を削除しました');
+}
+// 日の変更・削除をやめて、初回日から数えた元の予定に戻す
+function resetFilariaSlot(n) {
+  const year = new Date().getFullYear();
+  const before = _filariaSlots(year);
+  const slot = before.find(sl => sl.n === n);
+  if (!slot) return;
+  const id = year + '-' + n;
+  const trial = getFilariaPlan().filter(x => x && x.id !== id);
+  const after = _filariaSlots(year, trial);
+  const act = after.filter(sl => !sl.skip);
+  const bmap = new Map(before.map(sl => [sl.n, sl]));
+  const givenMoves = after.some(sl => bmap.has(sl.n) && bmap.get(sl.n).date !== sl.date && !bmap.get(sl.n).skip && isFilariaGiven(bmap.get(sl.n).date));
+  if (givenMoves || act.some((sl, i) => i > 0 && act[i - 1].date >= sl.date)) {
+    showToast('元に戻すと、投与済みの回や前後の予定日とぶつかるため、戻せません');
+    return;
+  }
+  _saveFilariaPlanEntry(year, n, { date: '', shift: true, skip: false });
+  _filariaRowOpen = null;
+  _renderFilariaAll();
+  showToast(n + '回目の予定を元に戻しました');
+}
+// 予定日の一覧から「投与済みにする／取り消す」。今日の分は、今日タブのチェックも同じ状態にそろえる
+function setFilariaGivenFromList(dateStr, given) {
+  if (!_isYmd(dateStr)) return;
+  if (given && dateStr > todayKey()) { showToast('先の予定日は、まだ投与済みにできません'); return; }
+  if (!given && !confirm('この回の「投与済み」を取り消しますか？')) return;
+  if (isFilariaGiven(dateStr) !== given) _setFilariaGiven(dateStr, given);
+  if (dateStr === todayKey()) {
+    const c = load('chk_' + dateStr, {});
+    if (!!c['filaria_today'] !== given) { _setCheckValue(c, 'filaria_today', given); save('chk_' + dateStr, c); }
+  }
+  _filariaRowOpen = null;
+  _renderFilariaAll();
+  showToast(given ? '投与済みにしました' : '投与済みを取り消しました');
 }
 
 // 「初回日を変更」は編集フォームを開くだけ。設定の上書きは保存時（saveFilariaFirstDate）に
@@ -6113,6 +6303,7 @@ function exportData() {
     selectedRecipeId: localStorage.getItem('selected_recipe_id') || null,
     filariaSettings: getFilariaSettings(),
     filariaHistory: getFilariaHistory(),
+    filariaPlan: getFilariaPlan(),
     ursoSetting: getUrsoSetting(),
     checks: {}
   };
@@ -6146,7 +6337,7 @@ function _validateImportData(d) {
     ['aoRecords', 'あおの記録', withId], ['consultationSummary', '次回診察用まとめ', objOrStrList],
     ['consultationHistory', '診察履歴', withId], ['medList', '薬', withId],
     ['customMealChecks', '食事チェック項目', withId], ['customHealthChecks', '健康チェック項目', withId],
-    ['recipes', 'レシピ', withId], ['filariaHistory', 'フィラリア履歴', objList],
+    ['recipes', 'レシピ', withId], ['filariaHistory', 'フィラリア履歴', objList], ['filariaPlan', 'フィラリアの予定日の変更', withId],
     ['deletedIds', '削除記録', v => isObj(v) && Object.values(v).every(Array.isArray)],
     ['filariaSettings', 'フィラリア設定', isObj],
     ['ursoSetting', 'ウルソの設定', isObj],
@@ -6224,12 +6415,19 @@ function importData(e) {
       }
       if (d.selectedRecipeId)    localStorage.setItem('selected_recipe_id', d.selectedRecipeId);
       if (d.filariaSettings)     setFilariaSettings(d.filariaSettings);
-      // filaria_history: scheduledDate単位のunionマージ（受信同期と同じ和集合。
-      // 追記専用データなので置き換えでインポート元に無い投与履歴を消さない）
+      // filaria_history・filaria_plan：ファイルにある項目で上書きし、ファイルに無い項目は残す。
+      // 取り込んだ項目にはいまの時刻を刻む（刻まないと、他の端末やGASにある「取り消しの印」の方が新しいと
+      // 判定され、取り込んだ記録が次の同期で消える）
+      const stampNow = e => Object.assign({}, e, { _ts: Date.now() });
       if (d.filariaHistory && Array.isArray(d.filariaHistory)) {
-        const fhMap = new Map(getFilariaHistory().map(h => [h.scheduledDate, h]));
-        d.filariaHistory.forEach(h => { if (h && h.scheduledDate) fhMap.set(h.scheduledDate, h); });
+        const fhMap = new Map(getFilariaHistory().filter(h => h && h.scheduledDate).map(h => [h.scheduledDate, h]));
+        d.filariaHistory.forEach(h => { if (h && h.scheduledDate) fhMap.set(h.scheduledDate, stampNow(h)); });
         setFilariaHistory(Array.from(fhMap.values()));
+      }
+      if (d.filariaPlan && Array.isArray(d.filariaPlan)) {
+        const fpMap = new Map(getFilariaPlan().filter(x => x && x.id).map(x => [x.id, x]));
+        d.filariaPlan.forEach(x => { if (x && x.id) fpMap.set(x.id, stampNow(x)); });
+        setFilariaPlan(Array.from(fpMap.values()));
       }
       // ウルソの設定（ver 6〜。それより前の書き出しには入っていないので、そのときは今の設定を残す）
       if (d.ursoSetting)         saveUrsoSetting(d.ursoSetting);

@@ -66,7 +66,7 @@ ao-health-management-sp のデータ構造・キー名・保存先・同期方�
 ## このアプリの保存キーの一覧（2026-11-16〜・index.html の SYNC_KEYS ほか）
 - GASと同期するキー（`SYNC_KEYS`）：diary / health_notes / blood_tests / bodyWeights / supple / med_list /
   recipes / next_visit / consultation_summary / consultation_history / ao_records / custom_meal_checks /
-  custom_health_checks / urso_setting / filaria_settings / filaria_history / deleted_ids / ao_records_migrated_v2
+  custom_health_checks / urso_setting / filaria_settings / filaria_history / filaria_plan / deleted_ids / ao_records_migrated_v2
 - 日付ごとに増える同期キー（`SYNC_KEY_PREFIXES`）：`chk_<日付>` / `day_memo_<日付>`
 - 端末だけのキー（`LOCAL_KEYS`）：gas_url / sync_token / entry_merge_ready / view_month_diary /
   view_month_notes / selected_recipe_id / maintenance_mode
@@ -101,3 +101,9 @@ ao-health-management-sp のデータ構造・キー名・保存先・同期方�
   名前が似ているので、今後コードを触るとき要注意。
 
 この保存方法（localStorage主＋スプレッドシート同期）は設計として妥当。変更不要。
+
+## フィラリア（2026-11-16 第8弾）
+- `filaria_settings`：`{ firstDoseDate, year }`（今年の6/1〜11/30のみ）。
+- `filaria_history`：`[{ scheduledDate, administeredAt, _ts }]`。取り消しは `{ scheduledDate, deleted:true, _ts }` の印に置き換える。
+- `filaria_plan`：`[{ id:'<年>-<回>', year, n, date, shift, skip, _ts }]`（予定日の変更・削除。項目は取り除かない）。
+- 詳細は CLAUDE.md「フィラリア：予定日の変更・削除…」。

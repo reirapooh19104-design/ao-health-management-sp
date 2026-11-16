@@ -105,3 +105,7 @@
 - 全データGAS同期・受信・自動バックアップ・バックアップからの復元を、「custom_ 以外は全部」から
   「一覧（SYNC_KEYS / SYNC_KEY_PREFIXES / LOCAL_KEYS）に載っているキーだけ」に変更。
 - 書き出しにウルソの設定（`ursoSetting`）を追加（ver 5→6）。
+
+## 2026-11-16 書き戻しの拡張とフィラリア（第8弾）
+- next_visit / consultation_summary / consultation_history / ao_records の書き戻しを「違いがあれば」に拡張（12cec78）。
+- フィラリア：予定日の変更・削除（`filaria_plan`）、投与済みの取り消し（取り消しの印）、初回日の確かめ。
