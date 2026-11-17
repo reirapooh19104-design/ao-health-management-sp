@@ -3812,6 +3812,8 @@ function stopSupple(id) {
   const list = getSupple();
   const s = list.find(e => e.id === id);
   if (!s) return;
+  // 押し間違いで止まらないよう、名前入りで確かめる（2026-11-16、意図せず別のサプリが止まっていたことがあった）
+  if (!confirm('「' + (s.name || '') + '」を停止しますか？')) return;
   s.status = 'stopped'; s.stoppedAt = todayKey(); s._ts = Date.now();
   // いつ止めて、いつ再開したかを残す（再開すると stoppedAt は消えるため、別に記録しておく）
   if (!Array.isArray(s.history)) s.history = [];
